@@ -1,0 +1,11 @@
+# 运行时数据与大型 fixture（不入库）
+datasets
+tests/fixtures/retrieval_bench/
+tests/fixtures/matcher_bench/
+tests/fixtures/toy_lake/
+data/
+*.db
+*.pkl
+__pycache__/
+*.pyc
+.env
