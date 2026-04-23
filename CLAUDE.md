@@ -114,7 +114,34 @@ ruff format adacascade/               # 格式化
 
 ---
 
-## 7. 目录结构
+## 7. 数据集与 Fixtures
+
+**原始数据集**（只读，不入 git）：
+```
+datasets/ → /root/autodl-tmp/Adac-dataset/   # 软链接
+├── dl/
+│   ├── join/tables/      1534 个 CSV（WebTable-Noise JOIN 候选池）
+│   ├── join/webtable_join_query.csv / ground_truth.csv
+│   ├── union/tables/     5487 个 CSV（WebTable-Noise UNION 候选池）
+│   └── union/webtable_union_query.csv / ground_truth.csv
+└── sm/
+    ├── Wikidata/Musicians/{joinable,semjoinable,unionable,viewunion}/
+    └── MIMIC_2_OMOP-main/data/   # schema-only，SMD 场景
+```
+
+**处理后 Fixtures**（`scripts/prepare_fixtures.py` 生成，不入 git）：
+```
+tests/fixtures/
+├── toy_lake/              10 张表，5 gt pairs（M1 集成测试用）
+├── retrieval_bench/       Parquet + queries.json + ground_truth.json
+└── matcher_bench/         Wikidata×4场景 + MIMIC-OMOP schema JSON
+```
+
+manifest.json 字段与 `table_registry` + `column_metadata` 完全对应，可供 `scripts/bulk_ingest.py` 直接批量导入。
+
+---
+
+## 8. 目录结构
 
 ```
 adacascade/                          # Python 包根目录
@@ -160,7 +187,7 @@ adacascade/                          # Python 包根目录
 
 ---
 
-## 8. 遇到不确定的地方怎么办
+## 9. 遇到不确定的地方怎么办
 
 1. **grep 设计文档**：先在两份 docs 里搜关键词，80% 的问题答案都在
 2. **看公式编号**：算法规格文档里的每个公式都有论文对应编号，回查可以验证
