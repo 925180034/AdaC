@@ -14,6 +14,19 @@
 
 ---
 
+## 前置完成项
+
+- [x] conda 环境 `adacascade`（Python 3.11）已创建
+- [x] datasets 软链接：`/root/AdaC/datasets → /root/autodl-tmp/Adac-dataset`
+- [x] `dl/webtable-noise.zip` 已解压
+- [x] 数据集完整性验证（表文件 + 列名交叉核查）
+- [x] `scripts/prepare_fixtures.py` 完成，零错误运行
+  - toy_lake：10 张精选表，5 个 gt pairs
+  - retrieval_bench：join 1534 张 + union 5487 张，全部转 Parquet
+  - matcher_bench：Wikidata 4 场景 + MIMIC-OMOP（SMD schema-only）
+
+---
+
 ## M1 · 骨架（目标：2 周）
 
 > 目标：`POST /tables` → Profiling → 状态变 READY，四个 Agent 用 mock 数据
@@ -130,5 +143,5 @@
 
 ## 当前状态
 
-**阶段**：准备开始 M1
-**最后更新**：2026-04-22
+**阶段**：M1 进行中
+**最后更新**：2026-04-23
