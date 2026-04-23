@@ -84,7 +84,6 @@ async def upload_table(
         col_descriptions=descriptions,
         db=db,
     )
-    db.commit()
 
     if status == "INGESTED":
         qdrant = request.app.state.qdrant
@@ -159,7 +158,6 @@ async def delete_table(
 
     tr.status = "ARCHIVED"
     tr.updated_at = datetime.now(timezone.utc)
-    db.commit()
 
     qdrant = request.app.state.qdrant
     await qdrant.delete_table(table_id=table_id)

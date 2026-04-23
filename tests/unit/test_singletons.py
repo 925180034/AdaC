@@ -22,3 +22,12 @@ def test_get_qdrant_raises_before_init() -> None:
     mod._qdrant = None
     with pytest.raises(RuntimeError, match="Qdrant not initialized"):
         mod.get_qdrant()
+
+
+def test_get_session_happy_path() -> None:
+    """get_session() yields a working session after init_db()."""
+    import adacascade.db.session as mod
+
+    mod.init_db("sqlite:///:memory:")
+    with mod.get_session() as db:
+        assert db is not None
