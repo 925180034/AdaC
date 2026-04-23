@@ -82,27 +82,27 @@ class Settings(BaseSettings):
     @property
     def tlcf_cfg(self) -> dict[str, Any]:
         """TLCF 全量配置（来自 configs/default.yaml）。"""
-        return _yaml.get("tlcf", {})
+        return dict(_yaml.get("tlcf", {}))
 
     @property
     def matcher_cfg(self) -> dict[str, Any]:
         """Matcher 全量配置。"""
-        return _yaml.get("matcher", {})
+        return dict(_yaml.get("matcher", {}))
 
     @property
     def profiling_cfg(self) -> dict[str, Any]:
         """Profiling 全量配置。"""
-        return _yaml.get("profiling", {})
+        return dict(_yaml.get("profiling", {}))
 
     @property
     def llm_cfg(self) -> dict[str, Any]:
         """LLM 全量配置。"""
-        return _yaml.get("llm", {})
+        return dict(_yaml.get("llm", {}))
 
     @property
     def planner_cfg(self) -> dict[str, Any]:
         """Planner 全量配置。"""
-        return _yaml.get("planner", {})
+        return dict(_yaml.get("planner", {}))
 
     @field_validator("SBERT_DEVICE")
     @classmethod

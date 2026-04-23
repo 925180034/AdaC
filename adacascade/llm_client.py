@@ -6,7 +6,7 @@ Switch backends by changing LLM_BASE_URL in .env — zero business logic changes
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
@@ -50,12 +50,17 @@ def chat(
         "chat_template_kwargs", {"enable_thinking": enable_thinking}
     )
 
-    return _client.chat.completions.create(
+    max_tok = max_tokens or cast(int, settings.llm_cfg.get("max_tokens", 512))
+
+    # Use extra_body for vLLM-specific params (e.g. enable_thinking).
+    # response_format is passed via extra_body to avoid openai SDK overload conflicts.
+    resp = _client.chat.completions.create(  # type: ignore[call-overload]
         model=model or settings.LLM_MODEL,
         messages=messages,
         temperature=temperature,
         response_format=response_format,
-        max_tokens=max_tokens or settings.llm_cfg.get("max_tokens", 512),
+        max_tokens=max_tok,
         extra_body=extra_body,
         **kwargs,
     )
+    return cast(ChatCompletion, resp)

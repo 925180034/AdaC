@@ -10,17 +10,14 @@ from qdrant_client.models import (
     Filter,
     MatchValue,
     PointStruct,
+    QueryRequest,
 )
 
 from adacascade.config import settings
 
 
 class AdacQdrantClient:
-    """Thin wrapper around AsyncQdrantClient for AdaCascade's two collections.
-
-    Encapsulates collection names and payload filter patterns so callers
-    don't need to know the internal Qdrant API.
-    """
+    """Thin wrapper around AsyncQdrantClient for AdaCascade's two collections."""
 
     def __init__(self, client: AsyncQdrantClient) -> None:
         self._q = client
@@ -58,9 +55,9 @@ class AdacQdrantClient:
         top_k: int,
     ) -> list[dict[str, Any]]:
         """Search table-level embeddings filtered by tenant and READY status."""
-        hits = await self._q.search(
+        result = await self._q.query_points(
             collection_name=self._tbl,
-            query_vector=vector,
+            query=vector,
             query_filter=Filter(
                 must=[
                     FieldCondition(key="tenant_id", match=MatchValue(value=tenant_id)),
@@ -71,8 +68,9 @@ class AdacQdrantClient:
             with_payload=True,
         )
         return [
-            {"table_id": h.payload["table_id"], "score": 1.0 - h.score}
-            for h in hits
+            {"table_id": (p.payload or {})["table_id"], "score": p.score}
+            for p in result.points
+            if p.payload
         ]
 
     # ── Column-level ──────────────────────────────────────────────────────────
@@ -80,7 +78,7 @@ class AdacQdrantClient:
     async def upsert_columns(
         self,
         *,
-        points: list[dict[str, Any]],  # [{column_id, table_id, tenant_id, vector, col_type}]
+        points: list[dict[str, Any]],
     ) -> None:
         """Batch-upsert column-level embeddings into col_embeddings."""
         structs = [
@@ -107,9 +105,9 @@ class AdacQdrantClient:
         top_k: int,
     ) -> list[dict[str, Any]]:
         """Search column-level embeddings filtered by tenant and READY status."""
-        hits = await self._q.search(
+        result = await self._q.query_points(
             collection_name=self._col,
-            query_vector=vector,
+            query=vector,
             query_filter=Filter(
                 must=[
                     FieldCondition(key="tenant_id", match=MatchValue(value=tenant_id)),
@@ -121,11 +119,12 @@ class AdacQdrantClient:
         )
         return [
             {
-                "column_id": h.payload["column_id"],
-                "table_id": h.payload["table_id"],
-                "score": 1.0 - h.score,
+                "column_id": (p.payload or {})["column_id"],
+                "table_id": (p.payload or {})["table_id"],
+                "score": p.score,
             }
-            for h in hits
+            for p in result.points
+            if p.payload
         ]
 
     # ── Delete ────────────────────────────────────────────────────────────────

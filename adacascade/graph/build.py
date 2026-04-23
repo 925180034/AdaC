@@ -23,13 +23,13 @@ def route_after_retrieval(state: IntegrationState) -> str:
     return END if state.get("task_type") == "DISCOVER_ONLY" else "matcher"
 
 
-def build_graph() -> StateGraph:
+def build_graph() -> StateGraph[IntegrationState, IntegrationState, IntegrationState]:
     """Construct and return the compiled-ready StateGraph."""
-    g: StateGraph = StateGraph(IntegrationState)
+    g: StateGraph[IntegrationState, IntegrationState, IntegrationState] = StateGraph(IntegrationState)
 
     g.add_node("planner", planner.run)
-    g.add_node("profiling_pool", profiling.run_pool)
-    g.add_node("profiling_pair", profiling.run_pair)
+    g.add_node("profiling_pool", profiling.run_pool)  # type: ignore[type-var]
+    g.add_node("profiling_pair", profiling.run_pair)  # type: ignore[type-var]
     g.add_node("retrieval", retrieval.run)
     g.add_node("matcher", matcher.run)
 

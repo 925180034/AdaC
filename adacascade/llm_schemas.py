@@ -6,7 +6,7 @@ these models. Never use {"type": "json_object"} — see CLAUDE.md §2.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -40,7 +40,7 @@ class MatchResult(BaseModel):
     is_equivalent: bool
 
 
-def json_schema_format(model: type[BaseModel], name: str | None = None) -> dict:
+def json_schema_format(model: type[BaseModel], name: str | None = None) -> dict[str, Any]:
     """Build the response_format dict for vLLM JSON Schema constrained decoding."""
     return {
         "type": "json_schema",

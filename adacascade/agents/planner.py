@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import structlog
 
@@ -87,7 +87,8 @@ def _call_llm_subtask(
         },
     ]
     resp = chat(messages, response_format=json_schema_format(PlannerDecision))
-    decision = PlannerDecision.model_validate_json(resp.choices[0].message.content)
+    content = resp.choices[0].message.content or ""
+    decision = PlannerDecision.model_validate_json(content)
     log.info("planner.llm_decision", subtask=decision.subtask, reason=decision.reason)
     return decision.subtask
 
@@ -108,7 +109,8 @@ async def run(state: IntegrationState) -> IntegrationState:
         distinct_ratios: list[float] = [
             c.get("distinct_ratio", 0.0) for c in query_profile.get("columns", [])
         ]
-        user_hint: str = state.get("plan", {}).get("user_hint", "")  # type: ignore[arg-type]
+        plan_raw = state.get("plan", {}) or {}
+        user_hint: str = str(plan_raw.get("user_hint", ""))
 
         heuristic = _detect_subtask_heuristic(col_names, col_types, distinct_ratios, user_hint)
         if heuristic:
@@ -124,9 +126,13 @@ async def run(state: IntegrationState) -> IntegrationState:
                 user_hint=user_hint,
             )
 
-    plan_cfg = settings.planner_cfg.get("default_plans", {}).get(subtask, _DEFAULT_PLANS[subtask])
+    raw_plans = settings.planner_cfg.get("default_plans") or {}
+    plan_cfg: dict[str, float | int] = dict(
+        raw_plans.get(subtask, _DEFAULT_PLANS[subtask])
+    )
+    task_subtask: Literal["JOIN", "UNION"] = "JOIN" if subtask == "JOIN" else "UNION"
     return {
         **state,
-        "subtask": subtask,
+        "subtask": task_subtask,
         "plan": plan_cfg,
     }
