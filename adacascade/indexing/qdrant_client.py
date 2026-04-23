@@ -10,7 +10,6 @@ from qdrant_client.models import (
     Filter,
     MatchValue,
     PointStruct,
-    QueryRequest,
 )
 
 from adacascade.config import settings

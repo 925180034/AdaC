@@ -19,7 +19,6 @@ import pandas as pd
 import structlog
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
-from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from adacascade.artifacts import save_pkl

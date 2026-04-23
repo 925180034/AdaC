@@ -45,8 +45,8 @@
 - [x] 创建 `.env.example`，拷贝为 `.env` 并按 4090 配置（`SBERT_DEVICE=cuda:0`，`LLM_BASE_URL` 指向云端）
 - [x] 创建 `configs/default.yaml`（算法规格 §5 全部超参，勿硬编码）
 - [x] `python scripts/init_db.py` — 建 SQLite 元数据表（`data/metadata.db` 已创建）
-- [ ] 启动 Qdrant docker，`python scripts/init_qdrant.py` — 建 collection + payload 索引
-- [ ] 验证 Qdrant 连通：`curl http://localhost:6333/healthz`
+- [x] 启动 Qdrant 二进制 v1.17.1（此环境 Docker iptables 受限，改用二进制），`python scripts/init_qdrant.py` — 建 collection + payload 索引
+- [x] 验证 Qdrant 连通：`curl --noproxy '*' http://localhost:6333/healthz`
 
 ### 包骨架
 - [x] 创建 `adacascade/` 包结构（按 CLAUDE.md §7 目录）
@@ -74,8 +74,9 @@
 
 ### M1 验收
 - [x] `pytest tests/integration/test_m1_ingest.py` 全通过（7/7）
-- [ ] 手工调 `POST /tables` 上传一张 CSV，`GET /tables/{id}` 返回 `status=READY`（需 Qdrant 启动）
-- [ ] `mypy --strict adacascade/` 无错误
+- [x] 手工调 `POST /tables` 上传 CSV，`GET /tables/{id}` 返回 `status=READY`（GPU SBERT，<3s）
+- [x] `mypy --strict adacascade/` 无错误（24 源文件）
+- [x] `ruff check adacascade/` 无警告
 
 ---
 
@@ -151,5 +152,16 @@
 
 ## 当前状态
 
-**阶段**：M1 进行中（前置工作全部就绪，可以开始写代码）
+**阶段**：✅ M1 完成 → M2 待开始
 **最后更新**：2026-04-23
+
+### M1 完成摘要
+- 所有骨架代码实现完毕（24 个 Python 源文件）
+- E2E 链路：`POST /tables` → 后台 Profiling（GPU SBERT cuda:0）→ Qdrant upsert → `READY`
+- `mypy --strict` 0 错误，`ruff check` 0 警告，7/7 集成测试通过
+- 已解决环境问题：PyTorch cu130→cu124（CUDA 12.6 兼容），Qdrant 二进制替代 Docker
+
+### 环境备注
+- GPU：RTX 4090，驱动 560.35.03，CUDA 12.6，PyTorch 2.6.0+cu124
+- Qdrant：二进制 v1.17.1，持久化到 `data/qdrant/`
+- 代理：`http_proxy=127.0.0.1:7890`，访问 localhost 需加 `--noproxy '*'`

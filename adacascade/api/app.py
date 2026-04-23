@@ -18,7 +18,7 @@ from sqlalchemy.orm import sessionmaker
 
 from adacascade.api.routes import tables
 from adacascade.config import settings
-from adacascade.db.models import Base
+from adacascade.db.models import Base, TableRegistry
 from adacascade.graph.build import build_graph
 from adacascade.indexing.qdrant_client import AdacQdrantClient
 from adacascade.ingest.reconcile import reconcile_orphan_ingests
@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             async def _enqueue(table_id: str) -> None:
                 from adacascade.agents.profiling import run_profiling
                 # Tenant will be read from DB inside run_profiling
-                tr = db.query(__import__("adacascade.db.models", fromlist=["TableRegistry"]).TableRegistry).filter_by(table_id=table_id).first()
+                tr = db.query(TableRegistry).filter_by(table_id=table_id).first()
                 tenant_id = tr.tenant_id if tr else settings.DEFAULT_TENANT_ID
                 await run_profiling(
                     table_id=table_id,

@@ -35,22 +35,27 @@ AdaCascade（**Ada**ptive scenario matching + **Cascade**d filtering）是一个
 # 1. 初始化 SQLite 元数据库
 python scripts/init_db.py
 
-# 2. 启动 Qdrant（持久化到 ./data/qdrant）
+# 2. 启动 Qdrant 二进制（持久化到 ./data/qdrant）
+# 注意：此环境不支持 Docker（iptables 权限受限），使用 Qdrant 二进制
+# 二进制已安装到 /usr/local/bin/qdrant（v1.17.1）
 bash scripts/start_qdrant.sh
 
 # 3. 初始化 Qdrant collections 与 payload 索引
-python scripts/init_qdrant.py
+NO_PROXY=localhost,127.0.0.1 python scripts/init_qdrant.py
 
 # 4. 启动 vLLM（独立 tmux/screen）
 bash scripts/start_llm.sh
-curl http://localhost:8000/v1/models   # 确认模型在线
+curl --noproxy '*' http://localhost:8000/v1/models   # 确认模型在线
 
 # 5. 启动 FastAPI（单 worker，不得修改）
-bash scripts/start_api.sh
+NO_PROXY=localhost,127.0.0.1 bash scripts/start_api.sh
 # uvicorn adacascade.api.app:app --host 0.0.0.0 --port 8080 --workers 1
 ```
 
-**关键**：必须使用 `--workers 1`。LangGraph 共享状态与 BackgroundTasks 依赖单进程内存。
+**关键**：
+- 必须使用 `--workers 1`。LangGraph 共享状态与 BackgroundTasks 依赖单进程内存。
+- 此环境有 `http_proxy` 代理，访问 localhost 服务时需加 `NO_PROXY=localhost,127.0.0.1` 或 `curl --noproxy '*'`。
+- GPU 环境：RTX 4090，驱动 560.35.03（CUDA 12.6），PyTorch 2.6.0+cu124，SBERT 运行在 `cuda:0`。
 
 ---
 
