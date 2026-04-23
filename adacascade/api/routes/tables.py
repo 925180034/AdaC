@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from adacascade.config import settings
 from adacascade.db.models import TableRegistry
+from adacascade.db.session import get_session
 from adacascade.ingest.pipeline import ingest_table
 
 log = structlog.get_logger(__name__)
@@ -23,14 +24,10 @@ router = APIRouter(prefix="/tables", tags=["tables"])
 
 # ── DB dependency ─────────────────────────────────────────────────────────────
 
-def get_db(request: Request) -> Generator[Session, None, None]:
-    """Yield a SQLAlchemy session from the app's sessionmaker."""
-    session_factory = request.app.state.db_session_factory
-    db = session_factory()
-    try:
+def get_db() -> Generator[Session, None, None]:
+    """Yield a SQLAlchemy session from the module-level singleton."""
+    with get_session() as db:
         yield db
-    finally:
-        db.close()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -91,20 +88,17 @@ async def upload_table(
 
     if status == "INGESTED":
         qdrant = request.app.state.qdrant
-        session_factory = request.app.state.db_session_factory
 
         async def _profiling_task() -> None:
             from adacascade.agents.profiling import run_profiling
-            bg_db = session_factory()
-            try:
+
+            with get_session() as bg_db:
                 await run_profiling(
                     table_id=table_id,
                     db=bg_db,
                     qdrant=qdrant,
                     tenant_id=tenant_id,
                 )
-            finally:
-                bg_db.close()
 
         background_tasks.add_task(_profiling_task)
         log.info("tables.upload", table_id=table_id, status=status)

@@ -13,14 +13,14 @@ import structlog
 from fastapi import FastAPI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from qdrant_client import AsyncQdrantClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from adacascade.api.routes import tables
 from adacascade.config import settings
-from adacascade.db.models import Base, TableRegistry
+from adacascade.db.models import TableRegistry
+from adacascade.db.session import get_session, init_db
 from adacascade.graph.build import build_graph
 from adacascade.indexing.qdrant_client import AdacQdrantClient
+from adacascade.indexing.registry import init_qdrant_registry
 from adacascade.ingest.reconcile import reconcile_orphan_ingests
 
 log = structlog.get_logger(__name__)
@@ -29,15 +29,13 @@ log = structlog.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """FastAPI lifespan: initialize all shared resources."""
-    # ── 1. SQLite engine + sessionmaker ──────────────────────────────────────
-    engine = create_engine(settings.DATABASE_URL)
-    Base.metadata.create_all(engine)  # idempotent
-    SessionFactory = sessionmaker(bind=engine, autocommit=False, autoflush=False)
-    app.state.db_session_factory = SessionFactory
+    # ── 1. SQLite engine + module singleton ───────────────────────────────────
+    init_db(settings.DATABASE_URL)
 
     # ── 2. Qdrant client ──────────────────────────────────────────────────────
     raw_qdrant = AsyncQdrantClient(url=settings.QDRANT_URL)
     app.state.qdrant = AdacQdrantClient(raw_qdrant)
+    init_qdrant_registry(app.state.qdrant)
 
     # ── 3. LangGraph checkpoint + compiled graph ──────────────────────────────
     async with AsyncSqliteSaver.from_conn_string(settings.CKPT_PATH) as ckpt:
@@ -45,11 +43,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.info("app.startup", qdrant_url=settings.QDRANT_URL)
 
         # ── 4. Reconcile orphan INGESTED tasks ─────────────────────────────────
-        db = SessionFactory()
-        try:
-            async def _enqueue(table_id: str) -> None:
-                from adacascade.agents.profiling import run_profiling
-                # Tenant will be read from DB inside run_profiling
+        async def _enqueue(table_id: str) -> None:
+            from adacascade.agents.profiling import run_profiling
+
+            with get_session() as db:
                 tr = db.query(TableRegistry).filter_by(table_id=table_id).first()
                 tenant_id = tr.tenant_id if tr else settings.DEFAULT_TENANT_ID
                 await run_profiling(
@@ -59,10 +56,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                     tenant_id=tenant_id,
                 )
 
+        with get_session() as db:
             requeued = await reconcile_orphan_ingests(db, _enqueue)
-            log.info("app.reconcile", requeued=requeued)
-        finally:
-            db.close()
+        log.info("app.reconcile", requeued=requeued)
 
         yield
 
