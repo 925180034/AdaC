@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Qdrant as a background docker container with persistent storage.
+# Start Qdrant binary with persistent storage (no Docker required).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,20 +8,21 @@ DATA_DIR="$PROJECT_DIR/data/qdrant"
 
 mkdir -p "$DATA_DIR"
 
-if docker ps -a --format '{{.Names}}' | grep -q '^adac-qdrant$'; then
-    echo "[start_qdrant] Container adac-qdrant already exists. Starting..."
-    docker start adac-qdrant
-else
-    echo "[start_qdrant] Creating and starting adac-qdrant..."
-    docker run -d --name adac-qdrant \
-        -p 6333:6333 -p 6334:6334 \
-        -v "$DATA_DIR:/qdrant/storage" \
-        qdrant/qdrant:latest
+# Check if already running (bypass proxy for localhost)
+if curl --noproxy '*' -sf http://localhost:6333/healthz >/dev/null 2>&1; then
+    echo "[start_qdrant] Qdrant is already running."
+    exit 0
 fi
+
+echo "[start_qdrant] Starting Qdrant binary..."
+QDRANT__STORAGE__STORAGE_PATH="$DATA_DIR" \
+QDRANT__SERVICE__HTTP_PORT=6333 \
+QDRANT__SERVICE__GRPC_PORT=6334 \
+nohup qdrant >"$PROJECT_DIR/data/qdrant.log" 2>&1 &
 
 echo "[start_qdrant] Waiting for Qdrant to be ready..."
 for i in $(seq 1 30); do
-    if curl -sf http://localhost:6333/healthz >/dev/null 2>&1; then
+    if curl --noproxy '*' -sf http://localhost:6333/healthz >/dev/null 2>&1; then
         echo "[start_qdrant] Qdrant is ready."
         exit 0
     fi

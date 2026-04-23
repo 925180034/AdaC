@@ -75,7 +75,7 @@ matcher:
 # ============ Profiling ============
 profiling:
   sbert_model:      "sentence-transformers/all-MiniLM-L6-v2"
-  sbert_device:     "cuda:0"
+  sbert_device:     "cpu"
   sbert_batch_size: 256
   sample_rows:      10000       # 超过即随机采样（random_state=42）
   sample_values:    5           # 每列保留样本条数
