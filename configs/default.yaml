@@ -1,0 +1,122 @@
+# AdaCascade 默认超参配置
+# 所有值来自论文实验验证，修改需有充分理由（见 CLAUDE.md §2）
+
+# ============ TLCF（RetrievalAgent） ============
+tlcf:
+  # Layer 1
+  omega_1: 0.7       # TF-IDF 权重（论文公式 3-3）
+  omega_2: 0.3       # Jaccard 权重
+  theta_1: 0.20      # L1 阈值（敏感性分析肘部）
+  k_1:     120       # L1 候选截断数（论文表 3-3）
+
+  # Layer 2
+  theta_2: 0.55      # L2 向量余弦阈值
+  k_2:     40        # L2 Qdrant top-k（论文 §3.6.4 收益递减点）
+
+  # Layer 3
+  theta_3: 0.50      # L3 LLM 置信度阈值
+  l3_batch_size: 10  # 单次 LLM 调用包含候选数（防止 8K 上下文超限）
+
+  # 聚合权重（按 subtask 切换，论文公式 3-13）
+  weights_join:
+    w1: 0.2
+    w2: 0.3
+    w3: 0.5
+  weights_union:
+    w1: 0.4
+    w2: 0.4
+    w3: 0.2
+
+# ============ Matcher ============
+matcher:
+  # 名称相似度融合（论文公式 4-5）
+  alpha_1: 0.4       # Sim_Lev 权重
+  alpha_2: 0.3       # Sim_seq 权重
+  alpha_3: 0.3       # Sim_JAC_token 权重
+
+  # 类型兼容（论文公式 4-6）
+  delta_type_compat: 0.5
+
+  # 数值统计（论文公式 4-7~4-10）
+  beta_1: 0.4        # Sim_mean
+  beta_2: 0.3        # Sim_std
+  beta_3: 0.3        # Sim_quantile
+  epsilon: 1.0e-8
+
+  # 类别统计（论文公式 4-11~4-12）
+  gamma_1: 0.5       # Sim_JAC_vals
+  gamma_2: 0.5       # Sim_dist_freq
+
+  # 场景权重（论文公式 4-14~4-16）
+  scenario_weights:
+    SMD:
+      text: 0.6
+      struct: 0.4
+      stat: 0.0
+    SSD:
+      text: 0.5
+      struct: 0.3
+      stat: 0.2
+    SLD:
+      text: 0.4
+      struct: 0.2
+      stat: 0.4
+
+  # 决策阈值
+  theta_cand:  0.35  # 候选召回阈值（较宽松，保证召回）
+  theta_match: 0.70  # 最终判定阈值（论文公式 4-19）
+
+  # Top-N 截断（超宽表保护，系统设计 §5.2）
+  llm_topn_per_source: 10
+
+  # 1:1 约束（论文 §4.8，仅 INTEGRATE+JOIN 启用）
+  enable_1to1: true
+
+# ============ Profiling ============
+profiling:
+  sbert_model:      "sentence-transformers/all-MiniLM-L6-v2"
+  sbert_device:     "cuda:0"
+  sbert_batch_size: 256
+  sample_rows:      10000       # 超过即随机采样（random_state=42）
+  sample_values:    5           # 每列保留样本条数
+
+  tfidf:
+    min_df: 2
+    max_df: 0.9
+    ngram_range: [1, 1]
+    sublinear_tf: true
+
+  cat_vocab_min_freq: 5         # 类别词表最低频次
+
+# ============ LLM ============
+llm:
+  model:           "qwen3.5:9b"
+  temperature:     0.0
+  max_tokens:      512
+  timeout_s:       30
+  enable_thinking: false        # Qwen3 特有，判定类任务必须关闭
+  max_retries:     2
+  cache_ttl_h:     168          # L3 LLM 结果缓存 7 天
+
+# ============ Planner ============
+planner:
+  # JOIN 默认 plan（论文 §3.6.4）
+  default_plans:
+    JOIN:
+      theta_1: 0.20
+      theta_2: 0.55
+      theta_3: 0.50
+      k_1:     120
+      k_2:     40
+      w_1:     0.2
+      w_2:     0.3
+      w_3:     0.5
+    UNION:
+      theta_1: 0.20
+      theta_2: 0.55
+      theta_3: 0.50
+      k_1:     120
+      k_2:     40
+      w_1:     0.4
+      w_2:     0.4
+      w_3:     0.2

@@ -40,41 +40,41 @@
 > 目标：`POST /tables` → Profiling → 状态变 READY，四个 Agent 用 mock 数据
 
 ### 环境与基础设施
-- [ ] 创建 `requirements.txt`（参考系统设计 §8.2 版本约束）
-- [ ] 安装项目依赖至 adacascade 环境（`pip install -r requirements.txt`）
-- [ ] 创建 `.env.example`，拷贝为 `.env` 并按 4090 配置（`SBERT_DEVICE=cuda:0`，`LLM_BASE_URL` 指向云端）
-- [ ] 创建 `configs/default.yaml`（算法规格 §5 全部超参，勿硬编码）
-- [ ] `python scripts/init_db.py` — 建 SQLite 元数据表
+- [x] 创建 `requirements.txt`（参考系统设计 §8.2 版本约束）
+- [x] 安装项目依赖至 adacascade 环境（`pip install -r requirements.txt`）
+- [x] 创建 `.env.example`，拷贝为 `.env` 并按 4090 配置（`SBERT_DEVICE=cuda:0`，`LLM_BASE_URL` 指向云端）
+- [x] 创建 `configs/default.yaml`（算法规格 §5 全部超参，勿硬编码）
+- [x] `python scripts/init_db.py` — 建 SQLite 元数据表（`data/metadata.db` 已创建）
 - [ ] 启动 Qdrant docker，`python scripts/init_qdrant.py` — 建 collection + payload 索引
 - [ ] 验证 Qdrant 连通：`curl http://localhost:6333/healthz`
 
 ### 包骨架
-- [ ] 创建 `adacascade/` 包结构（按 CLAUDE.md §7 目录）
-- [ ] `adacascade/config.py`：pydantic-settings 读 `.env` 与 `configs/default.yaml`
-- [ ] `adacascade/state.py`：`IntegrationState` TypedDict 完整定义
-- [ ] `adacascade/llm_client.py`：OpenAI 兼容客户端封装
-- [ ] `adacascade/llm_schemas.py`：`PlannerDecision` / `L3BatchResult` / `MatchResult` Pydantic schema
-- [ ] `adacascade/artifacts.py`：大对象读写工具（`save_pkl` / `load_pkl`）
+- [x] 创建 `adacascade/` 包结构（按 CLAUDE.md §7 目录）
+- [x] `adacascade/config.py`：pydantic-settings 读 `.env` 与 `configs/default.yaml`
+- [x] `adacascade/state.py`：`IntegrationState` TypedDict 完整定义
+- [x] `adacascade/llm_client.py`：OpenAI 兼容客户端封装
+- [x] `adacascade/llm_schemas.py`：`PlannerDecision` / `L3BatchResult` / `MatchResult` Pydantic schema
+- [x] `adacascade/artifacts.py`：大对象读写工具（`save_pkl` / `load_pkl`）
 
 ### 数据库层
-- [ ] `adacascade/db/models.py`：SQLAlchemy 模型（`table_registry` / `column_metadata` / `integration_task` / `agent_step` / `discovery_result` / `column_mapping`）
-- [ ] `scripts/init_db.py`：建表脚本（对应 system_design §6.2 全部 DDL）
+- [x] `adacascade/db/models.py`：SQLAlchemy 模型（`table_registry` / `column_metadata` / `integration_task` / `agent_step` / `discovery_result` / `column_mapping`）
+- [x] `scripts/init_db.py`：建表脚本（对应 system_design §6.2 全部 DDL）
 
 ### 入库链路
-- [ ] `adacascade/ingest/pipeline.py`：PENDING → INGESTED（格式校验、转 Parquet、schema_hash 计算）
-- [ ] `adacascade/ingest/reconcile.py`：`reconcile_orphan_ingests()`
-- [ ] `adacascade/indexing/qdrant_client.py`：封装 upsert / search / delete（含 payload 过滤）
-- [ ] `adacascade/agents/profiling.py`：完整 ProfilingAgent（text_blob + TF-IDF transform + SBERT GPU 编码 + Qdrant upsert）
+- [x] `adacascade/ingest/pipeline.py`：PENDING → INGESTED（格式校验、转 Parquet、schema_hash 计算）
+- [x] `adacascade/ingest/reconcile.py`：`reconcile_orphan_ingests()`
+- [x] `adacascade/indexing/qdrant_client.py`：封装 upsert / search / delete（含 payload 过滤）
+- [x] `adacascade/agents/profiling.py`：完整 ProfilingAgent（text_blob + TF-IDF transform + SBERT GPU 编码 + Qdrant upsert）
 
 ### API 骨架
-- [ ] `adacascade/api/app.py`：FastAPI lifespan（Qdrant 连接 + LangGraph 编译 + reconciliation）
-- [ ] `adacascade/api/routes/tables.py`：`POST /tables`（202）、`GET /tables/{id}`、`GET /tables`、`DELETE /tables/{id}`
-- [ ] `adacascade/graph/build.py`：LangGraph 图定义（四 Agent，Retrieval / Matcher 暂用 mock 桩）
-- [ ] `scripts/start_api.sh`：单 worker 启动脚本
+- [x] `adacascade/api/app.py`：FastAPI lifespan（Qdrant 连接 + LangGraph 编译 + reconciliation）
+- [x] `adacascade/api/routes/tables.py`：`POST /tables`（202）、`GET /tables/{id}`、`GET /tables`、`DELETE /tables/{id}`
+- [x] `adacascade/graph/build.py`：LangGraph 图定义（四 Agent，Retrieval / Matcher 暂用 mock 桩）
+- [x] `scripts/start_api.sh`：单 worker 启动脚本
 
 ### M1 验收
-- [ ] `pytest tests/integration/test_m1_ingest.py` 全通过
-- [ ] 手工调 `POST /tables` 上传一张 CSV，`GET /tables/{id}` 返回 `status=READY`
+- [x] `pytest tests/integration/test_m1_ingest.py` 全通过（7/7）
+- [ ] 手工调 `POST /tables` 上传一张 CSV，`GET /tables/{id}` 返回 `status=READY`（需 Qdrant 启动）
 - [ ] `mypy --strict adacascade/` 无错误
 
 ---
