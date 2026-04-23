@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 import structlog
-from scipy.sparse import issparse  # type: ignore[import-untyped]
 from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]
 
 from adacascade.config import settings
@@ -19,6 +18,7 @@ from adacascade.config import settings
 log = structlog.get_logger(__name__)
 
 _TFIDF_PATH = Path(settings.ARTIFACTS_DIR) / "tfidf.pkl"
+_vectorizer: Any = None
 
 
 class C1Entry(TypedDict):
@@ -29,7 +29,7 @@ class C1Entry(TypedDict):
 
 
 def _load_tfidf() -> Any:
-    """Load the TF-IDF vectorizer from disk.
+    """Load the TF-IDF vectorizer from disk (cached after first load).
 
     Returns:
         A fitted sklearn TfidfVectorizer.
@@ -37,13 +37,17 @@ def _load_tfidf() -> Any:
     Raises:
         FileNotFoundError: If the vectorizer pickle does not exist.
     """
+    global _vectorizer
+    if _vectorizer is not None:
+        return _vectorizer
     if not _TFIDF_PATH.exists():
         raise FileNotFoundError(
             f"TF-IDF vectorizer not found at {_TFIDF_PATH}. "
             "Run: python scripts/rebuild_tfidf.py"
         )
     with _TFIDF_PATH.open("rb") as f:
-        return pickle.load(f)  # noqa: S301
+        _vectorizer = pickle.load(f)  # noqa: S301
+    return _vectorizer
 
 
 def compute_s1(tfidf_sim: float, jaccard_sim: float) -> float:
@@ -121,8 +125,6 @@ def build_c1(
 
     for cand in candidates:
         vc = vec.transform([cand["text_blob"]])
-        # issparse check is a no-op here but kept for future sparse-path awareness
-        _ = issparse(vc)
         sim_tf: float = float(cosine_similarity(vq, vc)[0, 0])
         sim_jac: float = type_jaccard(query_types, cand["type_multiset"])
         s1 = compute_s1(sim_tf, sim_jac)
