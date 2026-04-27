@@ -54,3 +54,24 @@ def test_c2_fallback_when_empty() -> None:
     # No overlap → should fall back to top-3 of W ∪ C1
     result = intersect_c2(c1, {"B"}, {"B": 0.9}, theta_2=0.55, fallback=True)
     assert len(result) > 0
+
+
+def test_l3_batch_invalid_schema_raises() -> None:
+    """Mock LLM returning invalid JSON must raise via Pydantic, not silently pass."""
+    from adacascade.llm_schemas import L3BatchResult
+    import pytest
+
+    bad_json = '{"scores": [{"candidate_idx": 1, "score": 1.5, "reason": "x"}]}'
+    with pytest.raises(Exception):  # score > 1.0 violates Field(le=1.0)
+        L3BatchResult.model_validate_json(bad_json)
+
+
+def test_l3_batch_missing_idx_scores_zero() -> None:
+    """Candidates with no LLM score entry get S3=0.0 and are excluded from C3."""
+    from adacascade.agents.retrieval.layer3 import _merge_scores
+    c2 = [{"table_id": "A"}, {"table_id": "B"}]
+    llm_scores = {1: 0.8}  # only idx=1 (A) scored
+    result = _merge_scores(c2, llm_scores, theta_3=0.5)
+    assert len(result) == 1
+    assert result[0]["table_id"] == "A"
+    assert result[0]["s3"] == pytest.approx(0.8)

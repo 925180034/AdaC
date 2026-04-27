@@ -4,6 +4,8 @@ langgraph>=1.1.0
 langgraph-checkpoint-sqlite>=2.0.6
 langchain-core>=0.3
 openai>=1.40
+vllm==0.8.5
+transformers==4.51.3
 sentence-transformers>=3.0
 torch>=2.2
 qdrant-client>=1.10
