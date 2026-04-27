@@ -45,6 +45,8 @@ The frontend is a hybrid of a presentation demo and a real operation console:
 - It should still execute real backend tasks and show real task data, not hard-coded mock results.
 - It should be easy for the research-group system to link into without deep integration.
 
+This first version is local-demo only. It may put `VITE_API_KEY=dev-local-token` in browser-delivered frontend code, so it must not be deployed to a public network or treated as a production authentication model. Before any shared or public deployment, the external-system integration must switch to a short-lived session token or server-side proxy flow.
+
 The preferred visual style is a dark research workbench: professional, dense enough for technical details, but with clear graph and timeline highlights.
 
 ## 4. Overall Architecture
@@ -59,12 +61,12 @@ React/Vite frontend: /workspace
     │ REST + SSE, Authorization + X-Tenant-Id
     ▼
 Existing FastAPI AdaCascade service
-    ├── /tables
-    ├── /discover
-    ├── /match
-    ├── /integrate
-    ├── /tasks/{task_id}
-    └── /tasks/{task_id}/events  (new)
+    ├── /tables                 (existing)
+    ├── /discover               (existing)
+    ├── /match                  (existing)
+    ├── /integrate              (existing)
+    ├── /tasks/{task_id}        (existing)
+    └── /tasks/{task_id}/events (new backend work)
 ```
 
 The frontend and backend remain separated:
@@ -198,9 +200,11 @@ The right panel is the main process explanation area. It shows:
 6. On completion, frontend fetches final task result.
 7. Center panel shows discovery results and matching results.
 
-For integrated mode, the graph should default to the top-ranked candidate table. If the backend result does not yet associate mappings with each candidate table, the UI shows global mappings first and can later be refined when the backend stores candidate-specific mapping groups.
+Design decision for integrated mode: the first version treats mappings as task-level global mappings, because the current backend persists a flat `mappings[]` list and does not associate each mapping with a specific ranked candidate table. The integrated graph defaults to the top-ranked candidate table for the discovery section, while the mapping section shows all returned mappings as global task mappings. Candidate-specific mapping groups are a future backend extension and must not be assumed by the first implementation.
 
 ## 8. SSE Event API
+
+This section specifies new backend work. The current backend already exposes `GET /tasks/{task_id}` with persisted `trace`, `ranking`, and `mappings`, but it does not yet expose an SSE endpoint. The frontend implementation depends on adding the endpoint and event emission described below.
 
 ### 8.1 Endpoint
 
@@ -380,6 +384,26 @@ query table
 
 Discovery edges use ranking score as weight. Edge metrics include L1/L2/L3 layer scores when available.
 
+Mapping from `GET /tasks/{task_id}` to graph data:
+
+| Backend field | Frontend graph field |
+|---|---|
+| `task.query_table_id` | One `query_table` node with `id = table:<query_table_id>` and `table_id = query_table_id`. |
+| `ranking[n].candidate_table` | One `candidate_table` node with `id = table:<candidate_table>`. |
+| `ranking[n].rank` | Discovery edge label prefix, for example `#1`. |
+| `ranking[n].score` | Discovery edge `weight` and score label. |
+| `ranking[n].layer_scores` | Discovery edge `metrics.layer_scores`; expanded in the details drawer. |
+
+For each ranking item, create one discovery edge:
+
+```text
+source = table:<query_table_id>
+target = table:<candidate_table>
+kind = discovery
+weight = ranking[n].score
+label = `#${rank} ${score}`
+```
+
 ### 10.4 Match graph
 
 Match mode shows column-level relationships:
@@ -393,6 +417,32 @@ hospital_id ───────▶  provider_id
 
 Mapping edges use confidence as weight. Edge details show scenario and reasoning.
 
+Mapping from `GET /tasks/{task_id}` to graph data:
+
+| Backend field | Frontend graph field |
+|---|---|
+| `task.query_table_id` | `source_table` node for match mode. |
+| `task.target_table_id` | `target_table` node for match mode. |
+| `mappings[n].src_column_id` | `source_column` node with `id = column:<src_column_id>`. |
+| `mappings[n].tgt_column_id` | `target_column` node with `id = column:<tgt_column_id>`. |
+| `mappings[n].confidence` | Mapping edge `weight` and score label. |
+| `mappings[n].scenario` | Mapping edge `scenario`. |
+| `mappings[n].reasoning` | Mapping edge `explanation` and details drawer text. |
+| `mappings[n].is_matched` | Mapping edge visibility/status; false mappings are shown muted if returned. |
+
+For each mapping item, create one mapping edge:
+
+```text
+source = column:<src_column_id>
+target = column:<tgt_column_id>
+kind = mapping
+weight = mappings[n].confidence
+scenario = mappings[n].scenario
+explanation = mappings[n].reasoning
+```
+
+The current `/tasks/{task_id}` response does not include column display names or table membership for each column. The first frontend implementation can use column IDs as labels. A later backend enhancement may add column metadata to the task response or the frontend may resolve it through a separate table-detail endpoint if needed.
+
 ### 10.5 Integrated graph
 
 Integrated mode combines the two levels:
@@ -400,7 +450,7 @@ Integrated mode combines the two levels:
 - Upper section: query table to candidate tables.
 - Lower section: query/source columns to selected target/candidate columns.
 
-The UI defaults to the top-ranked candidate table. Clicking a candidate table changes the focused mapping section when candidate-specific mappings are available.
+The UI defaults to the top-ranked candidate table in the discovery section. For the first implementation, mappings are rendered as global task-level mappings, not as candidate-specific mappings. Clicking a candidate table only highlights the discovery node and edge; it does not filter mappings until the backend adds candidate-specific mapping groups.
 
 ### 10.6 Interaction rules
 
@@ -511,14 +561,15 @@ VITE_API_KEY=dev-local-token
 VITE_DEFAULT_TENANT_ID=default
 ```
 
-The first version is a local demo tool. Later, production deployment should not expose privileged long-lived API keys in browser code. The external-system integration can move to a short-lived session token flow when needed.
+The first version is a local demo tool only. Because Vite exposes `VITE_*` variables to browser code, `VITE_API_KEY` is visible to anyone who can open the frontend bundle. This is acceptable only for local demos on a trusted machine or private lab network. Do not deploy this setup to the public internet. A shared or production deployment must replace `VITE_API_KEY` with short-lived external-system session tokens or a backend-for-frontend proxy.
 
 ## 12. Backend Minimum Additions
 
-To support the frontend, add only the minimum backend changes:
+To support the frontend, add only the minimum backend changes. These are not present in the current backend unless explicitly marked optional future work:
 
-1. `GET /tasks/{task_id}/events`
+1. New endpoint: `GET /tasks/{task_id}/events`
    - SSE endpoint scoped by bearer token and tenant header.
+   - Must be implemented before the frontend can show real-time progress.
 
 2. In-process task event bus
    - Subscribe by `task_id`.
@@ -557,9 +608,16 @@ If SSE disconnects, the frontend must not mark the task failed. It should show a
 
 ## 14. Testing Strategy
 
+The frontend test toolchain should align with Vite and React:
+
+- Vitest as the unit test runner.
+- React Testing Library for component tests.
+- Mock Service Worker or explicit API mocks for backend responses in component tests.
+- Playwright for browser end-to-end demo tests.
+
 ### 14.1 Frontend unit tests
 
-Test pure conversion logic:
+Use Vitest for pure conversion logic:
 
 - Task result to graph nodes/edges.
 - SSE events to timeline state.
@@ -567,7 +625,7 @@ Test pure conversion logic:
 
 ### 14.2 Component tests
 
-Test key components with mock data:
+Use Vitest + React Testing Library with mock data:
 
 - `TaskControlPanel` renders modes and table selectors.
 - `AgentTracePanel` renders running, success, degraded, and failed nodes.
@@ -583,6 +641,21 @@ Use Playwright for the demo flow:
 - Verify timeline updates.
 - Verify final graph, ranking, and mappings render.
 - Verify URL parameters prefill the workspace.
+
+Add frontend package scripts so local and CI verification are explicit:
+
+```json
+{
+  "scripts": {
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "build": "tsc -b && vite build"
+  }
+}
+```
+
+CI should run at least `npm run lint`, `npm run test`, and `npm run build` for every frontend change. `npm run test:e2e` can run in a browser-enabled job or be documented as the local demo acceptance command if CI browser dependencies are unavailable.
 
 ## 15. Implementation Milestones
 
