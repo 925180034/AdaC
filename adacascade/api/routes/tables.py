@@ -8,7 +8,14 @@ from datetime import datetime, timezone
 from typing import Any, Generator
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi import File as FastAPIFile
 from fastapi import Form
 from sqlalchemy.orm import Session
@@ -24,6 +31,7 @@ router = APIRouter(prefix="/tables", tags=["tables"])
 
 # ── DB dependency ─────────────────────────────────────────────────────────────
 
+
 def get_db() -> Generator[Session, None, None]:
     """Yield a SQLAlchemy session from the module-level singleton."""
     with get_session() as db:
@@ -31,6 +39,7 @@ def get_db() -> Generator[Session, None, None]:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _table_to_dict(tr: TableRegistry) -> dict[str, Any]:
     return {
@@ -48,6 +57,7 @@ def _table_to_dict(tr: TableRegistry) -> dict[str, Any]:
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
 
 @router.post("", status_code=202)
 async def upload_table(
@@ -70,7 +80,9 @@ async def upload_table(
         try:
             descriptions = json.loads(col_descriptions)
         except json.JSONDecodeError as e:
-            raise HTTPException(status_code=422, detail=f"col_descriptions is not valid JSON: {e}")
+            raise HTTPException(
+                status_code=422, detail=f"col_descriptions is not valid JSON: {e}"
+            )
 
     raw = await file.read()
 
@@ -134,7 +146,9 @@ async def list_tables(
     if status:
         q = q.filter_by(status=status)
     total = q.count()
-    rows = q.order_by(TableRegistry.uploaded_at.desc()).offset(offset).limit(limit).all()
+    rows = (
+        q.order_by(TableRegistry.uploaded_at.desc()).offset(offset).limit(limit).all()
+    )
     return {
         "total": total,
         "offset": offset,

@@ -54,11 +54,14 @@ def client() -> TestClient:
 
 @pytest.fixture(scope="module")
 def sample_csv() -> bytes:
-    df = pd.DataFrame({"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"], "age": [25, 30, 35]})
+    df = pd.DataFrame(
+        {"id": [1, 2, 3], "name": ["Alice", "Bob", "Charlie"], "age": [25, 30, 35]}
+    )
     return df.to_csv(index=False).encode()
 
 
 # ── Tests ──────────────────────────────────────────────────────────────────────
+
 
 def test_healthz(client: TestClient) -> None:
     resp = client.get("/healthz")
@@ -79,7 +82,11 @@ def test_upload_csv_returns_202(client: TestClient, sample_csv: bytes) -> None:
 
 
 def test_get_table_after_upload(client: TestClient, sample_csv: bytes) -> None:
-    csv_bytes = pd.DataFrame({"col_a": [10, 20], "col_b": ["x", "y"]}).to_csv(index=False).encode()
+    csv_bytes = (
+        pd.DataFrame({"col_a": [10, 20], "col_b": ["x", "y"]})
+        .to_csv(index=False)
+        .encode()
+    )
     upload_resp = client.post(
         "/tables",
         data={"table_name": "status_test"},

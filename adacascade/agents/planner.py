@@ -112,16 +112,16 @@ async def run(state: IntegrationState) -> IntegrationState:
         plan_raw = state.get("plan", {}) or {}
         user_hint: str = str(plan_raw.get("user_hint", ""))
 
-        heuristic = _detect_subtask_heuristic(col_names, col_types, distinct_ratios, user_hint)
+        heuristic = _detect_subtask_heuristic(
+            col_names, col_types, distinct_ratios, user_hint
+        )
         if heuristic:
             subtask = heuristic
             bound_log.info("planner.heuristic", subtask=subtask)
         else:
             subtask = _call_llm_subtask(
                 table_name=query_profile.get("table_name", ""),
-                columns=[
-                    {"name": n, "type": t} for n, t in zip(col_names, col_types)
-                ],
+                columns=[{"name": n, "type": t} for n, t in zip(col_names, col_types)],
                 sample_rows=query_profile.get("sample_rows", []),
                 user_hint=user_hint,
             )

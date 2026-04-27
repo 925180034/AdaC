@@ -46,6 +46,7 @@ _DTYPE_MAP: dict[str, str] = {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _stable_id(seed: str) -> str:
     """Deterministic UUID5 from seed string."""
     return str(uuid.uuid5(_NAMESPACE, seed))
@@ -83,10 +84,13 @@ def _read_upload(file: IO[bytes], filename: str) -> pd.DataFrame:
             return pd.read_csv(io.BytesIO(raw), encoding=enc, low_memory=False)
         except UnicodeDecodeError:
             continue
-    raise ValueError(f"Cannot decode {filename} as CSV (tried utf-8, utf-8-sig, latin-1)")
+    raise ValueError(
+        f"Cannot decode {filename} as CSV (tried utf-8, utf-8-sig, latin-1)"
+    )
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
+
 
 def ingest_table(
     *,

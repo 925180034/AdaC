@@ -3,6 +3,7 @@
 Algorithm Spec §3.4. Batches C₂ into chunks of ≤10 and calls LLM in parallel.
 Returns C₃ = {Tc ∈ C₂ | S₃ > θ₃}.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -137,7 +138,7 @@ async def batch_verify(
         return []
 
     # Split into batches
-    batches = [c2[i:i + batch_size] for i in range(0, len(c2), batch_size)]
+    batches = [c2[i : i + batch_size] for i in range(0, len(c2), batch_size)]
     offsets = list(range(0, len(c2), batch_size))
 
     async def _call_one(batch: list[dict[str, Any]], offset: int) -> dict[int, float]:

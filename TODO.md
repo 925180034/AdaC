@@ -85,21 +85,21 @@
 > 目标：TLCF 三层 + Matcher 所有公式 + LLM JSON Schema，复现论文指标
 
 ### Week 1：RetrievalAgent / TLCF
-- [ ] `adacascade/agents/retrieval/layer1.py`：`compute_s1()`、`type_jaccard()`、`build_c1()`（小顶堆，算法规格 §3.2）
-- [ ] `adacascade/agents/retrieval/layer2.py`：Qdrant search + C₂ 交集约束 + 回退策略（算法规格 §3.3）
-- [ ] `adacascade/agents/retrieval/layer3.py`：LLM 批处理验证（batch_size=10，asyncio.gather 并行，算法规格 §3.4）
-- [ ] `adacascade/agents/retrieval/aggregate.py`：min-max 归一化（C₃ 内）+ S_final 加权聚合（算法规格 §3.5）
-- [ ] 单元测试：`test_type_jaccard` / `test_minmax_edge` / `test_c2_intersection` / `test_l3_batch`
-- [ ] 集成测试：`test_tlcf_toy`（toy_lake 10 表，已知 JOIN 对全进 C₃）
+- [x] `adacascade/agents/retrieval/layer1.py`：`compute_s1()`、`type_jaccard()`、`build_c1()`（小顶堆，算法规格 §3.2）
+- [x] `adacascade/agents/retrieval/layer2.py`：Qdrant search + C₂ 交集约束 + 回退策略（算法规格 §3.3）
+- [x] `adacascade/agents/retrieval/layer3.py`：LLM 批处理验证（batch_size=10，asyncio.gather 并行，算法规格 §3.4）
+- [x] `adacascade/agents/retrieval/aggregate.py`：min-max 归一化（C₃ 内）+ S_final 加权聚合（算法规格 §3.5）
+- [x] 单元测试：已覆盖 `type_jaccard` / C₂ 交集约束 / L3 JSON Schema 非法响应 / L3 缺失分数排除 / `test_minmax_edge` / S_final 聚合排序
+- [x] 集成测试：`test_tlcf_toy`（离线确定性验证 C₁→C₂→C₃→ranking，已知 JOIN 候选排第一）
 
 ### Week 2：MatcherAgent
-- [ ] `adacascade/agents/matcher/text_sim.py`：`sim_lev()` / `sim_seq()` / `sim_jac_name()` / `sim_name()`（算法规格 §4.2.1）
-- [ ] `adacascade/agents/matcher/struct_sim.py`：`sim_type()` + 兼容图（算法规格 §4.2.2）
-- [ ] `adacascade/agents/matcher/stat_sim.py`：`sim_num()` / `sim_cat()` / `sim_dist()`（算法规格 §4.2.3）
-- [ ] `adacascade/agents/matcher/mixed.py`：`mixed_score()` + 场景权重切换 SMD/SSD/SLD（算法规格 §4.2）
-- [ ] `adacascade/agents/matcher/candidates.py`：`filter_cpi()` + `truncate_per_source(top_n=10)`（算法规格 §4.3/§4.4）
-- [ ] `adacascade/agents/matcher/decision.py`：布尔判定 + 1:1 匈牙利（JOIN 场景，算法规格 §4.8）
-- [ ] 单元测试：`test_name_sim` / `test_type_compat` / `test_scenario_weights` / `test_num_stat` / `test_cat_stat`
+- [x] `adacascade/agents/matcher/text_sim.py`：`sim_lev()` / `sim_seq()` / `sim_jac_name()` / `sim_name()`（算法规格 §4.2.1）
+- [x] `adacascade/agents/matcher/struct_sim.py`：`sim_type()` + 兼容图（算法规格 §4.2.2）
+- [x] `adacascade/agents/matcher/stat_sim.py`：`sim_num()` / `sim_cat()` / `sim_dist()`（算法规格 §4.2.3）
+- [x] `adacascade/agents/matcher/mixed.py`：`mixed_score()` + 场景权重切换 SMD/SSD/SLD（算法规格 §4.2）
+- [x] `adacascade/agents/matcher/candidates.py`：`filter_cpi()` + `truncate_per_source(top_n=10)`（算法规格 §4.3/§4.4）
+- [x] `adacascade/agents/matcher/decision.py`：布尔判定 + 1:1 匈牙利（JOIN 场景，算法规格 §4.8）
+- [x] 单元测试：`test_name_sim` / `test_type_compat` / `test_scenario_weights` / `test_num_stat` / `test_cat_stat` / 候选过滤截断 / 匈牙利 1:1
 
 ### Week 3：LLM 提示词 + 端到端
 - [ ] `adacascade/agents/matcher/llm_verify.py`：五段式提示词（Block 1~5），场景差异化注入（算法规格 §4.6）
@@ -152,8 +152,8 @@
 
 ## 当前状态
 
-**阶段**：✅ M1 完成 → M2 待开始
-**最后更新**：2026-04-23
+**阶段**：✅ M1 完成 → M2 Week1 Retrieval/TLCF 完成，Week2 Matcher 公式层完成，Week3 LLM/API/端到端待完成
+**最后更新**：2026-04-27
 
 ### M1 完成摘要
 - 所有骨架代码实现完毕（24 个 Python 源文件）
@@ -161,7 +161,25 @@
 - `mypy --strict` 0 错误，`ruff check` 0 警告，7/7 集成测试通过
 - 已解决环境问题：PyTorch cu130→cu124（CUDA 12.6 兼容），Qdrant 二进制替代 Docker
 
+### M2 当前完成摘要
+- Retrieval Layer 1 已完成：TF-IDF + type Jaccard + C₁ 构建
+- Retrieval Layer 2 已完成：Qdrant 召回、`C₁ ∩ topK` 交集约束、回退策略
+- Retrieval Layer 3 已完成：LLM 批处理验证、Pydantic JSON Schema 校验、缺失分数按 0 排除
+- Retrieval aggregate 已完成：C₃ 内 min-max 归一化 + `S_final` 加权排序
+- Matcher Week2 公式层已完成：名称/类型/统计相似度、场景权重、候选过滤、Top-N 截断、布尔判定、1:1 匈牙利
+- 本地 Qwen AWQ 已部署到 `/root/autodl-tmp/models/qwen3.5-9b-awq`，`/root/models/qwen3.5-9b-awq` 为软链接
+- vLLM 已可用：运行时验证参数为 `VLLM_GPU_MEMORY_UTILIZATION=0.35 VLLM_MAX_MODEL_LEN=4096`
+- SBERT 已验证运行在 `cuda:0`，可与 vLLM 同时使用
+- 最新验证：`pytest tests/unit/ -v` 21/21 通过；`pytest tests/integration/ -v` 8/8 通过；`ruff check adacascade/ tests/ scripts/` 通过；`mypy --strict adacascade/` 通过
+
+### M2 剩余工作
+- Matcher LLM verify：五段式提示词 + `MatchResult` JSON Schema 强约束
+- `/integrate` / `/discover` / `/match` / `/tasks/{task_id}` API 补齐
+- `test_matcher_toy_smd` / `test_end2end_toy` 端到端测试
+- 论文复现测试：retrieval R@10 与 matcher SLD F1
+
 ### 环境备注
 - GPU：RTX 4090，驱动 560.35.03，CUDA 12.6，PyTorch 2.6.0+cu124
 - Qdrant：二进制 v1.17.1，持久化到 `data/qdrant/`
+- vLLM：`vllm==0.8.5`，`transformers==4.51.3`，默认 `xgrammar` guided decoding backend
 - 代理：`http_proxy=127.0.0.1:7890`，访问 localhost 需加 `--noproxy '*'`

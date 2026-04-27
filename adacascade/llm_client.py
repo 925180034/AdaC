@@ -46,9 +46,7 @@ def chat(
         Raw ChatCompletion response.
     """
     extra_body: dict[str, Any] = kwargs.pop("extra_body", {})
-    extra_body.setdefault(
-        "chat_template_kwargs", {"enable_thinking": enable_thinking}
-    )
+    extra_body.setdefault("chat_template_kwargs", {"enable_thinking": enable_thinking})
 
     max_tok = max_tokens or cast(int, settings.llm_cfg.get("max_tokens", 512))
 

@@ -61,7 +61,9 @@ class ColumnMetadata(Base):
 
     column_id: Mapped[str] = mapped_column(String, primary_key=True)
     table_id: Mapped[str] = mapped_column(
-        String, ForeignKey("table_registry.table_id", ondelete="CASCADE"), nullable=False
+        String,
+        ForeignKey("table_registry.table_id", ondelete="CASCADE"),
+        nullable=False,
     )
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     col_name: Mapped[str] = mapped_column(String, nullable=False)
@@ -72,7 +74,9 @@ class ColumnMetadata(Base):
     stat_summary: Mapped[str | None] = mapped_column(Text)  # JSON blob
     qdrant_point_id: Mapped[str | None] = mapped_column(String)
 
-    table: Mapped[TableRegistry] = relationship("TableRegistry", back_populates="columns")
+    table: Mapped[TableRegistry] = relationship(
+        "TableRegistry", back_populates="columns"
+    )
 
 
 class IntegrationTask(Base):
@@ -129,7 +133,9 @@ class AgentStep(Base):
     started_at: Mapped[datetime] = mapped_column(nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column()
 
-    task: Mapped[IntegrationTask] = relationship("IntegrationTask", back_populates="steps")
+    task: Mapped[IntegrationTask] = relationship(
+        "IntegrationTask", back_populates="steps"
+    )
 
 
 class DiscoveryResult(Base):
@@ -151,10 +157,10 @@ class ColumnMapping(Base):
 
     __tablename__ = "column_mapping"
     __table_args__ = (
-        UniqueConstraint("task_id", "src_column_id", "tgt_column_id", name="uq_cm_pair"),
-        CheckConstraint(
-            "scenario IN ('SMD','SSD','SLD')", name="ck_cm_scenario"
+        UniqueConstraint(
+            "task_id", "src_column_id", "tgt_column_id", name="uq_cm_pair"
         ),
+        CheckConstraint("scenario IN ('SMD','SSD','SLD')", name="ck_cm_scenario"),
     )
 
     mapping_id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -167,7 +173,9 @@ class ColumnMapping(Base):
     )
     scenario: Mapped[str] = mapped_column(String, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
-    is_matched: Mapped[int] = mapped_column(Integer, nullable=False)  # SQLite has no BOOL
+    is_matched: Mapped[int] = mapped_column(
+        Integer, nullable=False
+    )  # SQLite has no BOOL
     reasoning: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(nullable=False)
 
@@ -177,7 +185,9 @@ class ModelVersion(Base):
 
     __tablename__ = "model_version"
 
-    model_key: Mapped[str] = mapped_column(String, primary_key=True)  # sbert/llm/matcher
+    model_key: Mapped[str] = mapped_column(
+        String, primary_key=True
+    )  # sbert/llm/matcher
     version: Mapped[str] = mapped_column(String, nullable=False)
     params: Mapped[str | None] = mapped_column(Text)  # JSON
     activated_at: Mapped[datetime] = mapped_column(nullable=False)

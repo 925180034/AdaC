@@ -57,6 +57,7 @@ def _get_tfidf() -> TfidfVectorizer | None:
 
 # ── Dataclasses ───────────────────────────────────────────────────────────────
 
+
 @dataclass
 class NumericStats:
     """Descriptive statistics for int/float/date columns."""
@@ -72,8 +73,8 @@ class NumericStats:
 class CatStats:
     """Frequency statistics for str/bool columns."""
 
-    top_k: list[tuple[str, float]]   # [(value, norm_freq), ...]
-    freq_vector_ref: str             # path to pkl with sparse freq vector
+    top_k: list[tuple[str, float]]  # [(value, norm_freq), ...]
+    freq_vector_ref: str  # path to pkl with sparse freq vector
 
 
 @dataclass
@@ -89,7 +90,7 @@ class ColumnProfile:
     distinct_ratio: float
     numeric_stats: NumericStats | None
     categorical_stats: CatStats | None
-    col_emb_ref: str              # Qdrant point id
+    col_emb_ref: str  # Qdrant point id
     sample_values: list[str]
 
 
@@ -99,13 +100,14 @@ class TableProfile:
 
     table_id: str
     text_blob: str
-    tfidf_vec_ref: str           # path to pkl with sparse tfidf vector
-    table_emb_ref: str           # Qdrant point id (== table_id)
+    tfidf_vec_ref: str  # path to pkl with sparse tfidf vector
+    table_emb_ref: str  # Qdrant point id (== table_id)
     type_multiset: list[str]
     columns: list[ColumnProfile] = field(default_factory=list)
 
 
 # ── Text helpers ──────────────────────────────────────────────────────────────
+
 
 def _build_text_blob(table_name: str, columns: list[dict[str, Any]]) -> str:
     """Concatenate table name + column names + descriptions (Algorithm Spec §2.2)."""
@@ -138,10 +140,15 @@ def _col_sbert_input(col: ColumnMetadata, table_name: str) -> str:
 
 # ── Statistical feature computation ──────────────────────────────────────────
 
+
 def _compute_numeric_stats(series: pd.Series) -> NumericStats:
     """Compute mean/std/quartiles (Algorithm Spec §2.4)."""
     vals = pd.to_numeric(series.dropna(), errors="coerce").dropna()
-    q25, q50, q75 = np.percentile(vals, [25, 50, 75], method="linear") if len(vals) else (0.0, 0.0, 0.0)
+    q25, q50, q75 = (
+        np.percentile(vals, [25, 50, 75], method="linear")
+        if len(vals)
+        else (0.0, 0.0, 0.0)
+    )
     return NumericStats(
         mean=float(vals.mean()) if len(vals) else 0.0,
         std=float(vals.std()) if len(vals) else 0.0,
@@ -165,6 +172,7 @@ def _compute_cat_stats(series: pd.Series, table_id: str, col_id: str) -> CatStat
 
 
 # ── Core profile function ─────────────────────────────────────────────────────
+
 
 def profile_table(
     *,
@@ -235,10 +243,7 @@ def profile_table(
         elif dtype in {"str", "bool"}:
             cat_stats = _compute_cat_stats(series, table_id, col_id)
 
-        sample_vals = [
-            str(v)
-            for v in series.dropna().head(sample_values).tolist()
-        ]
+        sample_vals = [str(v) for v in series.dropna().head(sample_values).tolist()]
 
         col_profiles.append(
             ColumnProfile(
@@ -267,6 +272,7 @@ def profile_table(
 
 
 # ── SBERT encoding + Qdrant upsert ────────────────────────────────────────────
+
 
 async def encode_and_index(
     *,
@@ -339,6 +345,7 @@ async def encode_and_index(
 
 
 # ── Background-task entry point ───────────────────────────────────────────────
+
 
 async def run_profiling(
     *,
@@ -417,6 +424,7 @@ async def run_profiling(
 
 
 # ── LangGraph node stubs ──────────────────────────────────────────────────────
+
 
 async def run_pool(state: dict[str, Any]) -> dict[str, Any]:
     """LangGraph node: profile query table against pool (INTEGRATE/DISCOVER)."""

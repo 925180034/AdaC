@@ -3,6 +3,7 @@
 Algorithm Spec §3.3. C₂ = {Tc ∈ C₁ ∩ W | S₂(Tq,Tc) > θ₂}.
 Fallback: if |C₂| < 3, relax to top-3 from W ∪ C₁ and set degraded=True.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -49,11 +50,13 @@ def intersect_c2(
         for tid in all_ids:
             s2 = qdrant_scores.get(tid, 0.0)
             s1_entry = c1_ids.get(tid, {})
-            merged.append({
-                "table_id": tid,
-                "s1": s1_entry.get("s1", 0.0),
-                "s2": s2,
-            })
+            merged.append(
+                {
+                    "table_id": tid,
+                    "s1": s1_entry.get("s1", 0.0),
+                    "s2": s2,
+                }
+            )
         merged.sort(key=lambda x: x["s2"], reverse=True)
         c2 = merged[:3]
 
@@ -84,7 +87,9 @@ async def search_and_build_c2(
     from adacascade.indexing.registry import get_qdrant
 
     qdrant = get_qdrant()
-    hits = await qdrant.search_tables(vector=query_vector, tenant_id=tenant_id, top_k=k_2)
+    hits = await qdrant.search_tables(
+        vector=query_vector, tenant_id=tenant_id, top_k=k_2
+    )
 
     qdrant_ids = {h["table_id"] for h in hits}
     qdrant_scores = {h["table_id"]: h["score"] for h in hits}

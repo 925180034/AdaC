@@ -2,6 +2,7 @@
 
 Algorithm Spec §3.2. Produces C₁ = TopK({Tc | S1 > θ1}, k1).
 """
+
 from __future__ import annotations
 
 import heapq
@@ -137,9 +138,7 @@ def build_c1(
         elif s1 > heap[0][0]:
             heapq.heapreplace(heap, (s1, cand["table_id"]))
 
-    results: list[C1Entry] = [
-        C1Entry(table_id=tid, s1=score) for score, tid in heap
-    ]
+    results: list[C1Entry] = [C1Entry(table_id=tid, s1=score) for score, tid in heap]
     results.sort(key=lambda x: x["s1"], reverse=True)
     log.info("retrieval.l1", c1_size=len(results), theta_1=theta_1, k_1=k_1)
     return results

@@ -10,7 +10,9 @@ from adacascade.state import IntegrationState
 
 def route_after_planner(state: IntegrationState) -> str:
     """Route to profiling_pair (MATCH_ONLY) or profiling_pool (others)."""
-    return "profiling_pair" if state.get("task_type") == "MATCH_ONLY" else "profiling_pool"
+    return (
+        "profiling_pair" if state.get("task_type") == "MATCH_ONLY" else "profiling_pool"
+    )
 
 
 def route_after_profiling(state: IntegrationState) -> str:
@@ -25,7 +27,9 @@ def route_after_retrieval(state: IntegrationState) -> str:
 
 def build_graph() -> StateGraph[IntegrationState, IntegrationState, IntegrationState]:
     """Construct and return the compiled-ready StateGraph."""
-    g: StateGraph[IntegrationState, IntegrationState, IntegrationState] = StateGraph(IntegrationState)
+    g: StateGraph[IntegrationState, IntegrationState, IntegrationState] = StateGraph(
+        IntegrationState
+    )
 
     g.add_node("planner", planner.run)
     g.add_node("profiling_pool", profiling.run_pool)  # type: ignore[type-var]

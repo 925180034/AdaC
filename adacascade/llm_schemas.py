@@ -40,7 +40,9 @@ class MatchResult(BaseModel):
     is_equivalent: bool
 
 
-def json_schema_format(model: type[BaseModel], name: str | None = None) -> dict[str, Any]:
+def json_schema_format(
+    model: type[BaseModel], name: str | None = None
+) -> dict[str, Any]:
     """Build the response_format dict for vLLM JSON Schema constrained decoding."""
     return {
         "type": "json_schema",
