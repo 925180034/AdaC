@@ -63,28 +63,38 @@ async def run(state: IntegrationState) -> IntegrationState:
 
     query_vector = query_profile.get("table_vector")
     if query_vector:
-        c2, degraded = await search_and_build_c2(
-            c1=cast(list[dict[str, Any]], c1),
-            query_vector=cast(list[float], query_vector),
-            tenant_id=str(state.get("tenant_id", "default")),
-            theta_2=_plan_float(plan, "theta_2", float(cfg.get("theta_2", 0.55))),
-            k_2=_plan_int(plan, "k_2", int(cfg.get("k_2", 40))),
-        )
+        try:
+            c2, degraded = await search_and_build_c2(
+                c1=cast(list[dict[str, Any]], c1),
+                query_vector=cast(list[float], query_vector),
+                tenant_id=str(state.get("tenant_id", "default")),
+                theta_2=_plan_float(plan, "theta_2", float(cfg.get("theta_2", 0.55))),
+                k_2=_plan_int(plan, "k_2", int(cfg.get("k_2", 40))),
+            )
+        except Exception as exc:
+            bound_log.warning("retrieval.qdrant_degraded", error=str(exc))
+            c2 = [{**entry, "s2": entry["s1"]} for entry in c1]
+            degraded = True
     else:
         c2 = [{**entry, "s2": entry["s1"]} for entry in c1]
         degraded = True
 
     c2_enriched = _enrich(c2, candidate_profiles)
-    c3 = await batch_verify(
-        c2=c2_enriched,
-        query_name=str(
-            query_profile.get("table_name", query_profile.get("table_id", ""))
-        ),
-        query_cols=cast(list[dict[str, Any]], query_profile.get("columns", [])),
-        task_type=state.get("subtask", "JOIN"),
-        theta_3=_plan_float(plan, "theta_3", float(cfg.get("theta_3", 0.5))),
-        batch_size=int(cfg.get("l3_batch_size", 10)),
-    )
+    try:
+        c3 = await batch_verify(
+            c2=c2_enriched,
+            query_name=str(
+                query_profile.get("table_name", query_profile.get("table_id", ""))
+            ),
+            query_cols=cast(list[dict[str, Any]], query_profile.get("columns", [])),
+            task_type=state.get("subtask", "JOIN"),
+            theta_3=_plan_float(plan, "theta_3", float(cfg.get("theta_3", 0.5))),
+            batch_size=int(cfg.get("l3_batch_size", 10)),
+        )
+    except Exception as exc:
+        bound_log.warning("retrieval.l3_degraded", error=str(exc))
+        c3 = []
+        degraded = True
     c3_enriched = _enrich(c3, candidate_profiles)
     weights = {
         "w1": _plan_float(plan, "w_1", 0.3),

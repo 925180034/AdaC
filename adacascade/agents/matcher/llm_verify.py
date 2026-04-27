@@ -101,14 +101,19 @@ def verify_pair(
     scenario: Scenario,
 ) -> MatchResult:
     """Verify a single candidate column pair via the configured LLM."""
-    resp = llm_client.chat(
-        build_prompt(src_col, tgt_col, component_scores, scenario),
-        response_format=json_schema_format(MatchResult),
-        temperature=0.0,
-        enable_thinking=False,
-    )
-    content = resp.choices[0].message.content or ""
-    return parse_match_result(content)
+    try:
+        resp = llm_client.chat(
+            build_prompt(src_col, tgt_col, component_scores, scenario),
+            response_format=json_schema_format(MatchResult),
+            temperature=0.0,
+            enable_thinking=False,
+        )
+        content = resp.choices[0].message.content or ""
+        return parse_match_result(content)
+    except Exception:
+        return MatchResult(
+            reasoning="LLM verification failed", score=0.0, is_equivalent=False
+        )
 
 
 def verify_pairs(

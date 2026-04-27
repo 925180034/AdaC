@@ -11,10 +11,12 @@ from typing import AsyncIterator
 
 import structlog
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from qdrant_client import AsyncQdrantClient
 
 from adacascade.api.routes import operations, tables, tasks
+from adacascade.api.middleware import AuthAndTenantMiddleware
 from adacascade.config import settings
 from adacascade.db.models import TableRegistry
 from adacascade.db.session import get_session, init_db
@@ -23,6 +25,13 @@ from adacascade.indexing.qdrant_client import AdacQdrantClient
 from adacascade.indexing.registry import init_qdrant_registry
 from adacascade.ingest.reconcile import reconcile_orphan_ingests
 
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.add_log_level,
+        structlog.processors.JSONRenderer(),
+    ],
+)
 log = structlog.get_logger(__name__)
 
 
@@ -74,10 +83,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ── Routers ───────────────────────────────────────────────────────────────────
+# ── Middleware and routers ────────────────────────────────────────────────────
+app.add_middleware(AuthAndTenantMiddleware)
 app.include_router(tables.router)
 app.include_router(operations.router)
 app.include_router(tasks.router)
+if settings.METRICS_ENABLED:
+    Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 
 @app.get("/healthz", tags=["ops"])

@@ -274,6 +274,33 @@ def profile_table(
 # ── SBERT encoding + Qdrant upsert ────────────────────────────────────────────
 
 
+def _is_cuda_oom(exc: Exception) -> bool:
+    """Return True when an exception looks like CUDA out-of-memory."""
+    message = str(exc).lower()
+    return "cuda" in message and "out of memory" in message
+
+
+def _encode_with_oom_fallback(texts: list[str], batch_size: int) -> Any:
+    """Encode with configured SBERT, retrying once on CPU after CUDA OOM."""
+    global _sbert
+    try:
+        return _get_sbert().encode(
+            texts,
+            batch_size=batch_size,
+            normalize_embeddings=True,
+        )
+    except RuntimeError as exc:
+        if not _is_cuda_oom(exc):
+            raise
+        log.warning("profiling.sbert_cuda_oom_fallback")
+        _sbert = SentenceTransformer(settings.SBERT_MODEL, device="cpu")
+        return _sbert.encode(
+            texts,
+            batch_size=batch_size,
+            normalize_embeddings=True,
+        )
+
+
 async def encode_and_index(
     *,
     profile: TableProfile,
@@ -294,7 +321,6 @@ async def encode_and_index(
     cfg = settings.profiling_cfg
     batch_size: int = cfg.get("sbert_batch_size", 256)
 
-    sbert = _get_sbert()
     tr = db.query(TableRegistry).filter_by(table_id=profile.table_id).one()
     col_rows: list[ColumnMetadata] = (
         db.query(ColumnMetadata)
@@ -305,11 +331,9 @@ async def encode_and_index(
 
     # ── Table-level embedding ─────────────────────────────────────────────────
     table_text = _table_sbert_input(tr.table_name, col_rows)
-    table_vec: list[float] = sbert.encode(
-        [table_text],
-        batch_size=batch_size,
-        normalize_embeddings=True,
-    )[0].tolist()
+    table_vec: list[float] = _encode_with_oom_fallback([table_text], batch_size)[
+        0
+    ].tolist()
 
     await qdrant.upsert_table(
         table_id=profile.table_id,
@@ -320,11 +344,7 @@ async def encode_and_index(
 
     # ── Column-level embeddings ───────────────────────────────────────────────
     col_texts = [_col_sbert_input(c, tr.table_name) for c in col_rows]
-    col_vecs = sbert.encode(
-        col_texts,
-        batch_size=batch_size,
-        normalize_embeddings=True,
-    )
+    col_vecs = _encode_with_oom_fallback(col_texts, batch_size)
 
     points = [
         {

@@ -20,6 +20,7 @@ from fastapi import File as FastAPIFile
 from fastapi import Form
 from sqlalchemy.orm import Session
 
+from adacascade.api.middleware import get_tenant_id
 from adacascade.config import settings
 from adacascade.db.models import TableRegistry
 from adacascade.db.session import get_session
@@ -86,12 +87,13 @@ async def upload_table(
 
     raw = await file.read()
 
+    active_tenant_id = get_tenant_id(request) or tenant_id
     table_id, status = ingest_table(
         file=io.BytesIO(raw),
         filename=file.filename or "upload",
         table_name=table_name,
         source_system=source_system,
-        tenant_id=tenant_id,
+        tenant_id=active_tenant_id,
         uploaded_by=uploaded_by,
         col_descriptions=descriptions,
         db=db,
@@ -108,7 +110,7 @@ async def upload_table(
                     table_id=table_id,
                     db=bg_db,
                     qdrant=qdrant,
-                    tenant_id=tenant_id,
+                    tenant_id=active_tenant_id,
                 )
 
         background_tasks.add_task(_profiling_task)
@@ -122,17 +124,19 @@ async def upload_table(
 @router.get("/{table_id}")
 async def get_table(
     table_id: str,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Get a table's status and metadata."""
     tr = db.query(TableRegistry).filter_by(table_id=table_id).first()
-    if tr is None:
+    if tr is None or tr.tenant_id != get_tenant_id(request):
         raise HTTPException(status_code=404, detail="Table not found")
     return _table_to_dict(tr)
 
 
 @router.get("")
 async def list_tables(
+    request: Request,
     db: Session = Depends(get_db),
     tenant_id: str | None = None,
     status: str | None = None,
@@ -141,8 +145,7 @@ async def list_tables(
 ) -> dict[str, Any]:
     """List tables with optional tenant/status filtering."""
     q = db.query(TableRegistry)
-    if tenant_id:
-        q = q.filter_by(tenant_id=tenant_id)
+    q = q.filter_by(tenant_id=tenant_id or get_tenant_id(request))
     if status:
         q = q.filter_by(status=status)
     total = q.count()
@@ -165,7 +168,7 @@ async def delete_table(
 ) -> dict[str, str]:
     """Soft-delete a table: set ARCHIVED + hard-delete Qdrant vectors."""
     tr = db.query(TableRegistry).filter_by(table_id=table_id).first()
-    if tr is None:
+    if tr is None or tr.tenant_id != get_tenant_id(request):
         raise HTTPException(status_code=404, detail="Table not found")
     if tr.status == "ARCHIVED":
         return {"table_id": table_id, "status": "ARCHIVED"}

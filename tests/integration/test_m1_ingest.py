@@ -63,6 +63,9 @@ def sample_csv() -> bytes:
 # ── Tests ──────────────────────────────────────────────────────────────────────
 
 
+AUTH_HEADERS = {"Authorization": "Bearer dev-local-token"}
+
+
 def test_healthz(client: TestClient) -> None:
     resp = client.get("/healthz")
     assert resp.status_code == 200
@@ -72,6 +75,7 @@ def test_healthz(client: TestClient) -> None:
 def test_upload_csv_returns_202(client: TestClient, sample_csv: bytes) -> None:
     resp = client.post(
         "/tables",
+        headers=AUTH_HEADERS,
         data={"table_name": "test_table", "source_system": "upload"},
         files={"file": ("test.csv", io.BytesIO(sample_csv), "text/csv")},
     )
@@ -89,13 +93,14 @@ def test_get_table_after_upload(client: TestClient, sample_csv: bytes) -> None:
     )
     upload_resp = client.post(
         "/tables",
+        headers=AUTH_HEADERS,
         data={"table_name": "status_test"},
         files={"file": ("status_test.csv", io.BytesIO(csv_bytes), "text/csv")},
     )
     assert upload_resp.status_code == 202, upload_resp.text
     table_id = upload_resp.json()["table_id"]
 
-    get_resp = client.get(f"/tables/{table_id}")
+    get_resp = client.get(f"/tables/{table_id}", headers=AUTH_HEADERS)
     assert get_resp.status_code == 200, get_resp.text
     body = get_resp.json()
     assert body["table_id"] == table_id
@@ -103,7 +108,7 @@ def test_get_table_after_upload(client: TestClient, sample_csv: bytes) -> None:
 
 
 def test_list_tables_returns_200(client: TestClient) -> None:
-    resp = client.get("/tables")
+    resp = client.get("/tables", headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert "items" in body
@@ -111,7 +116,7 @@ def test_list_tables_returns_200(client: TestClient) -> None:
 
 
 def test_get_nonexistent_table_returns_404(client: TestClient) -> None:
-    resp = client.get("/tables/does-not-exist-00000")
+    resp = client.get("/tables/does-not-exist-00000", headers=AUTH_HEADERS)
     assert resp.status_code == 404
 
 
@@ -119,13 +124,14 @@ def test_delete_table_returns_archived(client: TestClient, sample_csv: bytes) ->
     csv_bytes = pd.DataFrame({"x": [1], "y": ["a"]}).to_csv(index=False).encode()
     upload_resp = client.post(
         "/tables",
+        headers=AUTH_HEADERS,
         data={"table_name": "delete_test"},
         files={"file": ("delete_test.csv", io.BytesIO(csv_bytes), "text/csv")},
     )
     assert upload_resp.status_code == 202, upload_resp.text
     table_id = upload_resp.json()["table_id"]
 
-    del_resp = client.delete(f"/tables/{table_id}")
+    del_resp = client.delete(f"/tables/{table_id}", headers=AUTH_HEADERS)
     assert del_resp.status_code == 200, del_resp.text
     assert del_resp.json()["status"] == "ARCHIVED"
 
@@ -135,6 +141,7 @@ def test_duplicate_upload_rejected(client: TestClient, sample_csv: bytes) -> Non
     for _ in range(2):
         resp = client.post(
             "/tables",
+            headers=AUTH_HEADERS,
             data={"table_name": "dup_test"},
             files={"file": ("dup.csv", io.BytesIO(sample_csv), "text/csv")},
         )

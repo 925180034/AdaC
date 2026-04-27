@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from adacascade.api.middleware import get_tenant_id
 from adacascade.config import settings
 from adacascade.db.models import ColumnMapping, DiscoveryResult, IntegrationTask
 from adacascade.db.session import get_session
@@ -154,7 +155,7 @@ async def integrate(
         request,
         db,
         task_type="INTEGRATE",
-        tenant_id=body.tenant_id,
+        tenant_id=get_tenant_id(request),
         query_table_id=body.query_table_id,
         target_table_id=None,
         options=body.options,
@@ -170,7 +171,7 @@ async def discover(
         request,
         db,
         task_type="DISCOVER_ONLY",
-        tenant_id=body.tenant_id,
+        tenant_id=get_tenant_id(request),
         query_table_id=body.query_table_id,
         target_table_id=None,
         options=body.options,
@@ -186,7 +187,7 @@ async def match(
         request,
         db,
         task_type="MATCH_ONLY",
-        tenant_id=body.tenant_id,
+        tenant_id=get_tenant_id(request),
         query_table_id=body.source_table_id,
         target_table_id=body.target_table_id,
         options=body.options,

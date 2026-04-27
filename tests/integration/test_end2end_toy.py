@@ -13,6 +13,8 @@ from adacascade.config import settings
 from adacascade.db.models import ColumnMetadata, TableRegistry
 from adacascade.db.session import get_session
 
+AUTH_HEADERS = {"Authorization": "Bearer dev-local-token"}
+
 
 @pytest.fixture(scope="module")
 def client() -> TestClient:
@@ -101,13 +103,15 @@ def _seed_ready_tables() -> None:
 
 
 def test_integrate_and_task_status(client: TestClient) -> None:
-    resp = client.post("/integrate", json={"query_table_id": "toy_source"})
+    resp = client.post(
+        "/integrate", json={"query_table_id": "toy_source"}, headers=AUTH_HEADERS
+    )
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["status"] == "SUCCESS"
     assert body["state"]["ranking"][0]["table_id"] == "toy_target"
 
-    task_resp = client.get(f"/tasks/{body['task_id']}")
+    task_resp = client.get(f"/tasks/{body['task_id']}", headers=AUTH_HEADERS)
     assert task_resp.status_code == 200, task_resp.text
     task_body = task_resp.json()
     assert task_body["status"] == "SUCCESS"

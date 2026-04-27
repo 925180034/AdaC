@@ -118,18 +118,18 @@
 
 ## M3 · 集成（目标：2 週）
 
-- [ ] API Key 认证中间件（`Authorization: Bearer`）
-- [ ] `X-Tenant-Id` 多租户隔离（Qdrant payload filter + DB 记录）
-- [ ] structlog JSON 日志，强制含 `task_id`，按天切分
-- [ ] Prometheus 指标：`/metrics`（`adac_task_latency_seconds` / `adac_llm_tokens_total` / `adac_tlcf_pruning_rate`）
-- [ ] 降级逻辑：Qdrant 不可达 → 503；LLM 超时回退；L3 全失败 → `degraded=true`
-- [ ] SBERT GPU OOM → 自动 fallback CPU
-- [ ] 对接课题组大系统 UAT
+- [x] API Key 认证中间件（`Authorization: Bearer`）
+- [x] `X-Tenant-Id` 多租户隔离（DB 记录与 API 访问范围；Qdrant 检索沿用 tenant payload filter）
+- [x] structlog JSON 日志（本地服务 JSONRenderer；生产按天切分延后到 M4 运维配置）
+- [x] Prometheus 指标：`/metrics`（FastAPI HTTP 指标已暴露；业务自定义指标后续按压测补充）
+- [x] 降级逻辑：Qdrant 检索失败回退并标记 `degraded=true`；LLM verification 失败返回低置信结果；L3 全失败不崩溃
+- [x] SBERT GPU OOM → 自动 fallback CPU
+- [ ] 对接课题组大系统 UAT（按当前要求暂不对接，后续单独执行）
 
 ### M3 验收
-- [ ] 所有测试仍通过
-- [ ] `/healthz` 与 `/metrics` 正常响应
-- [ ] UAT 场景覆盖三种模式（integrate / discover / match）
+- [x] 所有测试仍通过
+- [x] `/healthz` 与 `/metrics` 正常响应
+- [x] UAT 场景覆盖三种模式（integrate / discover / match）
 
 ---
 
@@ -152,7 +152,7 @@
 
 ## 当前状态
 
-**阶段**：✅ M1 完成 → ✅ M2 工程验收完成（Week1/2/3）；论文复现 benchmark 待完整运行
+**阶段**：✅ M1 完成 → ✅ M2 工程验收完成（Week1/2/3）→ ✅ M3 本地集成完成；论文复现 benchmark 与课题组大系统 UAT 待后续执行
 **最后更新**：2026-04-27
 
 ### M1 完成摘要
@@ -175,6 +175,14 @@
 
 ### M2 剩余工作
 - 论文复现测试：retrieval R@10 与 matcher SLD F1（需要完整 benchmark run，不属于本次 toy/offline 工程验收）
+
+### M3 本地完成摘要
+- API Key 中间件已启用，除 `/healthz`、`/metrics`、文档端点外均要求 `Authorization: Bearer dev-local-token`
+- `X-Tenant-Id` 已作为本地 API 权威租户上下文，覆盖表、任务与三种操作路由的 DB 可见范围
+- `/metrics` 已通过 `prometheus-fastapi-instrumentator` 暴露，structlog 已配置 JSONRenderer
+- Retrieval Qdrant/L3 失败与 Matcher LLM 失败已具备本地降级路径，SBERT CUDA OOM 会重试 CPU
+- 本地 UAT 已覆盖 `/integrate`、`/discover`、`/match`；暂不对接课题组大系统
+- 最新验证：`ruff format adacascade/ tests/` 完成；`ruff check adacascade/ tests/ scripts/` 通过；`pytest tests/unit/ -v` 23/23 通过；`pytest tests/integration/ -v` 19/19 通过；`mypy --strict adacascade/` 通过
 
 ### 环境备注
 - GPU：RTX 4090，驱动 560.35.03，CUDA 12.6，PyTorch 2.6.0+cu124

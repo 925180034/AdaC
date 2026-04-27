@@ -69,8 +69,11 @@ class Settings(BaseSettings):
         default=_yaml.get("matcher", {}).get("llm_topn_per_source", 10)
     )
 
-    # ── 多租户 ────────────────────────────────────────────────────────────
+    # ── 多租户与 API ──────────────────────────────────────────────────────
     DEFAULT_TENANT_ID: str = "default"
+    API_KEY: str = "dev-local-token"
+    AUTH_ENABLED: bool = True
+    METRICS_ENABLED: bool = True
 
     # ── 算法超参（直接从 YAML 读，供各 Agent 访问） ───────────────────────
     @property

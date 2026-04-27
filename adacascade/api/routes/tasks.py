@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 from typing import Any, Generator
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from adacascade.api.middleware import get_tenant_id
 from adacascade.db.models import (
     AgentStep,
     ColumnMapping,
@@ -30,10 +31,12 @@ def _json_or_none(raw: str | None) -> Any:
 
 
 @router.get("/{task_id}")
-async def get_task(task_id: str, db: Session = Depends(get_db)) -> dict[str, Any]:
+async def get_task(
+    task_id: str, request: Request, db: Session = Depends(get_db)
+) -> dict[str, Any]:
     """Return persisted task status, trace, ranking, and mappings."""
     task = db.query(IntegrationTask).filter_by(task_id=task_id).first()
-    if task is None:
+    if task is None or task.tenant_id != get_tenant_id(request):
         raise HTTPException(status_code=404, detail="Task not found")
     steps = (
         db.query(AgentStep).filter_by(task_id=task_id).order_by(AgentStep.step_id).all()
