@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from qdrant_client import AsyncQdrantClient
 
-from adacascade.api.routes import tables
+from adacascade.api.routes import operations, tables, tasks
 from adacascade.config import settings
 from adacascade.db.models import TableRegistry
 from adacascade.db.session import get_session, init_db
@@ -76,6 +76,8 @@ app = FastAPI(
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(tables.router)
+app.include_router(operations.router)
+app.include_router(tasks.router)
 
 
 @app.get("/healthz", tags=["ops"])

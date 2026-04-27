@@ -423,16 +423,107 @@ async def run_profiling(
         raise
 
 
-# ── LangGraph node stubs ──────────────────────────────────────────────────────
+# ── LangGraph node entry points ────────────────────────────────────────────────
+
+
+def _parse_stat_summary(raw: str | None) -> dict[str, Any]:
+    """Parse persisted column statistics into matcher-compatible fields."""
+    if not raw:
+        return {"numeric_stats": None, "categorical_stats": None}
+    data = json.loads(raw)
+    return {
+        "numeric_stats": data.get("numeric"),
+        "categorical_stats": {"top_k": data.get("cat_top_k", [])}
+        if data.get("cat_top_k") is not None
+        else None,
+    }
+
+
+def load_table_profile(table_id: str, db: Session) -> dict[str, Any]:
+    """Load a lightweight table profile from SQLite metadata rows."""
+    tr = db.query(TableRegistry).filter_by(table_id=table_id).one()
+    col_rows: list[ColumnMetadata] = (
+        db.query(ColumnMetadata)
+        .filter_by(table_id=table_id)
+        .order_by(ColumnMetadata.ordinal)
+        .all()
+    )
+    col_dicts = [
+        {
+            "col_name": c.col_name,
+            "col_type": c.col_type,
+            "col_description": c.col_description,
+        }
+        for c in col_rows
+    ]
+    columns: list[dict[str, Any]] = []
+    for col in col_rows:
+        stats = _parse_stat_summary(col.stat_summary)
+        columns.append(
+            {
+                "col_id": col.column_id,
+                "ordinal": col.ordinal,
+                "name": col.col_name,
+                "dtype": col.col_type,
+                "description": col.col_description or "",
+                "null_ratio": col.null_ratio or 0.0,
+                "distinct_ratio": col.distinct_ratio or 0.0,
+                "numeric_stats": stats["numeric_stats"],
+                "categorical_stats": stats["categorical_stats"],
+                "sample_values": [],
+            }
+        )
+    return {
+        "table_id": tr.table_id,
+        "table_name": tr.table_name,
+        "tenant_id": tr.tenant_id,
+        "text_blob": _build_text_blob(tr.table_name, col_dicts),
+        "type_multiset": [c.col_type for c in col_rows],
+        "row_count": tr.row_count or 0,
+        "columns": columns,
+    }
+
+
+def load_candidate_profiles(
+    query_table_id: str, tenant_id: str, db: Session
+) -> dict[str, dict[str, Any]]:
+    """Load READY candidate profiles for a tenant, excluding the query table."""
+    rows: list[TableRegistry] = (
+        db.query(TableRegistry)
+        .filter(
+            TableRegistry.tenant_id == tenant_id,
+            TableRegistry.status == "READY",
+            TableRegistry.table_id != query_table_id,
+        )
+        .order_by(TableRegistry.table_name)
+        .all()
+    )
+    return {row.table_id: load_table_profile(row.table_id, db) for row in rows}
 
 
 async def run_pool(state: dict[str, Any]) -> dict[str, Any]:
-    """LangGraph node: profile query table against pool (INTEGRATE/DISCOVER)."""
-    # M1: stub — actual implementation in M2
-    return {**state, "query_profile": {"table_id": state.get("task_id", "")}}
+    """LangGraph node: load query and pool profiles for discovery/integration."""
+    from adacascade.db.session import get_session
+
+    query_table_id = str(state["query_table_id"])
+    tenant_id = str(state.get("tenant_id", "default"))
+    with get_session() as db:
+        query_profile = load_table_profile(query_table_id, db)
+        candidate_profiles = load_candidate_profiles(query_table_id, tenant_id, db)
+    return {
+        **state,
+        "query_profile": query_profile,
+        "candidate_profiles": candidate_profiles,
+    }
 
 
 async def run_pair(state: dict[str, Any]) -> dict[str, Any]:
-    """LangGraph node: profile source + target pair (MATCH_ONLY)."""
-    # M1: stub — actual implementation in M2
-    return {**state, "query_profile": {}, "target_profile": {}}
+    """LangGraph node: load source and target profiles for direct matching."""
+    from adacascade.db.session import get_session
+
+    source_table_id = str(state["query_table_id"])
+    target_table_id = str(state["target_table_id"])
+    with get_session() as db:
+        query_profile = load_table_profile(source_table_id, db)
+        target_profile = load_table_profile(target_table_id, db)
+    return {**state, "query_profile": query_profile, "target_profile": target_profile}

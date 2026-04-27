@@ -104,27 +104,32 @@ async def run(state: IntegrationState) -> IntegrationState:
     subtask = "JOIN"  # default
     if task_type != "MATCH_ONLY":
         query_profile: dict[str, Any] = state.get("query_profile", {})
-        col_names: list[str] = [c["name"] for c in query_profile.get("columns", [])]
-        col_types: list[str] = [c["dtype"] for c in query_profile.get("columns", [])]
-        distinct_ratios: list[float] = [
-            c.get("distinct_ratio", 0.0) for c in query_profile.get("columns", [])
-        ]
         plan_raw = state.get("plan", {}) or {}
         user_hint: str = str(plan_raw.get("user_hint", ""))
+        if query_profile:
+            col_names: list[str] = [c["name"] for c in query_profile.get("columns", [])]
+            col_types: list[str] = [
+                c["dtype"] for c in query_profile.get("columns", [])
+            ]
+            distinct_ratios: list[float] = [
+                c.get("distinct_ratio", 0.0) for c in query_profile.get("columns", [])
+            ]
 
-        heuristic = _detect_subtask_heuristic(
-            col_names, col_types, distinct_ratios, user_hint
-        )
-        if heuristic:
-            subtask = heuristic
-            bound_log.info("planner.heuristic", subtask=subtask)
-        else:
-            subtask = _call_llm_subtask(
-                table_name=query_profile.get("table_name", ""),
-                columns=[{"name": n, "type": t} for n, t in zip(col_names, col_types)],
-                sample_rows=query_profile.get("sample_rows", []),
-                user_hint=user_hint,
+            heuristic = _detect_subtask_heuristic(
+                col_names, col_types, distinct_ratios, user_hint
             )
+            if heuristic:
+                subtask = heuristic
+                bound_log.info("planner.heuristic", subtask=subtask)
+            else:
+                subtask = _call_llm_subtask(
+                    table_name=query_profile.get("table_name", ""),
+                    columns=[
+                        {"name": n, "type": t} for n, t in zip(col_names, col_types)
+                    ],
+                    sample_rows=query_profile.get("sample_rows", []),
+                    user_hint=user_hint,
+                )
 
     raw_plans = settings.planner_cfg.get("default_plans") or {}
     plan_cfg: dict[str, float | int] = dict(
