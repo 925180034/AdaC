@@ -3,7 +3,11 @@ import { INITIAL_TIMELINE, applyTaskEvent } from './timeline'
 import type { TaskEvent } from './taskTypes'
 
 describe('applyTaskEvent', () => {
-  it('marks a retrieval layer as running then success and records output size', () => {
+  it('starts with exactly four AdaCascade agents', () => {
+    expect(Object.keys(INITIAL_TIMELINE)).toEqual(['Planner', 'Profiling', 'Retrieval', 'Matcher'])
+  })
+
+  it('marks a retrieval layer step as running then success and records output size', () => {
     const started: TaskEvent = {
       task_id: 'task-1',
       type: 'agent_started',
@@ -21,35 +25,56 @@ describe('applyTaskEvent', () => {
     }
 
     const running = applyTaskEvent(INITIAL_TIMELINE, started)
-    expect(running['Retrieval:L1'].status).toBe('running')
+    expect(running.Retrieval.status).toBe('running')
+    expect(running.Retrieval.currentStepId).toBe('L1')
+    expect(running.Retrieval.steps.find((step) => step.id === 'L1')).toMatchObject({
+      status: 'running',
+      label: 'Lexical filter',
+    })
 
     const success = applyTaskEvent(running, completed)
-    expect(success['Retrieval:L1']).toMatchObject({ status: 'success', output_size: 80 })
+    expect(success.Retrieval.currentStepId).toBe('L1')
+    expect(success.Retrieval.steps.find((step) => step.id === 'L1')).toMatchObject({
+      status: 'success',
+      output_size: 80,
+    })
+    expect(success).not.toHaveProperty('Retrieval:L1')
   })
 
-  it('marks retrieval layer degraded events as degraded with reason', () => {
+  it('marks retrieval layer degraded events as degraded with reason and fallback', () => {
     const degraded = applyTaskEvent(INITIAL_TIMELINE, {
       task_id: 'task-1',
       type: 'agent_degraded',
       agent: 'Retrieval',
       layer: 'L2',
       reason: 'qdrant down',
+      fallback: 'reuse L1 candidates',
       timestamp: '2026-04-27T00:00:00Z',
     })
 
-    expect(degraded['Retrieval:L2']).toMatchObject({ status: 'degraded', reason: 'qdrant down' })
+    expect(degraded.Retrieval.status).toBe('degraded')
+    expect(degraded.Retrieval.currentStepId).toBe('L2')
+    expect(degraded.Retrieval.steps.find((step) => step.id === 'L2')).toMatchObject({
+      status: 'degraded',
+      reason: 'qdrant down',
+      fallback: 'reuse L1 candidates',
+    })
   })
 
-  it('ignores layerless Retrieval events without creating a Retrieval node', () => {
+  it('updates layerless Planner events without creating ad-hoc nodes', () => {
     const updated = applyTaskEvent(INITIAL_TIMELINE, {
       task_id: 'task-1',
       type: 'agent_started',
-      agent: 'Retrieval',
+      agent: 'Planner',
       timestamp: '2026-04-27T00:00:00Z',
     })
 
-    expect(updated).toBe(INITIAL_TIMELINE)
-    expect(updated).not.toHaveProperty('Retrieval')
+    expect(updated.Planner.status).toBe('running')
+    expect(updated.Planner.currentStepId).toBe('overview')
+    expect(updated.Planner.steps.find((step) => step.id === 'overview')).toMatchObject({
+      status: 'running',
+    })
+    expect(updated).not.toHaveProperty('Planner:undefined')
   })
 
   it('ignores unknown Retrieval layers without creating an ad-hoc node', () => {
@@ -65,7 +90,7 @@ describe('applyTaskEvent', () => {
     expect(updated).not.toHaveProperty('Retrieval:L9')
   })
 
-  it('preserves previous metrics when a later event omits them', () => {
+  it('preserves previous step metrics when a later event omits them', () => {
     const withMetrics = applyTaskEvent(INITIAL_TIMELINE, {
       task_id: 'task-1',
       type: 'agent_started',
@@ -86,7 +111,7 @@ describe('applyTaskEvent', () => {
       timestamp: '2026-04-27T00:00:01Z',
     })
 
-    expect(completed['Matcher:LLM']).toMatchObject({
+    expect(completed.Matcher.steps.find((step) => step.id === 'LLM')).toMatchObject({
       status: 'success',
       input_size: 0,
       output_size: 12,
