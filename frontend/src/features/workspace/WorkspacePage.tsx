@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { subscribeTaskEvents } from '../../api/events'
+import { getLlmRuntime, updateLlmRuntime } from '../../api/runtime'
 import { listTables } from '../../api/tables'
 import { getTask, startDiscover, startIntegrate, startMatch } from '../../api/tasks'
 import { useTaskStore } from '../tasks/taskStore'
@@ -53,9 +54,21 @@ export function WorkspacePage() {
   const [streamError, setStreamError] = useState<string | null>(null)
   const [language, setLanguage] = useState(readLanguage)
   const theme = 'light'
-  const runtimeBackend: RuntimeBackend = 'local'
   const copy = getWorkspaceCopy(language)
   const tenantId = getSearchParam(params, 'tenant_id', defaultTenantId)
+
+  const runtimeQuery = useQuery({
+    queryKey: ['llm-runtime', tenantId],
+    queryFn: () => getLlmRuntime(tenantId),
+  })
+
+  const runtimeMutation = useMutation({
+    mutationFn: (backend: RuntimeBackend) => updateLlmRuntime(tenantId, backend),
+    onSuccess: (runtime) => {
+      queryClient.setQueryData(['llm-runtime', tenantId], runtime)
+    },
+  })
+  const runtimeBackend = runtimeQuery.data?.backend ?? 'local'
 
   const tablesQuery = useQuery({
     queryKey: ['tables', tenantId],
@@ -142,8 +155,15 @@ export function WorkspacePage() {
     writeLanguage(nextLanguage)
   }, [])
 
+  const handleRuntimeBackendChange = useCallback(
+    (backend: RuntimeBackend) => {
+      if (!runtimeQuery.data || isRunning || runtimeMutation.isPending || backend === runtimeBackend) return
+      runtimeMutation.mutate(backend)
+    },
+    [isRunning, runtimeBackend, runtimeMutation, runtimeQuery.data],
+  )
+
   const ignorePendingThemeChange = useCallback(() => undefined, [])
-  const ignorePendingRuntimeBackendChange = useCallback(() => undefined, [])
 
   return (
     <div className="workspace-shell">
@@ -162,13 +182,13 @@ export function WorkspacePage() {
         language={language}
         theme={theme}
         runtimeBackend={runtimeBackend}
-        isRuntimePending={false}
+        isRuntimePending={runtimeMutation.isPending}
         isRunning={isRunning}
         isThemeDisabled={true}
-        isRuntimeDisabled={true}
+        isRuntimeDisabled={!runtimeQuery.data}
         onLanguageChange={handleLanguageChange}
         onThemeChange={ignorePendingThemeChange}
-        onRuntimeBackendChange={ignorePendingRuntimeBackendChange}
+        onRuntimeBackendChange={handleRuntimeBackendChange}
       />
 
       <div className="workspace-grid">
