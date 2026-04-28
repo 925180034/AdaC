@@ -1,5 +1,7 @@
 import type { TaskMode, TableSummary } from '../tasks/taskTypes'
 import { StatusBadge } from '../../components/StatusBadge'
+import { getWorkspaceCopy } from './i18n'
+import type { Language } from './uiPreferences'
 
 export type TaskControlPanelProps = {
   tenantId: string
@@ -14,6 +16,7 @@ export type TaskControlPanelProps = {
   onSourceTableChange: (tableId: string) => void
   onTargetTableChange: (tableId: string) => void
   onRun: () => void
+  language?: Language
 }
 
 function tableLabel(table: TableSummary): string {
@@ -36,7 +39,9 @@ export function TaskControlPanel({
   onSourceTableChange,
   onTargetTableChange,
   onRun,
+  language = 'en',
 }: TaskControlPanelProps) {
+  const copy = getWorkspaceCopy(language).control
   const tableOptions = tables.map((table) => (
     <option key={table.table_id} value={table.table_id}>
       {tableLabel(table)}
@@ -47,42 +52,42 @@ export function TaskControlPanel({
     <aside className="panel control-panel" aria-labelledby="task-control-title">
       <div className="panel__header">
         <div>
-          <p className="panel-kicker">Launch vector</p>
-          <h2 id="task-control-title">Task Control</h2>
+          <p className="panel-kicker">{copy.kicker}</p>
+          <h2 id="task-control-title">{copy.title}</h2>
         </div>
-        <StatusBadge status="ready" label="Ready" size="sm" />
+        <StatusBadge status="ready" label={copy.ready} size="sm" />
       </div>
 
-      <dl className="control-panel__meta" aria-label="Workspace context">
+      <dl className="control-panel__meta" aria-label={copy.contextLabel}>
         <div>
-          <dt>Tenant</dt>
+          <dt>{copy.tenant}</dt>
           <dd>{tenantId}</dd>
         </div>
         <div>
-          <dt>Tables</dt>
-          <dd>{tables.length} ready</dd>
+          <dt>{copy.tables}</dt>
+          <dd>{copy.tablesReady(tables.length)}</dd>
         </div>
       </dl>
 
       <div className="field-stack">
         <label className="field" htmlFor="task-mode">
-          <span>Mode</span>
+          <span>{copy.mode}</span>
           <select
             id="task-mode"
             value={mode}
             onChange={(event) => onModeChange(event.target.value as TaskMode)}
             disabled={isRunning}
           >
-            <option value="discover">Discover</option>
-            <option value="integrate">Integrate</option>
-            <option value="match">Match</option>
+            <option value="discover">{copy.modes.discover}</option>
+            <option value="integrate">{copy.modes.integrate}</option>
+            <option value="match">{copy.modes.match}</option>
           </select>
         </label>
 
         {mode === 'match' ? (
           <>
             <label className="field" htmlFor="source-table">
-              <span>Source table</span>
+              <span>{copy.sourceTable}</span>
               <select
                 id="source-table"
                 value={sourceTableId}
@@ -93,7 +98,7 @@ export function TaskControlPanel({
               </select>
             </label>
             <label className="field" htmlFor="target-table">
-              <span>Target table</span>
+              <span>{copy.targetTable}</span>
               <select
                 id="target-table"
                 value={targetTableId}
@@ -106,7 +111,7 @@ export function TaskControlPanel({
           </>
         ) : (
           <label className="field" htmlFor="query-table">
-            <span>Query table</span>
+            <span>{copy.queryTable}</span>
             <select
               id="query-table"
               value={queryTableId}
@@ -120,12 +125,10 @@ export function TaskControlPanel({
       </div>
 
       <button className="run-button" type="button" onClick={onRun} disabled={isRunning}>
-        {isRunning ? 'Running AdaCascade…' : 'Run AdaCascade'}
+        {isRunning ? copy.running : copy.run}
       </button>
 
-      <p className="control-panel__note">
-        Static shell preview. REST submission and SSE reconciliation will attach in the next task.
-      </p>
+      <p className="control-panel__note">{copy.note}</p>
     </aside>
   )
 }

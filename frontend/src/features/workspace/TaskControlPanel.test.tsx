@@ -63,6 +63,15 @@ describe('TaskControlPanel', () => {
     expect(screen.getByRole('button', { name: 'Run AdaCascade' })).toBeEnabled()
   })
 
+  it('renders Chinese copy when the workspace language is Chinese', () => {
+    render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} language="zh" />)
+
+    expect(screen.getByRole('heading', { name: '任务控制' })).toBeInTheDocument()
+    expect(screen.getByLabelText('模式')).toBeInTheDocument()
+    expect(screen.getByLabelText('查询表')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '运行 AdaCascade' })).toBeEnabled()
+  })
+
   it('calls onModeChange when the mode select changes', async () => {
     const user = userEvent.setup()
     render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)

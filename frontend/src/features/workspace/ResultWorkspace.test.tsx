@@ -57,6 +57,18 @@ describe('ResultWorkspace', () => {
     expect(screen.queryByRole('region', { name: 'Result graph' })).not.toBeInTheDocument()
   })
 
+  it('renders Chinese empty state and result tabs when requested', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<ResultWorkspace task={null} language="zh" />)
+
+    expect(screen.getByRole('heading', { name: '结果工作区' })).toBeInTheDocument()
+    expect(screen.getByText('暂无活跃任务')).toBeInTheDocument()
+
+    rerender(<ResultWorkspace task={task} language="zh" />)
+    await user.click(screen.getByRole('tab', { name: '排序' }))
+    expect(screen.getByRole('tabpanel', { name: '排序' })).toHaveTextContent('1 个候选')
+  })
+
   it('switches between graph, ranking, mappings, and raw JSON result views', async () => {
     const user = userEvent.setup()
     render(<ResultWorkspace task={task} />)

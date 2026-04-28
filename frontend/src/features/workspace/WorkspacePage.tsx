@@ -8,8 +8,10 @@ import type { TaskMode } from '../tasks/taskTypes'
 
 const defaultTenantId = import.meta.env.VITE_DEFAULT_TENANT_ID ?? 'default'
 import { AgentTracePanel } from './AgentTracePanel'
+import { getWorkspaceCopy } from './i18n'
 import { ResultWorkspace } from './ResultWorkspace'
 import { TaskControlPanel } from './TaskControlPanel'
+import { readLanguage } from './uiPreferences'
 
 function getSearchParam(params: URLSearchParams, key: string, fallback: string): string {
   return params.get(key) || fallback
@@ -46,6 +48,8 @@ export function WorkspacePage() {
   const [sourceTableId, setSourceTableId] = useState(() => getSearchParam(params, 'source_table_id', ''))
   const [targetTableId, setTargetTableId] = useState(() => getSearchParam(params, 'target_table_id', ''))
   const [streamError, setStreamError] = useState<string | null>(null)
+  const [language] = useState(readLanguage)
+  const copy = getWorkspaceCopy(language)
   const tenantId = getSearchParam(params, 'tenant_id', defaultTenantId)
 
   const tablesQuery = useQuery({
@@ -132,11 +136,11 @@ export function WorkspacePage() {
     <div className="workspace-shell">
       <header className="workspace-topbar">
         <div>
-          <p className="eyebrow">Adaptive scenario matching · Cascaded filtering</p>
-          <h1>AdaCascade Workbench</h1>
+          <p className="eyebrow">{copy.page.eyebrow}</p>
+          <h1>{copy.page.title}</h1>
         </div>
-        <aside className="demo-warning" aria-label="Local demo security warning">
-          Local demo environment. Do not expose this build or its browser-visible API key on a public network.
+        <aside className="demo-warning" aria-label={copy.page.warningLabel}>
+          {copy.page.warning}
         </aside>
       </header>
 
@@ -154,9 +158,10 @@ export function WorkspacePage() {
           onSourceTableChange={setSourceTableId}
           onTargetTableChange={setTargetTableId}
           onRun={handleRun}
+          language={language}
         />
-        <ResultWorkspace task={taskQuery.data ?? null} />
-        <AgentTracePanel timeline={timeline} events={events} streamError={streamError} />
+        <ResultWorkspace task={taskQuery.data ?? null} language={language} />
+        <AgentTracePanel timeline={timeline} events={events} streamError={streamError} language={language} />
       </div>
     </div>
   )

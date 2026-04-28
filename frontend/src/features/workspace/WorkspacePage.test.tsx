@@ -51,6 +51,7 @@ function renderWorkspace() {
 describe('WorkspacePage', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/')
+    window.localStorage.clear()
     vi.clearAllMocks()
     vi.mocked(listTables).mockResolvedValue(tablesResponse)
   })
@@ -60,5 +61,13 @@ describe('WorkspacePage', () => {
 
     await waitFor(() => expect(listTables).toHaveBeenCalledWith('default'))
     expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
+  })
+
+  it('uses the stored Chinese language preference for primary workspace copy', async () => {
+    window.localStorage.setItem('adacascade.language', 'zh')
+    renderWorkspace()
+
+    expect(await screen.findByRole('heading', { name: 'AdaCascade 工作台' })).toBeInTheDocument()
+    expect(screen.getByLabelText('本地演示安全提醒')).toHaveTextContent('本地演示环境')
   })
 })

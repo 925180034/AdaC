@@ -1,22 +1,19 @@
 import { StatusBadge } from '../../components/StatusBadge'
 import type { TaskEvent } from '../tasks/taskTypes'
+import { translateTimeline } from '../tasks/timeline'
 import type { TimelineNode, TimelineState, TimelineStep } from '../tasks/timeline'
+import { getWorkspaceCopy } from './i18n'
+import type { Language } from './uiPreferences'
 
 type AgentTracePanelProps = {
   timeline: TimelineState
   events: TaskEvent[]
   streamError?: string | null
+  language?: Language
 }
 
-const agentPurpose: Record<string, string> = {
-  Planner: 'Builds the task plan and mode routing.',
-  Profiling: 'Extracts table and column metadata.',
-  Retrieval: 'Narrows the lake with TLCF cascade.',
-  Matcher: 'Verifies column alignments and final mappings.',
-}
-
-function eventLine(event: TaskEvent): string {
-  const actor = event.agent ? `${event.agent}${event.layer ? `/${event.layer}` : ''}` : 'Task'
+function eventLine(event: TaskEvent, defaultActor: string): string {
+  const actor = event.agent ? `${event.agent}${event.layer ? `/${event.layer}` : ''}` : defaultActor
   const message = event.message ?? event.reason ?? event.error ?? event.type.replace(/_/g, ' ')
   return `${new Date(event.timestamp).toLocaleTimeString()} · ${actor} · ${message}`
 }
@@ -26,13 +23,13 @@ function formatCount(value: number | undefined): string | null {
   return value.toLocaleString()
 }
 
-function stepFact(step: TimelineStep): string | null {
+function stepFact(step: TimelineStep, copy: ReturnType<typeof getWorkspaceCopy>['trace']): string | null {
   const input = formatCount(step.input_size)
   const output = formatCount(step.output_size)
 
-  if (input && output) return `${input} → ${output} candidates`
-  if (output) return `${output} produced`
-  if (input) return `${input} queued`
+  if (input && output) return copy.candidates(input, output)
+  if (output) return copy.produced(output)
+  if (input) return copy.queued(input)
   return null
 }
 
@@ -40,11 +37,10 @@ function completedSteps(node: TimelineNode): number {
   return node.steps.filter((step) => step.status === 'success' || step.status === 'degraded').length
 }
 
-function agentFact(node: TimelineNode): string {
+function agentFact(node: TimelineNode, copy: ReturnType<typeof getWorkspaceCopy>['trace']): string {
   const done = completedSteps(node)
-  if (node.status === 'pending') return 'Waiting for task events'
-  if (done === node.steps.length) return `${done}/${node.steps.length} steps complete`
-  return `${done}/${node.steps.length} steps complete`
+  if (node.status === 'pending') return copy.waiting
+  return copy.stepsComplete(done, node.steps.length)
 }
 
 function activeStep(node: TimelineNode): TimelineStep | undefined {
@@ -56,28 +52,29 @@ function visibleMessage(node: TimelineNode): string | null {
   return current?.reason ?? current?.message ?? node.reason ?? node.message ?? null
 }
 
-function fallbackMessage(node: TimelineNode): string | null {
+function fallbackMessage(node: TimelineNode, copy: ReturnType<typeof getWorkspaceCopy>['trace']): string | null {
   const fallback = activeStep(node)?.fallback
-  return fallback ? `Fallback: ${fallback}` : null
+  return fallback ? copy.fallback(fallback) : null
 }
 
-export function AgentTracePanel({ timeline, events, streamError = null }: AgentTracePanelProps) {
-  const nodes = Object.values(timeline)
+export function AgentTracePanel({ timeline, events, streamError = null, language = 'en' }: AgentTracePanelProps) {
+  const copy = getWorkspaceCopy(language).trace
+  const nodes = Object.values(translateTimeline(timeline, language))
 
   return (
     <aside className="panel trace-panel" aria-labelledby="trace-title">
       <div className="panel__header">
         <div>
-          <p className="panel-kicker">Agent pipeline</p>
-          <h2 id="trace-title">Four-agent execution</h2>
+          <p className="panel-kicker">{copy.kicker}</p>
+          <h2 id="trace-title">{copy.title}</h2>
         </div>
-        <span className="trace-panel__count">{events.length} events</span>
+        <span className="trace-panel__count">{copy.eventCount(events.length)}</span>
       </div>
 
-      <ol className="agent-board" aria-label="AdaCascade agent pipeline">
+      <ol className="agent-board" aria-label={copy.pipelineLabel}>
         {nodes.map((node) => {
           const message = visibleMessage(node)
-          const fallback = fallbackMessage(node)
+          const fallback = fallbackMessage(node, copy)
 
           return (
             <li key={node.id}>
@@ -85,15 +82,15 @@ export function AgentTracePanel({ timeline, events, streamError = null }: AgentT
                 <div className="agent-card__topline">
                   <div>
                     <h3>{node.label}</h3>
-                    <p>{agentPurpose[node.id]}</p>
+                    <p>{copy.agentPurpose[node.id]}</p>
                   </div>
                   <StatusBadge status={node.status} size="sm" />
                 </div>
 
-                <ol className="agent-steps" aria-label={`${node.label} steps`}>
+                <ol className="agent-steps" aria-label={copy.stepsLabel(node.label)}>
                   {node.steps.map((step) => {
                     const isCurrent = step.id === node.currentStepId
-                    const fact = stepFact(step)
+                    const fact = stepFact(step, copy)
 
                     return (
                       <li
@@ -104,7 +101,7 @@ export function AgentTracePanel({ timeline, events, streamError = null }: AgentT
                           <span className="agent-step__dot" aria-hidden="true" />
                           <span>{step.label}</span>
                         </div>
-                        {isCurrent ? <span className="agent-step__current">Current step</span> : null}
+                        {isCurrent ? <span className="agent-step__current">{copy.currentStep}</span> : null}
                         <p className="agent-step__summary">{step.summary}</p>
                         {fact ? <span className="agent-step__fact">{fact}</span> : null}
                       </li>
@@ -113,7 +110,7 @@ export function AgentTracePanel({ timeline, events, streamError = null }: AgentT
                 </ol>
 
                 <div className="agent-facts">
-                  <span>{agentFact(node)}</span>
+                  <span>{agentFact(node, copy)}</span>
                   {message ? <span>{message}</span> : null}
                   {fallback ? <span>{fallback}</span> : null}
                 </div>
@@ -125,8 +122,8 @@ export function AgentTracePanel({ timeline, events, streamError = null }: AgentT
 
       <section className="event-stream" aria-labelledby="event-stream-title">
         <div className="section-title-row">
-          <h3 id="event-stream-title">Recent events</h3>
-          <span>supporting log</span>
+          <h3 id="event-stream-title">{copy.eventsTitle}</h3>
+          <span>{copy.eventsKicker}</span>
         </div>
         {streamError ? (
           <p className="event-stream__error" role="status">
@@ -136,7 +133,7 @@ export function AgentTracePanel({ timeline, events, streamError = null }: AgentT
         <div className="event-stream__lines" role="log" aria-live="polite">
           {events.map((event) => (
             <p key={`${event.timestamp}-${event.task_id}-${event.type}-${event.agent ?? 'task'}`}>
-              {eventLine(event)}
+              {eventLine(event, copy.defaultActor)}
             </p>
           ))}
         </div>
