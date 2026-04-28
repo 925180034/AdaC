@@ -1,6 +1,6 @@
 import { StatusBadge } from '../../components/StatusBadge'
 import type { TaskEvent } from '../tasks/taskTypes'
-import { translateTimeline } from '../tasks/timeline'
+import { isKnownAgentId, translateTimeline } from '../tasks/timeline'
 import type { TimelineNode, TimelineState, TimelineStep } from '../tasks/timeline'
 import { getWorkspaceCopy } from './i18n'
 import type { Language } from './uiPreferences'
@@ -35,6 +35,10 @@ function stepFact(step: TimelineStep, copy: ReturnType<typeof getWorkspaceCopy>[
 
 function completedSteps(node: TimelineNode): number {
   return node.steps.filter((step) => step.status === 'success' || step.status === 'degraded').length
+}
+
+function agentPurpose(node: TimelineNode, copy: ReturnType<typeof getWorkspaceCopy>['trace']): string {
+  return isKnownAgentId(node.id) ? copy.agents[node.id].purpose : ''
 }
 
 function agentFact(node: TimelineNode, copy: ReturnType<typeof getWorkspaceCopy>['trace']): string {
@@ -82,7 +86,7 @@ export function AgentTracePanel({ timeline, events, streamError = null, language
                 <div className="agent-card__topline">
                   <div>
                     <h3>{node.label}</h3>
-                    <p>{copy.agentPurpose[node.id]}</p>
+                    <p>{agentPurpose(node, copy)}</p>
                   </div>
                   <StatusBadge status={node.status} size="sm" />
                 </div>

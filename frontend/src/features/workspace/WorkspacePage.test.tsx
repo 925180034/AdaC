@@ -72,6 +72,31 @@ describe('WorkspacePage', () => {
     expect(screen.getByLabelText('本地演示安全提醒')).toHaveTextContent('本地演示环境')
   })
 
+  it('keeps page-level runtime and theme controls non-interactive before backend wiring', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    expect(await screen.findByRole('heading', { name: 'AdaCascade Workbench' })).toBeInTheDocument()
+
+    const lightButton = screen.getByRole('button', { name: 'Light', pressed: true })
+    const darkButton = screen.getByRole('button', { name: 'Dark', pressed: false })
+    const localButton = screen.getByRole('button', { name: 'Local model', pressed: true })
+    const apiButton = screen.getByRole('button', { name: 'API model', pressed: false })
+
+    expect(lightButton).toBeDisabled()
+    expect(darkButton).toBeDisabled()
+    expect(localButton).toBeDisabled()
+    expect(apiButton).toBeDisabled()
+
+    await user.click(darkButton)
+    await user.click(apiButton)
+
+    expect(screen.getByRole('button', { name: 'Light', pressed: true })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Dark', pressed: false })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Local model', pressed: true })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'API model', pressed: false })).toBeDisabled()
+  })
+
   it('switches visible workspace copy and agent summaries after selecting Chinese', async () => {
     const user = userEvent.setup()
     renderWorkspace()

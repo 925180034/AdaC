@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
 
 const copy = {
+  preferencesLabel: 'Workspace preferences',
   language: 'Language',
   english: 'English',
   chinese: '中文',
@@ -31,6 +32,7 @@ describe('WorkspaceToolbar', () => {
       />,
     )
 
+    expect(screen.getByLabelText('Workspace preferences')).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Theme' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Model runtime' })).toBeInTheDocument()
@@ -85,6 +87,66 @@ describe('WorkspaceToolbar', () => {
     expect(onLanguageChange).toHaveBeenCalledWith('zh')
     expect(onThemeChange).toHaveBeenCalledWith('dark')
     expect(onRuntimeBackendChange).toHaveBeenCalledWith('api')
+  })
+
+  it('disables theme buttons when theme controls are disabled', () => {
+    const onThemeChange = vi.fn()
+
+    render(
+      <WorkspaceToolbar
+        copy={copy}
+        language="en"
+        theme="light"
+        runtimeBackend="local"
+        isRuntimePending={false}
+        isRunning={false}
+        isThemeDisabled={true}
+        onLanguageChange={vi.fn()}
+        onThemeChange={onThemeChange}
+        onRuntimeBackendChange={vi.fn()}
+      />,
+    )
+
+    const lightButton = screen.getByRole('button', { name: 'Light', pressed: true })
+    const darkButton = screen.getByRole('button', { name: 'Dark', pressed: false })
+
+    expect(lightButton).toBeDisabled()
+    expect(darkButton).toBeDisabled()
+
+    fireEvent.click(lightButton)
+    fireEvent.click(darkButton)
+
+    expect(onThemeChange).not.toHaveBeenCalled()
+  })
+
+  it('disables runtime buttons when runtime controls are disabled', () => {
+    const onRuntimeBackendChange = vi.fn()
+
+    render(
+      <WorkspaceToolbar
+        copy={copy}
+        language="en"
+        theme="light"
+        runtimeBackend="local"
+        isRuntimePending={false}
+        isRunning={false}
+        isRuntimeDisabled={true}
+        onLanguageChange={vi.fn()}
+        onThemeChange={vi.fn()}
+        onRuntimeBackendChange={onRuntimeBackendChange}
+      />,
+    )
+
+    const localButton = screen.getByRole('button', { name: 'Local vLLM', pressed: true })
+    const apiButton = screen.getByRole('button', { name: 'DeepSeek API', pressed: false })
+
+    expect(localButton).toBeDisabled()
+    expect(apiButton).toBeDisabled()
+
+    fireEvent.click(localButton)
+    fireEvent.click(apiButton)
+
+    expect(onRuntimeBackendChange).not.toHaveBeenCalled()
   })
 
   it('disables both runtime switch buttons while a task is running', () => {

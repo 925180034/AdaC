@@ -1,3 +1,4 @@
+import type { TimelineCopy } from '../tasks/timeline'
 import type { Language } from './uiPreferences'
 
 export type WorkspaceCopy = {
@@ -8,6 +9,7 @@ export type WorkspaceCopy = {
     warning: string
   }
   toolbar: {
+    preferencesLabel: string
     language: string
     english: string
     chinese: string
@@ -74,7 +76,7 @@ export type WorkspaceCopy = {
     eventsTitle: string
     eventsKicker: string
     defaultActor: string
-    agentPurpose: Record<string, string>
+    agents: TimelineCopy
   }
 }
 
@@ -87,6 +89,7 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       warning: 'Local demo environment. Do not expose this build or its browser-visible API key on a public network.',
     },
     toolbar: {
+      preferencesLabel: 'Workspace preferences',
       language: 'Language',
       english: 'English',
       chinese: '中文',
@@ -154,11 +157,39 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       eventsTitle: 'Recent events',
       eventsKicker: 'supporting log',
       defaultActor: 'Task',
-      agentPurpose: {
-        Planner: 'Builds the task plan and mode routing.',
-        Profiling: 'Extracts table and column metadata.',
-        Retrieval: 'Narrows the lake with TLCF cascade.',
-        Matcher: 'Verifies column alignments and final mappings.',
+      agents: {
+        Planner: {
+          label: 'Planner',
+          purpose: 'Builds the task plan and mode routing.',
+          steps: {
+            overview: { label: 'Plan routing', summary: 'Chooses discover, match, or integrate execution path.' },
+          },
+        },
+        Profiling: {
+          label: 'Profiling',
+          purpose: 'Extracts table and column metadata.',
+          steps: {
+            overview: { label: 'Table profiling', summary: 'Reads table shape, columns, types, and value statistics.' },
+          },
+        },
+        Retrieval: {
+          label: 'Retrieval',
+          purpose: 'Narrows the lake with TLCF cascade.',
+          steps: {
+            L1: { label: 'Lexical filter', summary: 'Uses table text and schema keywords to keep plausible candidates.' },
+            L2: { label: 'Vector recall', summary: 'Queries embeddings to recover semantically similar tables.' },
+            L3: { label: 'LLM rerank', summary: 'Asks the LLM to rerank the strongest candidates.' },
+          },
+        },
+        Matcher: {
+          label: 'Matcher',
+          purpose: 'Verifies column alignments and final mappings.',
+          steps: {
+            filtering: { label: 'Candidate filter', summary: 'Keeps likely column pairs before expensive verification.' },
+            LLM: { label: 'LLM verification', summary: 'Checks semantic equivalence for candidate column pairs.' },
+            decision: { label: 'One-to-one decision', summary: 'Selects final non-conflicting column mappings.' },
+          },
+        },
       },
     },
   },
@@ -170,6 +201,7 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       warning: '本地演示环境。请勿将此构建或浏览器可见的 API Key 暴露到公网。',
     },
     toolbar: {
+      preferencesLabel: '工作区偏好',
       language: '语言',
       english: 'English',
       chinese: '中文',
@@ -236,11 +268,39 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       eventsTitle: '最近事件',
       eventsKicker: '辅助日志',
       defaultActor: '任务',
-      agentPurpose: {
-        Planner: '生成任务计划并选择模式路由。',
-        Profiling: '抽取表和列元数据。',
-        Retrieval: '通过 TLCF 级联缩小数据湖候选范围。',
-        Matcher: '验证列对齐并生成最终映射。',
+      agents: {
+        Planner: {
+          label: '规划',
+          purpose: '生成任务计划并选择模式路由。',
+          steps: {
+            overview: { label: '规划路由', summary: '选择发现、匹配或集成执行路径。' },
+          },
+        },
+        Profiling: {
+          label: '画像',
+          purpose: '抽取表和列元数据。',
+          steps: {
+            overview: { label: '表画像', summary: '读取表形状、列、类型和值统计。' },
+          },
+        },
+        Retrieval: {
+          label: '检索',
+          purpose: '通过 TLCF 级联缩小数据湖候选范围。',
+          steps: {
+            L1: { label: '词法过滤', summary: '使用表文本和模式关键词保留可能候选。' },
+            L2: { label: '向量召回', summary: '查询嵌入，找回语义相近的表。' },
+            L3: { label: 'LLM 重排', summary: '让 LLM 重排最强候选。' },
+          },
+        },
+        Matcher: {
+          label: '匹配',
+          purpose: '验证列对齐并生成最终映射。',
+          steps: {
+            filtering: { label: '候选过滤', summary: '在高成本验证前保留可能的列对。' },
+            LLM: { label: 'LLM 验证', summary: '检查候选列对的语义等价性。' },
+            decision: { label: '一对一决策', summary: '选择最终无冲突的列映射。' },
+          },
+        },
       },
     },
   },

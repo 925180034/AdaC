@@ -52,8 +52,8 @@ export function WorkspacePage() {
   const [targetTableId, setTargetTableId] = useState(() => getSearchParam(params, 'target_table_id', ''))
   const [streamError, setStreamError] = useState<string | null>(null)
   const [language, setLanguage] = useState(readLanguage)
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
-  const [runtimeBackend, setRuntimeBackend] = useState<RuntimeBackend>('local')
+  const theme = 'light'
+  const runtimeBackend: RuntimeBackend = 'local'
   const copy = getWorkspaceCopy(language)
   const tenantId = getSearchParam(params, 'tenant_id', defaultTenantId)
 
@@ -142,9 +142,8 @@ export function WorkspacePage() {
     writeLanguage(nextLanguage)
   }, [])
 
-  const handleRuntimeBackendChange = useCallback((nextBackend: RuntimeBackend) => {
-    setRuntimeBackend(nextBackend)
-  }, [])
+  const ignorePendingThemeChange = useCallback(() => undefined, [])
+  const ignorePendingRuntimeBackendChange = useCallback(() => undefined, [])
 
   return (
     <div className="workspace-shell">
@@ -165,9 +164,11 @@ export function WorkspacePage() {
         runtimeBackend={runtimeBackend}
         isRuntimePending={false}
         isRunning={isRunning}
+        isThemeDisabled={true}
+        isRuntimeDisabled={true}
         onLanguageChange={handleLanguageChange}
-        onThemeChange={setTheme}
-        onRuntimeBackendChange={handleRuntimeBackendChange}
+        onThemeChange={ignorePendingThemeChange}
+        onRuntimeBackendChange={ignorePendingRuntimeBackendChange}
       />
 
       <div className="workspace-grid">

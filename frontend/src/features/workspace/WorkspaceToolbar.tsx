@@ -2,6 +2,7 @@ import type { RuntimeBackend } from '../../api/runtime'
 import type { Language, ThemeMode } from './uiPreferences'
 
 export type WorkspaceToolbarCopy = {
+  preferencesLabel: string
   language: string
   english: string
   chinese: string
@@ -21,6 +22,8 @@ type WorkspaceToolbarProps = {
   runtimeBackend: RuntimeBackend
   isRuntimePending: boolean
   isRunning: boolean
+  isThemeDisabled?: boolean
+  isRuntimeDisabled?: boolean
   onLanguageChange: (language: Language) => void
   onThemeChange: (theme: ThemeMode) => void
   onRuntimeBackendChange: (backend: RuntimeBackend) => void
@@ -37,14 +40,16 @@ export function WorkspaceToolbar({
   runtimeBackend,
   isRuntimePending,
   isRunning,
+  isThemeDisabled = false,
+  isRuntimeDisabled = false,
   onLanguageChange,
   onThemeChange,
   onRuntimeBackendChange,
 }: WorkspaceToolbarProps) {
-  const runtimeDisabled = isRunning || isRuntimePending
+  const runtimeDisabled = isRuntimeDisabled || isRunning || isRuntimePending
 
   return (
-    <aside className="workspace-toolbar" aria-label="Workspace preferences">
+    <aside className="workspace-toolbar" aria-label={copy.preferencesLabel}>
       <div className="segmented-control" role="group" aria-label={copy.language}>
         <button
           className={selectedClass(language === 'en')}
@@ -70,6 +75,7 @@ export function WorkspaceToolbar({
           type="button"
           aria-pressed={theme === 'light'}
           onClick={() => onThemeChange('light')}
+          disabled={isThemeDisabled}
         >
           {copy.light}
         </button>
@@ -78,6 +84,7 @@ export function WorkspaceToolbar({
           type="button"
           aria-pressed={theme === 'dark'}
           onClick={() => onThemeChange('dark')}
+          disabled={isThemeDisabled}
         >
           {copy.dark}
         </button>
