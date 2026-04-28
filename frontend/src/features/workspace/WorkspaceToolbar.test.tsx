@@ -36,6 +36,29 @@ describe('WorkspaceToolbar', () => {
     expect(screen.getByRole('group', { name: 'Model runtime' })).toBeInTheDocument()
   })
 
+  it('exposes selected state for each segmented control', () => {
+    render(
+      <WorkspaceToolbar
+        copy={copy}
+        language="zh"
+        theme="dark"
+        runtimeBackend="api"
+        isRuntimePending={false}
+        isRunning={false}
+        onLanguageChange={vi.fn()}
+        onThemeChange={vi.fn()}
+        onRuntimeBackendChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'English', pressed: false })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '中文', pressed: true })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Light', pressed: false })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dark', pressed: true })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Local vLLM', pressed: false })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'DeepSeek API', pressed: true })).toBeInTheDocument()
+  })
+
   it('calls handlers when controls change', () => {
     const onLanguageChange = vi.fn()
     const onThemeChange = vi.fn()
@@ -64,7 +87,9 @@ describe('WorkspaceToolbar', () => {
     expect(onRuntimeBackendChange).toHaveBeenCalledWith('api')
   })
 
-  it('disables runtime switch while task is running', () => {
+  it('disables both runtime switch buttons while a task is running', () => {
+    const onRuntimeBackendChange = vi.fn()
+
     render(
       <WorkspaceToolbar
         copy={copy}
@@ -75,10 +100,48 @@ describe('WorkspaceToolbar', () => {
         isRunning={true}
         onLanguageChange={vi.fn()}
         onThemeChange={vi.fn()}
-        onRuntimeBackendChange={vi.fn()}
+        onRuntimeBackendChange={onRuntimeBackendChange}
       />,
     )
 
-    expect(screen.getByRole('button', { name: 'DeepSeek API' })).toBeDisabled()
+    const localButton = screen.getByRole('button', { name: 'Local vLLM', pressed: true })
+    const apiButton = screen.getByRole('button', { name: 'DeepSeek API', pressed: false })
+
+    expect(localButton).toBeDisabled()
+    expect(apiButton).toBeDisabled()
+
+    fireEvent.click(localButton)
+    fireEvent.click(apiButton)
+
+    expect(onRuntimeBackendChange).not.toHaveBeenCalled()
+  })
+
+  it('disables both runtime switch buttons while runtime change is pending', () => {
+    const onRuntimeBackendChange = vi.fn()
+
+    render(
+      <WorkspaceToolbar
+        copy={copy}
+        language="en"
+        theme="light"
+        runtimeBackend="api"
+        isRuntimePending={true}
+        isRunning={false}
+        onLanguageChange={vi.fn()}
+        onThemeChange={vi.fn()}
+        onRuntimeBackendChange={onRuntimeBackendChange}
+      />,
+    )
+
+    const localButton = screen.getByRole('button', { name: 'Local vLLM', pressed: false })
+    const apiButton = screen.getByRole('button', { name: 'Switching runtime…', pressed: true })
+
+    expect(localButton).toBeDisabled()
+    expect(apiButton).toBeDisabled()
+
+    fireEvent.click(localButton)
+    fireEvent.click(apiButton)
+
+    expect(onRuntimeBackendChange).not.toHaveBeenCalled()
   })
 })

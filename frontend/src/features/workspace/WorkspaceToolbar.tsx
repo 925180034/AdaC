@@ -46,19 +46,39 @@ export function WorkspaceToolbar({
   return (
     <aside className="workspace-toolbar" aria-label="Workspace preferences">
       <div className="segmented-control" role="group" aria-label={copy.language}>
-        <button className={selectedClass(language === 'en')} type="button" onClick={() => onLanguageChange('en')}>
+        <button
+          className={selectedClass(language === 'en')}
+          type="button"
+          aria-pressed={language === 'en'}
+          onClick={() => onLanguageChange('en')}
+        >
           {copy.english}
         </button>
-        <button className={selectedClass(language === 'zh')} type="button" onClick={() => onLanguageChange('zh')}>
+        <button
+          className={selectedClass(language === 'zh')}
+          type="button"
+          aria-pressed={language === 'zh'}
+          onClick={() => onLanguageChange('zh')}
+        >
           {copy.chinese}
         </button>
       </div>
 
       <div className="segmented-control" role="group" aria-label={copy.theme}>
-        <button className={selectedClass(theme === 'light')} type="button" onClick={() => onThemeChange('light')}>
+        <button
+          className={selectedClass(theme === 'light')}
+          type="button"
+          aria-pressed={theme === 'light'}
+          onClick={() => onThemeChange('light')}
+        >
           {copy.light}
         </button>
-        <button className={selectedClass(theme === 'dark')} type="button" onClick={() => onThemeChange('dark')}>
+        <button
+          className={selectedClass(theme === 'dark')}
+          type="button"
+          aria-pressed={theme === 'dark'}
+          onClick={() => onThemeChange('dark')}
+        >
           {copy.dark}
         </button>
       </div>
@@ -67,6 +87,7 @@ export function WorkspaceToolbar({
         <button
           className={selectedClass(runtimeBackend === 'local')}
           type="button"
+          aria-pressed={runtimeBackend === 'local'}
           onClick={() => onRuntimeBackendChange('local')}
           disabled={runtimeDisabled}
         >
@@ -75,6 +96,7 @@ export function WorkspaceToolbar({
         <button
           className={selectedClass(runtimeBackend === 'api')}
           type="button"
+          aria-pressed={runtimeBackend === 'api'}
           onClick={() => onRuntimeBackendChange('api')}
           disabled={runtimeDisabled}
         >
