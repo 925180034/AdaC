@@ -11,7 +11,10 @@ import { AgentTracePanel } from './AgentTracePanel'
 import { getWorkspaceCopy } from './i18n'
 import { ResultWorkspace } from './ResultWorkspace'
 import { TaskControlPanel } from './TaskControlPanel'
-import { readLanguage } from './uiPreferences'
+import { WorkspaceToolbar } from './WorkspaceToolbar'
+import { readLanguage, writeLanguage } from './uiPreferences'
+import type { Language } from './uiPreferences'
+import type { RuntimeBackend } from '../../api/runtime'
 
 function getSearchParam(params: URLSearchParams, key: string, fallback: string): string {
   return params.get(key) || fallback
@@ -48,7 +51,9 @@ export function WorkspacePage() {
   const [sourceTableId, setSourceTableId] = useState(() => getSearchParam(params, 'source_table_id', ''))
   const [targetTableId, setTargetTableId] = useState(() => getSearchParam(params, 'target_table_id', ''))
   const [streamError, setStreamError] = useState<string | null>(null)
-  const [language] = useState(readLanguage)
+  const [language, setLanguage] = useState(readLanguage)
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [runtimeBackend, setRuntimeBackend] = useState<RuntimeBackend>('local')
   const copy = getWorkspaceCopy(language)
   const tenantId = getSearchParam(params, 'tenant_id', defaultTenantId)
 
@@ -132,6 +137,15 @@ export function WorkspacePage() {
     startTaskMutation.mutate()
   }, [canRun, startTaskMutation])
 
+  const handleLanguageChange = useCallback((nextLanguage: Language) => {
+    setLanguage(nextLanguage)
+    writeLanguage(nextLanguage)
+  }, [])
+
+  const handleRuntimeBackendChange = useCallback((nextBackend: RuntimeBackend) => {
+    setRuntimeBackend(nextBackend)
+  }, [])
+
   return (
     <div className="workspace-shell">
       <header className="workspace-topbar">
@@ -143,6 +157,18 @@ export function WorkspacePage() {
           {copy.page.warning}
         </aside>
       </header>
+
+      <WorkspaceToolbar
+        copy={copy.toolbar}
+        language={language}
+        theme={theme}
+        runtimeBackend={runtimeBackend}
+        isRuntimePending={false}
+        isRunning={isRunning}
+        onLanguageChange={handleLanguageChange}
+        onThemeChange={setTheme}
+        onRuntimeBackendChange={handleRuntimeBackendChange}
+      />
 
       <div className="workspace-grid">
         <TaskControlPanel

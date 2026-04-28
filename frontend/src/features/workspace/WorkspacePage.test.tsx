@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ListTablesResponse } from '../../api/tables'
@@ -69,5 +70,22 @@ describe('WorkspacePage', () => {
 
     expect(await screen.findByRole('heading', { name: 'AdaCascade 工作台' })).toBeInTheDocument()
     expect(screen.getByLabelText('本地演示安全提醒')).toHaveTextContent('本地演示环境')
+  })
+
+  it('switches visible workspace copy and agent summaries after selecting Chinese', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    expect(await screen.findByRole('heading', { name: 'AdaCascade Workbench' })).toBeInTheDocument()
+    expect(screen.getByText('Builds the task plan and mode routing.')).toBeInTheDocument()
+    expect(screen.getByText('Chooses discover, match, or integrate execution path.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '中文' }))
+
+    expect(await screen.findByRole('heading', { name: 'AdaCascade 工作台' })).toBeInTheDocument()
+    expect(screen.getByLabelText('本地演示安全提醒')).toHaveTextContent('本地演示环境')
+    expect(screen.getByText('生成任务计划并选择模式路由。')).toBeInTheDocument()
+    expect(screen.getByText('选择发现、匹配或集成执行路径。')).toBeInTheDocument()
+    expect(window.localStorage.getItem('adacascade.language')).toBe('zh')
   })
 })
