@@ -16,7 +16,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from qdrant_client import AsyncQdrantClient
 
-from adacascade.api.routes import operations, tables, tasks
+from adacascade.api.routes import operations, runtime, tables, tasks
 from adacascade.api.middleware import AuthAndTenantMiddleware
 from adacascade.config import settings
 from adacascade.db.models import TableRegistry
@@ -95,6 +95,7 @@ app.add_middleware(
 app.include_router(tables.router)
 app.include_router(operations.router)
 app.include_router(tasks.router)
+app.include_router(runtime.router)
 if settings.METRICS_ENABLED:
     Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
