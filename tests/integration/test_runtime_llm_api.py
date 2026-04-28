@@ -23,9 +23,11 @@ def client() -> TestClient:
         from adacascade.api.app import app
 
         llm_runtime.set_active_backend("local")
-        with TestClient(app, raise_server_exceptions=False) as c:
-            yield c
-        llm_runtime.set_active_backend("local")
+        try:
+            with TestClient(app, raise_server_exceptions=False) as c:
+                yield c
+        finally:
+            llm_runtime.set_active_backend("local")
 
 
 def test_runtime_llm_requires_auth(client: TestClient) -> None:
@@ -51,7 +53,8 @@ def test_runtime_llm_put_switches_backend(client: TestClient) -> None:
     assert switched.status_code == 200
     assert switched.json()["backend"] == "api"
     assert current.json()["backend"] == "api"
-    assert "api_key" not in switched.text
+    assert '"api_key"' not in switched.text
+    assert "EMPTY" not in switched.text
 
 
 def test_runtime_llm_put_rejects_invalid_backend(client: TestClient) -> None:
