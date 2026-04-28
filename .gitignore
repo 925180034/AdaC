@@ -11,3 +11,9 @@ __pycache__/
 .env
 .qdrant-initialized
 docs/superpowers/
+frontend/dist/
+frontend/node_modules/
+frontend/*.tsbuildinfo
+frontend/*.config.js
+frontend/*.config.d.ts
+frontend/test-results/

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Generator
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,7 +19,7 @@ AUTH_HEADERS = {"Authorization": "Bearer dev-local-token"}
 
 
 @pytest.fixture(scope="module")
-def client() -> TestClient:
+def client() -> Generator[TestClient, None, None]:
     mock_qdrant = MagicMock()
     mock_qdrant.delete_table = AsyncMock()
     raw_qdrant_mock = AsyncMock()
@@ -107,6 +110,20 @@ def _seed_uat_tables() -> None:
                 )
 
 
+def _poll_task(client: TestClient, task_id: str) -> dict[str, Any]:
+    deadline = time.monotonic() + 2.0
+    last_body: dict[str, Any] | None = None
+    while time.monotonic() < deadline:
+        task_resp = client.get(f"/tasks/{task_id}", headers=AUTH_HEADERS)
+        assert task_resp.status_code == 200, task_resp.text
+        last_body = task_resp.json()
+        if last_body["status"] != "RUNNING":
+            return last_body
+        time.sleep(0.01)
+    assert last_body is not None
+    return last_body
+
+
 @pytest.mark.parametrize(
     ("path", "payload", "expect_ranking", "expect_mapping"),
     [
@@ -130,10 +147,11 @@ def test_local_uat_routes(
     resp = client.post(path, json=payload, headers=AUTH_HEADERS)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["status"] == "SUCCESS"
+    assert body["status"] == "RUNNING"
+    assert body["state"]["status"] == "RUNNING"
+    assert body["task_id"]
 
-    task_resp = client.get(f"/tasks/{body['task_id']}", headers=AUTH_HEADERS)
-    assert task_resp.status_code == 200, task_resp.text
-    task = task_resp.json()
+    task = _poll_task(client, str(body["task_id"]))
+    assert task["status"] == "SUCCESS"
     assert bool(task["ranking"]) is expect_ranking
     assert bool(task["mappings"]) is expect_mapping

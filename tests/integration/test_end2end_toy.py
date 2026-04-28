@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import time
+from collections.abc import Generator
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,7 +19,7 @@ AUTH_HEADERS = {"Authorization": "Bearer dev-local-token"}
 
 
 @pytest.fixture(scope="module")
-def client() -> TestClient:
+def client() -> Generator[TestClient, None, None]:
     mock_qdrant = MagicMock()
     mock_qdrant.delete_table = AsyncMock()
     raw_qdrant_mock = AsyncMock()
@@ -102,18 +104,35 @@ def _seed_ready_tables() -> None:
                 )
 
 
+def _poll_task(client: TestClient, task_id: str) -> dict[str, object]:
+    deadline = time.monotonic() + 2.0
+    last_body: dict[str, object] | None = None
+    while time.monotonic() < deadline:
+        task_resp = client.get(f"/tasks/{task_id}", headers=AUTH_HEADERS)
+        assert task_resp.status_code == 200, task_resp.text
+        last_body = task_resp.json()
+        if last_body["status"] != "RUNNING":
+            return last_body
+        time.sleep(0.01)
+    assert last_body is not None
+    return last_body
+
+
 def test_integrate_and_task_status(client: TestClient) -> None:
     resp = client.post(
         "/integrate", json={"query_table_id": "toy_source"}, headers=AUTH_HEADERS
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["status"] == "SUCCESS"
-    assert body["state"]["ranking"][0]["table_id"] == "toy_target"
+    assert body["status"] == "RUNNING"
+    assert body["state"]["status"] == "RUNNING"
+    assert body["task_id"]
 
-    task_resp = client.get(f"/tasks/{body['task_id']}", headers=AUTH_HEADERS)
-    assert task_resp.status_code == 200, task_resp.text
-    task_body = task_resp.json()
+    task_body = _poll_task(client, str(body["task_id"]))
     assert task_body["status"] == "SUCCESS"
-    assert task_body["ranking"][0]["candidate_table"] == "toy_target"
-    assert task_body["mappings"][0]["src_column_id"] == "src_name"
+    ranking = task_body["ranking"]
+    mappings = task_body["mappings"]
+    assert isinstance(ranking, list)
+    assert isinstance(mappings, list)
+    assert ranking[0]["candidate_table"] == "toy_target"
+    assert mappings[0]["src_column_id"] == "src_name"

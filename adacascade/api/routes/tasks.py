@@ -6,8 +6,10 @@ import json
 from typing import Any, Generator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from adacascade.api.events import stream_task_events
 from adacascade.api.middleware import get_tenant_id
 from adacascade.db.models import (
     AgentStep,
@@ -99,3 +101,17 @@ async def get_task(
             for mapping in mappings
         ],
     }
+
+
+@router.get("/{task_id}/events")
+async def get_task_events(task_id: str, request: Request) -> StreamingResponse:
+    """Stream task progress events for the current tenant as SSE."""
+    with get_session() as db:
+        task = db.query(IntegrationTask).filter_by(task_id=task_id).first()
+        if task is None or task.tenant_id != get_tenant_id(request):
+            raise HTTPException(status_code=404, detail="Task not found")
+    return StreamingResponse(
+        stream_task_events(task_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

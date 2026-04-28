@@ -129,28 +129,28 @@
 ### M3 验收
 - [x] 所有测试仍通过
 - [x] `/healthz` 与 `/metrics` 正常响应
-- [x] UAT 场景覆盖三种模式（integrate / discover / match）
+- [x] 本地 UAT 场景覆盖三种模式（integrate / discover / match）
 
 ---
 
 ## M3.5 · 前端演示工作台（目标：本地可演示）
 
 - [x] 完成前端演示设计文档：`docs/frontend_demo_design.md`
-- [ ] 创建 `frontend/`：React + Vite + TypeScript 独立前端
-- [ ] 实现 `/workspace` 三栏工作台：任务控制区、结果图区、Agent Trace 区
-- [ ] 接入现有后端 REST：`GET /tables`、`POST /discover`、`POST /match`、`POST /integrate`、`GET /tasks/{task_id}`
+- [x] 创建 `frontend/`：React + Vite + TypeScript 独立前端
+- [x] 实现 `/workspace` 三栏工作台：任务控制区、结果图区、Agent Trace 区
+- [x] 接入现有后端 REST：`GET /tables`、`POST /discover`、`POST /match`、`POST /integrate`、`GET /tasks/{task_id}`
 - [ ] 新增后端 SSE：`GET /tasks/{task_id}/events` 与进程内任务事件总线
 - [ ] 增加 Agent/Layer 事件 emit 点：Planner、Profiling、Retrieval L1/L2/L3、Matcher filtering/LLM/decision
-- [ ] 实现 React Flow 图谱：ranking → discovery graph，mappings → column mapping graph
-- [ ] 实现 Vitest 单元/组件测试与 Playwright 演示 E2E
-- [ ] 明确本地 demo 安全边界：`VITE_API_KEY` 仅限本地可信环境，不可公网部署
+- [x] 实现 React Flow 图谱：ranking → discovery graph，mappings → column mapping graph
+- [x] 实现 Vitest 单元/组件测试与 Playwright 演示 E2E
+- [x] 明确本地 demo 安全边界：`VITE_API_KEY` 仅限本地可信环境，不可公网部署
 
 ### M3.5 验收
-- [ ] 大系统按钮 URL 参数可预填 workspace 上下文，但不会自动运行任务
+- [x] 大系统按钮 URL 参数可预填 workspace 上下文，但不会自动运行任务
 - [ ] discover / match / integrate 三种模式均可从前端启动并展示结果
 - [ ] SSE 实时显示 Agent + Layer 级阶段进度
 - [ ] 图谱、ranking、mappings、Raw JSON 四种结果视图可切换并联动
-- [ ] `npm run lint`、`npm run test`、`npm run build` 通过；Playwright demo 流程通过或有明确本地验收命令
+- [x] `npm run lint`、`npm run test`、`npm run build` 通过；Playwright demo 流程通过或有明确本地验收命令
 
 ---
 

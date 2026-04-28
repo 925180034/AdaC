@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo/node.tsbuildinfo"
+  },
+  "include": ["vite.config.ts", "playwright.config.ts"]
+}
