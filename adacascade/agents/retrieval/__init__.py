@@ -10,6 +10,7 @@ from adacascade.agents.retrieval.aggregate import aggregate
 from adacascade.agents.retrieval.layer1 import build_c1
 from adacascade.agents.retrieval.layer2 import search_and_build_c2
 from adacascade.agents.retrieval.layer3 import batch_verify
+from adacascade.api.events import emit_task_event
 from adacascade.config import settings
 from adacascade.state import IntegrationState
 
@@ -42,8 +43,51 @@ async def run(state: IntegrationState) -> IntegrationState:
     cfg = settings.tlcf_cfg
 
     candidates = list(candidate_profiles.values())
+    if task_id:
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_started",
+                "agent": "Retrieval",
+                "layer": "L1",
+                "status": "RUNNING",
+                "input_size": len(candidates),
+            },
+        )
     if not candidates:
         bound_log.info("retrieval.empty_pool")
+        if task_id:
+            await emit_task_event(
+                task_id,
+                {
+                    "type": "agent_completed",
+                    "agent": "Retrieval",
+                    "layer": "L1",
+                    "status": "SUCCESS",
+                    "output_size": 0,
+                },
+            )
+            for layer in ["L2", "L3"]:
+                await emit_task_event(
+                    task_id,
+                    {
+                        "type": "agent_started",
+                        "agent": "Retrieval",
+                        "layer": layer,
+                        "status": "RUNNING",
+                        "input_size": 0,
+                    },
+                )
+                await emit_task_event(
+                    task_id,
+                    {
+                        "type": "agent_completed",
+                        "agent": "Retrieval",
+                        "layer": layer,
+                        "status": "SUCCESS",
+                        "output_size": 0,
+                    },
+                )
         return {
             **state,
             "c1_meta": [],
@@ -60,11 +104,34 @@ async def run(state: IntegrationState) -> IntegrationState:
         _plan_float(plan, "theta_1", float(cfg.get("theta_1", 0.2))),
         _plan_int(plan, "k_1", int(cfg.get("k_1", 120))),
     )
+    if task_id:
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_completed",
+                "agent": "Retrieval",
+                "layer": "L1",
+                "status": "SUCCESS",
+                "output_size": len(c1),
+            },
+        )
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_started",
+                "agent": "Retrieval",
+                "layer": "L2",
+                "status": "RUNNING",
+                "input_size": len(c1),
+            },
+        )
 
+    l2_degraded = False
+    l3_degraded = False
     query_vector = query_profile.get("table_vector")
     if query_vector:
         try:
-            c2, degraded = await search_and_build_c2(
+            c2, l2_degraded = await search_and_build_c2(
                 c1=cast(list[dict[str, Any]], c1),
                 query_vector=cast(list[float], query_vector),
                 tenant_id=str(state.get("tenant_id", "default")),
@@ -74,10 +141,33 @@ async def run(state: IntegrationState) -> IntegrationState:
         except Exception as exc:
             bound_log.warning("retrieval.qdrant_degraded", error=str(exc))
             c2 = [{**entry, "s2": entry["s1"]} for entry in c1]
-            degraded = True
+            l2_degraded = True
     else:
         c2 = [{**entry, "s2": entry["s1"]} for entry in c1]
-        degraded = True
+        l2_degraded = True
+
+    if task_id:
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_degraded" if l2_degraded else "agent_completed",
+                "agent": "Retrieval",
+                "layer": "L2",
+                "status": "DEGRADED" if l2_degraded else "SUCCESS",
+                "output_size": len(c2),
+                "reason": "vector search fallback" if l2_degraded else None,
+            },
+        )
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_started",
+                "agent": "Retrieval",
+                "layer": "L3",
+                "status": "RUNNING",
+                "input_size": len(c2),
+            },
+        )
 
     c2_enriched = _enrich(c2, candidate_profiles)
     try:
@@ -94,7 +184,20 @@ async def run(state: IntegrationState) -> IntegrationState:
     except Exception as exc:
         bound_log.warning("retrieval.l3_degraded", error=str(exc))
         c3 = []
-        degraded = True
+        l3_degraded = True
+    if task_id:
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_degraded" if l3_degraded else "agent_completed",
+                "agent": "Retrieval",
+                "layer": "L3",
+                "status": "DEGRADED" if l3_degraded else "SUCCESS",
+                "output_size": len(c3),
+                "reason": "LLM verification fallback" if l3_degraded else None,
+            },
+        )
+
     c3_enriched = _enrich(c3, candidate_profiles)
     weights = {
         "w1": _plan_float(plan, "w_1", 0.3),
@@ -111,5 +214,5 @@ async def run(state: IntegrationState) -> IntegrationState:
         "c2_vec": [item["table_id"] for item in c2],
         "c3_llm": [item["table_id"] for item in c3],
         "ranking": ranking,
-        "degraded": degraded,
+        "degraded": l2_degraded or l3_degraded,
     }

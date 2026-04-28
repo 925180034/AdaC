@@ -11,6 +11,7 @@ from adacascade.agents.matcher import llm_verify
 from adacascade.agents.matcher.candidates import filter_cpi, truncate_per_source
 from adacascade.agents.matcher.decision import decide, hungarian_1to1
 from adacascade.agents.matcher.mixed import Scenario
+from adacascade.api.events import emit_task_event
 from adacascade.artifacts import save_pkl
 from adacascade.config import settings
 from adacascade.state import IntegrationState
@@ -98,19 +99,77 @@ async def run(state: IntegrationState) -> IntegrationState:
     all_pairs: list[dict[str, Any]] = []
     final_mappings: list[dict[str, Any]] = []
 
+    targets = _targets(state)
+    if task_id:
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_started",
+                "agent": "Matcher",
+                "layer": "filtering",
+                "status": "RUNNING",
+                "input_size": len(source_cols)
+                * sum(len(target.get("columns", [])) for target in targets),
+            },
+        )
+
     for src_col in source_cols:
         src_col["table_id"] = source_profile.get("table_id")
 
-    for target_profile in _targets(state):
+    processed_targets = 0
+    for target_profile in targets:
         target_cols = cast(list[dict[str, Any]], target_profile.get("columns", []))
         if not source_cols or not target_cols:
             continue
+        processed_targets += 1
         c_pi = filter_cpi(source_cols, target_cols, scenario)
         truncated = truncate_per_source(c_pi)
         all_pairs.extend(cast(list[dict[str, Any]], truncated))
+        if task_id:
+            await emit_task_event(
+                task_id,
+                {
+                    "type": "agent_completed",
+                    "agent": "Matcher",
+                    "layer": "filtering",
+                    "status": "SUCCESS",
+                    "output_size": len(all_pairs),
+                },
+            )
+            await emit_task_event(
+                task_id,
+                {
+                    "type": "agent_started",
+                    "agent": "Matcher",
+                    "layer": "LLM",
+                    "status": "RUNNING",
+                    "input_size": len(truncated),
+                },
+            )
         verified = llm_verify.verify_pairs(
             cast(list[dict[str, Any]], truncated), source_cols, target_cols, scenario
         )
+        if task_id:
+            await emit_task_event(
+                task_id,
+                {
+                    "type": "agent_completed",
+                    "agent": "Matcher",
+                    "layer": "LLM",
+                    "status": "SUCCESS",
+                    "output_size": len(verified),
+                },
+            )
+            await emit_task_event(
+                task_id,
+                {
+                    "type": "agent_started",
+                    "agent": "Matcher",
+                    "layer": "decision",
+                    "status": "RUNNING",
+                    "input_size": len(verified),
+                },
+            )
         accepted = [
             item
             for item in verified
@@ -131,6 +190,50 @@ async def run(state: IntegrationState) -> IntegrationState:
             _mapping_entry(source_cols, target_cols, target_profile, item, scenario)
             for item in accepted
         )
+        if task_id:
+            await emit_task_event(
+                task_id,
+                {
+                    "type": "agent_completed",
+                    "agent": "Matcher",
+                    "layer": "decision",
+                    "status": "SUCCESS",
+                    "output_size": len(final_mappings),
+                },
+            )
+
+    if task_id and processed_targets == 0:
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_completed",
+                "agent": "Matcher",
+                "layer": "filtering",
+                "status": "SUCCESS",
+                "output_size": 0,
+            },
+        )
+        for layer in ["LLM", "decision"]:
+            await emit_task_event(
+                task_id,
+                {
+                    "type": "agent_started",
+                    "agent": "Matcher",
+                    "layer": layer,
+                    "status": "RUNNING",
+                    "input_size": 0,
+                },
+            )
+            await emit_task_event(
+                task_id,
+                {
+                    "type": "agent_completed",
+                    "agent": "Matcher",
+                    "layer": layer,
+                    "status": "SUCCESS",
+                    "output_size": 0,
+                },
+            )
 
     sim_path = save_pkl(task_id, "sim", all_pairs) if task_id else None
     bound_log.info("matcher.done", pairs=len(all_pairs), mappings=len(final_mappings))

@@ -425,15 +425,24 @@ select {
   padding: 0.5rem 0.75rem;
   background: rgba(255, 255, 255, 0.035);
   color: var(--muted);
+  cursor: pointer;
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
 }
 
-.view-index__item:first-child {
-  border-color: rgba(39, 217, 255, 0.28);
+.view-index__item:hover,
+.view-index__item[aria-selected='true'] {
+  border-color: rgba(39, 217, 255, 0.44);
+  background: rgba(39, 217, 255, 0.09);
   color: var(--text-strong);
+  box-shadow: 0 0 22px rgba(39, 217, 255, 0.12);
 }
 
 .graph-canvas,

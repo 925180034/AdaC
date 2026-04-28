@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { TaskDetail } from '../tasks/taskTypes'
 import { ResultWorkspace } from './ResultWorkspace'
@@ -54,5 +55,30 @@ describe('ResultWorkspace', () => {
 
     expect(screen.getByText('No active task')).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Result graph' })).not.toBeInTheDocument()
+  })
+
+  it('switches between graph, ranking, mappings, and raw JSON result views', async () => {
+    const user = userEvent.setup()
+    render(<ResultWorkspace task={task} />)
+
+    expect(screen.getByRole('region', { name: 'Result graph' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Ranking results' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Ranking' }))
+    const ranking = screen.getByRole('tabpanel', { name: 'Ranking' })
+    expect(within(ranking).getByText('candidate_orders')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Result graph' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Mappings' }))
+    const mappings = screen.getByRole('tabpanel', { name: 'Mappings' })
+    expect(within(mappings).getByText('customer_name')).toBeInTheDocument()
+    expect(screen.queryByRole('tabpanel', { name: 'Ranking' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Raw JSON' }))
+    const rawJson = screen.getByRole('tabpanel', { name: 'Raw JSON' })
+    expect(rawJson).toHaveTextContent('task-graph-1')
+
+    await user.click(screen.getByRole('tab', { name: 'Graph' }))
+    expect(screen.getByRole('region', { name: 'Result graph' })).toBeInTheDocument()
   })
 })

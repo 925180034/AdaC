@@ -11,10 +11,15 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from adacascade.api.events import emit_task_event
+from adacascade.api.events import emit_task_event, has_task_event
 from adacascade.api.middleware import get_tenant_id
 from adacascade.config import settings
-from adacascade.db.models import ColumnMapping, DiscoveryResult, IntegrationTask, TableRegistry
+from adacascade.db.models import (
+    ColumnMapping,
+    DiscoveryResult,
+    IntegrationTask,
+    TableRegistry,
+)
 from adacascade.db.session import get_session
 
 router = APIRouter(tags=["operations"])
@@ -116,7 +121,11 @@ def _ensure_ready_table(db: Session, table_id: str | None, tenant_id: str) -> No
     """Require a READY table owned by the current tenant."""
     if table_id is None:
         return
-    table = db.query(TableRegistry).filter_by(table_id=table_id, tenant_id=tenant_id).first()
+    table = (
+        db.query(TableRegistry)
+        .filter_by(table_id=table_id, tenant_id=tenant_id)
+        .first()
+    )
     if table is None or table.status != "READY":
         raise HTTPException(status_code=404, detail="Table not found")
 
@@ -126,6 +135,66 @@ def _output_size(task_type: str, state: dict[str, Any]) -> int:
     key = "ranking" if task_type == "DISCOVER_ONLY" else "final_mappings"
     value = state.get(key, [])
     return len(value) if isinstance(value, list) else 0
+
+
+async def _emit_missing_stage_summary(
+    task_id: str, *, task_type: str, state: dict[str, Any]
+) -> None:
+    """Backfill coarse stage events when the graph implementation did not emit them."""
+    for agent in ["Planner", "Profiling"]:
+        if not await has_task_event(task_id, agent=agent, terminal=True):
+            await emit_task_event(
+                task_id,
+                {"type": "agent_completed", "agent": agent, "status": "SUCCESS"},
+            )
+
+    if task_type in {"INTEGRATE", "DISCOVER_ONLY"}:
+        retrieval_outputs = {
+            "L1": len(state.get("c1_meta", []))
+            if isinstance(state.get("c1_meta"), list)
+            else 0,
+            "L2": len(state.get("c2_vec", []))
+            if isinstance(state.get("c2_vec"), list)
+            else 0,
+            "L3": len(state.get("ranking", []))
+            if isinstance(state.get("ranking"), list)
+            else 0,
+        }
+        for layer, output_size in retrieval_outputs.items():
+            if not await has_task_event(
+                task_id, agent="Retrieval", layer=layer, terminal=True
+            ):
+                await emit_task_event(
+                    task_id,
+                    {
+                        "type": "agent_completed",
+                        "agent": "Retrieval",
+                        "layer": layer,
+                        "status": "SUCCESS",
+                        "output_size": output_size,
+                    },
+                )
+
+    if task_type in {"INTEGRATE", "MATCH_ONLY"}:
+        mapping_count = (
+            len(state.get("final_mappings", []))
+            if isinstance(state.get("final_mappings"), list)
+            else 0
+        )
+        for layer in ["filtering", "LLM", "decision"]:
+            if not await has_task_event(
+                task_id, agent="Matcher", layer=layer, terminal=True
+            ):
+                await emit_task_event(
+                    task_id,
+                    {
+                        "type": "agent_completed",
+                        "agent": "Matcher",
+                        "layer": layer,
+                        "status": "SUCCESS",
+                        "output_size": mapping_count,
+                    },
+                )
 
 
 async def _execute_task_background(
@@ -141,6 +210,10 @@ async def _execute_task_background(
             task_id,
             {"type": "agent_started", "agent": "Planner", "status": "RUNNING"},
         )
+        await emit_task_event(
+            task_id,
+            {"type": "agent_started", "agent": "Profiling", "status": "RUNNING"},
+        )
         state = await graph.ainvoke(
             initial_state,
             config={"configurable": {"thread_id": task_id}},
@@ -148,6 +221,7 @@ async def _execute_task_background(
         with get_session() as db:
             task = db.query(IntegrationTask).filter_by(task_id=task_id).one()
             _persist_success(db, task, state)
+        await _emit_missing_stage_summary(task_id, task_type=task_type, state=state)
         final_agent = "Retrieval" if task_type == "DISCOVER_ONLY" else "Matcher"
         await emit_task_event(
             task_id,

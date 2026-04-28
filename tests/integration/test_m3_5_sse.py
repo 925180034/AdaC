@@ -32,6 +32,78 @@ class FakeGraph:
         return {**state, "ranking": [], "final_mappings": []}
 
 
+class FakePopulatedGraph:
+    """Graph test double that returns ranking and mapping outputs."""
+
+    async def ainvoke(
+        self, state: dict[str, Any], config: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Return populated graph output while preserving input state."""
+        _ = config
+        return {
+            **state,
+            "ranking": [
+                {
+                    "table_id": "candidate-table",
+                    "score": 0.91,
+                    "layer_scores": {"s1": 0.8, "s2": 0.88, "s3": 0.94},
+                }
+            ],
+            "final_mappings": [
+                {
+                    "source_col_id": "source.name",
+                    "target_col_id": "target.full_name",
+                    "scenario": "SMD",
+                    "confidence": 0.87,
+                    "reasoning": "same semantic column",
+                }
+            ],
+        }
+
+
+class FakeEmptyColumnGraph:
+    """Graph test double that only emits matcher start for unusable columns."""
+
+    async def ainvoke(
+        self, state: dict[str, Any], config: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Return empty mapping output after emitting a matcher filtering start."""
+        _ = config
+        await emit_task_event(
+            str(state["task_id"]),
+            {
+                "type": "agent_started",
+                "agent": "Matcher",
+                "layer": "filtering",
+                "status": "RUNNING",
+                "input_size": 0,
+            },
+        )
+        return {**state, "ranking": [], "final_mappings": []}
+
+
+class FakeDegradedRetrievalGraph:
+    """Graph test double that emits a degraded retrieval terminal event."""
+
+    async def ainvoke(
+        self, state: dict[str, Any], config: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Return empty output after marking retrieval L2 degraded."""
+        _ = config
+        await emit_task_event(
+            str(state["task_id"]),
+            {
+                "type": "agent_degraded",
+                "agent": "Retrieval",
+                "layer": "L2",
+                "status": "DEGRADED",
+                "output_size": 0,
+                "reason": "vector search fallback",
+            },
+        )
+        return {**state, "ranking": [], "final_mappings": []}
+
+
 @pytest.fixture(scope="module")
 def client() -> Generator[TestClient, None, None]:
     """Create a TestClient with external startup dependencies mocked."""
@@ -41,7 +113,9 @@ def client() -> Generator[TestClient, None, None]:
     with (
         patch("qdrant_client.AsyncQdrantClient", return_value=raw_qdrant_mock),
         patch("adacascade.api.app.AdacQdrantClient", return_value=mock_qdrant),
-        patch("adacascade.api.app.reconcile_orphan_ingests", new=AsyncMock(return_value=0)),
+        patch(
+            "adacascade.api.app.reconcile_orphan_ingests", new=AsyncMock(return_value=0)
+        ),
     ):
         from adacascade.api.app import app
 
@@ -72,6 +146,11 @@ def _seed_sse_task() -> None:
         for table_id, tenant_id in [
             ("sse-query", "tenant-a"),
             ("sse-query-running", "tenant-a"),
+            ("sse-query-populated", "tenant-a"),
+            ("sse-source", "tenant-a"),
+            ("sse-target", "tenant-a"),
+            ("sse-empty-source", "tenant-a"),
+            ("sse-empty-target", "tenant-a"),
             ("tenant-b-only-table", "tenant-b"),
         ]:
             if db.query(TableRegistry).filter_by(table_id=table_id).first() is None:
@@ -121,7 +200,9 @@ def test_pre_emitted_task_events_stream_from_history(client: TestClient) -> None
         emit_task_event("sse-task-a", {"type": "task_completed", "status": "SUCCESS"})
     )
 
-    with client.stream("GET", "/tasks/sse-task-a/events", headers=TENANT_A_HEADERS) as response:
+    with client.stream(
+        "GET", "/tasks/sse-task-a/events", headers=TENANT_A_HEADERS
+    ) as response:
         assert response.status_code == 200
         body = response.read().decode()
 
@@ -161,12 +242,17 @@ def test_discover_route_emits_lifecycle_event_history(client: TestClient) -> Non
     task = _poll_task(client, task_id)
     assert task["status"] == "SUCCESS"
 
-    with client.stream("GET", f"/tasks/{task_id}/events", headers=TENANT_A_HEADERS) as response:
+    with client.stream(
+        "GET", f"/tasks/{task_id}/events", headers=TENANT_A_HEADERS
+    ) as response:
         assert response.status_code == 200
         body = response.read().decode()
 
     assert "event: task_created" in body
-    assert "event: agent_started" in body
+    assert '"agent":"Planner","status":"RUNNING"' in body
+    assert '"agent":"Planner","status":"SUCCESS"' in body
+    assert '"agent":"Profiling","status":"RUNNING"' in body
+    assert '"agent":"Profiling","status":"SUCCESS"' in body
     assert "event: agent_completed" in body
     assert "event: task_completed" in body
 
@@ -192,3 +278,124 @@ def test_discover_route_returns_running_before_final_status(client: TestClient) 
 
     task = _poll_task(client, str(create_body["task_id"]))
     assert task["status"] == "SUCCESS"
+
+
+def test_integrate_route_emits_retrieval_and_matcher_stage_events(
+    client: TestClient,
+) -> None:
+    app_state = cast(Any, client.app).state
+    previous_graph = app_state.graph
+    app_state.graph = FakePopulatedGraph()
+    try:
+        create_response = client.post(
+            "/integrate",
+            json={"query_table_id": "sse-query-populated"},
+            headers=TENANT_A_HEADERS,
+        )
+    finally:
+        app_state.graph = previous_graph
+
+    assert create_response.status_code == 200
+    task_id = str(create_response.json()["task_id"])
+    task = _poll_task(client, task_id)
+    assert task["status"] == "SUCCESS"
+
+    with client.stream(
+        "GET", f"/tasks/{task_id}/events", headers=TENANT_A_HEADERS
+    ) as response:
+        assert response.status_code == 200
+        body = response.read().decode()
+
+    for layer in ["L1", "L2", "L3"]:
+        assert f'"agent":"Retrieval","layer":"{layer}"' in body
+    for layer in ["filtering", "LLM", "decision"]:
+        assert f'"agent":"Matcher","layer":"{layer}"' in body
+
+
+def test_discover_route_preserves_degraded_retrieval_stage(client: TestClient) -> None:
+    app_state = cast(Any, client.app).state
+    previous_graph = app_state.graph
+    app_state.graph = FakeDegradedRetrievalGraph()
+    try:
+        create_response = client.post(
+            "/discover",
+            json={"query_table_id": "sse-query"},
+            headers=TENANT_A_HEADERS,
+        )
+    finally:
+        app_state.graph = previous_graph
+
+    assert create_response.status_code == 200
+    task_id = str(create_response.json()["task_id"])
+    task = _poll_task(client, task_id)
+    assert task["status"] == "SUCCESS"
+
+    with client.stream(
+        "GET", f"/tasks/{task_id}/events", headers=TENANT_A_HEADERS
+    ) as response:
+        assert response.status_code == 200
+        body = response.read().decode()
+
+    assert '"agent":"Retrieval","layer":"L2","status":"DEGRADED"' in body
+    assert '"agent":"Retrieval","layer":"L2","status":"SUCCESS"' not in body
+
+
+def test_match_route_emits_matcher_stage_events(client: TestClient) -> None:
+    app_state = cast(Any, client.app).state
+    previous_graph = app_state.graph
+    app_state.graph = FakePopulatedGraph()
+    try:
+        create_response = client.post(
+            "/match",
+            json={"source_table_id": "sse-source", "target_table_id": "sse-target"},
+            headers=TENANT_A_HEADERS,
+        )
+    finally:
+        app_state.graph = previous_graph
+
+    assert create_response.status_code == 200
+    task_id = str(create_response.json()["task_id"])
+    task = _poll_task(client, task_id)
+    assert task["status"] == "SUCCESS"
+
+    with client.stream(
+        "GET", f"/tasks/{task_id}/events", headers=TENANT_A_HEADERS
+    ) as response:
+        assert response.status_code == 200
+        body = response.read().decode()
+
+    for layer in ["filtering", "LLM", "decision"]:
+        assert f'"agent":"Matcher","layer":"{layer}"' in body
+
+
+def test_match_route_backfills_completion_for_started_empty_stage(
+    client: TestClient,
+) -> None:
+    app_state = cast(Any, client.app).state
+    previous_graph = app_state.graph
+    app_state.graph = FakeEmptyColumnGraph()
+    try:
+        create_response = client.post(
+            "/match",
+            json={
+                "source_table_id": "sse-empty-source",
+                "target_table_id": "sse-empty-target",
+            },
+            headers=TENANT_A_HEADERS,
+        )
+    finally:
+        app_state.graph = previous_graph
+
+    assert create_response.status_code == 200
+    task_id = str(create_response.json()["task_id"])
+    task = _poll_task(client, task_id)
+    assert task["status"] == "SUCCESS"
+
+    with client.stream(
+        "GET", f"/tasks/{task_id}/events", headers=TENANT_A_HEADERS
+    ) as response:
+        assert response.status_code == 200
+        body = response.read().decode()
+
+    assert '"agent":"Matcher","layer":"filtering","status":"RUNNING"' in body
+    assert '"agent":"Matcher","layer":"filtering","status":"SUCCESS"' in body

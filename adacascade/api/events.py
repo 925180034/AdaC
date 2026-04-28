@@ -53,6 +53,26 @@ async def emit_task_event(task_id: str, event: TaskEvent) -> None:
         queue.put_nowait(enriched)
 
 
+async def has_task_event(
+    task_id: str,
+    *,
+    agent: str,
+    layer: str | None = None,
+    status: str | None = None,
+    terminal: bool = False,
+) -> bool:
+    """Return whether task history has a matching agent event."""
+    terminal_statuses = {"SUCCESS", "DEGRADED", "FAILED"}
+    async with _lock:
+        return any(
+            event.get("agent") == agent
+            and (layer is None or event.get("layer") == layer)
+            and (status is None or event.get("status") == status)
+            and (not terminal or event.get("status") in terminal_statuses)
+            for event in _history.get(task_id, ())
+        )
+
+
 async def stream_task_events(task_id: str) -> AsyncIterator[str]:
     """Yield task events as Server-Sent Events from history, then live updates."""
     queue: asyncio.Queue[TaskEvent] = asyncio.Queue(maxsize=_QUEUE_LIMIT)
