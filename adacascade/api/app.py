@@ -11,6 +11,7 @@ from typing import AsyncIterator
 
 import structlog
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from qdrant_client import AsyncQdrantClient
@@ -85,6 +86,12 @@ app = FastAPI(
 
 # ── Middleware and routers ────────────────────────────────────────────────────
 app.add_middleware(AuthAndTenantMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://u307207-94cd-0c29b003.nmb1.seetacloud.com:8443"],
+    allow_methods=["*"],
+    allow_headers=["Authorization", "X-Tenant-Id", "Content-Type"],
+)
 app.include_router(tables.router)
 app.include_router(operations.router)
 app.include_router(tasks.router)

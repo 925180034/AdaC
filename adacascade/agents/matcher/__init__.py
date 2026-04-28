@@ -146,7 +146,7 @@ async def run(state: IntegrationState) -> IntegrationState:
                     "input_size": len(truncated),
                 },
             )
-        verified = llm_verify.verify_pairs(
+        verified = await llm_verify.verify_pairs_async(
             cast(list[dict[str, Any]], truncated), source_cols, target_cols, scenario
         )
         if task_id:

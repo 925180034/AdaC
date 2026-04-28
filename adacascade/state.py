@@ -19,6 +19,8 @@ class IntegrationState(TypedDict, total=False):
     task_id: str
     tenant_id: str
     task_type: Literal["INTEGRATE", "DISCOVER_ONLY", "MATCH_ONLY"]
+    query_table_id: str
+    target_table_id: Optional[str]
     subtask: Literal["JOIN", "UNION"]
     created_at: datetime
 

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import time
+
 import numpy as np
 import pytest
 
@@ -135,3 +138,57 @@ def test_sim_stat_dispatch() -> None:
     assert (
         sim_stat(_numeric_col("age", "a"), _cat_col("age", "b", [("old", 1.0)])) == 0.0
     )
+
+
+@pytest.mark.anyio
+async def test_matcher_llm_verification_does_not_block_event_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from adacascade.agents import matcher
+    from adacascade.llm_schemas import MatchResult
+
+    async def slow_verify_pairs_async(
+        *args: object, **kwargs: object
+    ) -> list[dict[str, object]]:
+        await asyncio.to_thread(time.sleep, 0.05)
+        return [
+            {
+                "src_idx": 0,
+                "tgt_idx": 0,
+                "src_col_id": "src",
+                "tgt_col_id": "tgt",
+                "llm_result": MatchResult(
+                    reasoning="same", score=0.9, is_equivalent=True
+                ),
+            }
+        ]
+
+    monkeypatch.setattr(
+        matcher.llm_verify, "verify_pairs_async", slow_verify_pairs_async
+    )
+
+    task = asyncio.create_task(
+        matcher.run(
+            {
+                "task_id": "",
+                "tenant_id": "default",
+                "task_type": "MATCH_ONLY",
+                "query_profile": {
+                    "table_id": "source",
+                    "columns": [_numeric_col("name", "src")],
+                },
+                "target_profile": {
+                    "table_id": "target",
+                    "columns": [_numeric_col("name", "tgt")],
+                },
+                "plan": {},
+                "status": "RUNNING",
+                "degraded": False,
+            }
+        )
+    )
+    await asyncio.sleep(0.01)
+
+    assert not task.done()
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)

@@ -144,7 +144,8 @@ async def batch_verify(
     async def _call_one(batch: list[dict[str, Any]], offset: int) -> dict[int, float]:
         messages = _build_batch_prompt(query_name, query_cols, batch, task_type, offset)
         try:
-            resp = chat(
+            resp = await asyncio.to_thread(
+                chat,
                 messages,
                 response_format=json_schema_format(L3BatchResult),
                 temperature=0.0,

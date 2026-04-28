@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from adacascade import llm_client
@@ -116,6 +117,25 @@ def verify_pair(
         )
 
 
+def _verify_pair_entry(
+    pair: dict[str, Any],
+    source_cols: list[dict[str, Any]],
+    target_cols: list[dict[str, Any]],
+    scenario: Scenario,
+) -> dict[str, Any]:
+    """Verify one candidate pair and attach the LLM decision."""
+    src_col = source_cols[int(pair["src_idx"])]
+    tgt_col = target_cols[int(pair["tgt_idx"])]
+    scores = {
+        "sim_name": float(pair.get("sim_name", 0.0)),
+        "sim_type": float(pair.get("sim_type", 0.0)),
+        "sim_stat": float(pair.get("sim_stat", 0.0)),
+        "m_score": float(pair.get("m_score", 0.0)),
+    }
+    decision = verify_pair(src_col, tgt_col, scores, scenario)
+    return {**pair, "llm_result": decision}
+
+
 def verify_pairs(
     pairs: list[dict[str, Any]],
     source_cols: list[dict[str, Any]],
@@ -123,16 +143,25 @@ def verify_pairs(
     scenario: Scenario,
 ) -> list[dict[str, Any]]:
     """Verify candidate pairs sequentially and attach LLM decisions."""
-    results: list[dict[str, Any]] = []
-    for pair in pairs:
-        src_col = source_cols[int(pair["src_idx"])]
-        tgt_col = target_cols[int(pair["tgt_idx"])]
-        scores = {
-            "sim_name": float(pair.get("sim_name", 0.0)),
-            "sim_type": float(pair.get("sim_type", 0.0)),
-            "sim_stat": float(pair.get("sim_stat", 0.0)),
-            "m_score": float(pair.get("m_score", 0.0)),
-        }
-        decision = verify_pair(src_col, tgt_col, scores, scenario)
-        results.append({**pair, "llm_result": decision})
-    return results
+    return [
+        _verify_pair_entry(pair, source_cols, target_cols, scenario) for pair in pairs
+    ]
+
+
+async def verify_pairs_async(
+    pairs: list[dict[str, Any]],
+    source_cols: list[dict[str, Any]],
+    target_cols: list[dict[str, Any]],
+    scenario: Scenario,
+    concurrency: int = 4,
+) -> list[dict[str, Any]]:
+    """Verify candidate pairs concurrently without blocking the event loop."""
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def _run(pair: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            return await asyncio.to_thread(
+                _verify_pair_entry, pair, source_cols, target_cols, scenario
+            )
+
+    return list(await asyncio.gather(*(_run(pair) for pair in pairs)))

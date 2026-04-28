@@ -106,6 +106,25 @@ def test_tenant_header_scopes_tables(client: TestClient) -> None:
     assert {item["table_id"] for item in tenant_b} >= {"tenant_b_table"}
 
 
+def test_cors_preflight_allows_autodl_frontend_origin(client: TestClient) -> None:
+    resp = client.options(
+        "/tables",
+        headers={
+            "Origin": "https://u307207-94cd-0c29b003.nmb1.seetacloud.com:8443",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization,x-tenant-id",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert (
+        resp.headers["access-control-allow-origin"]
+        == "https://u307207-94cd-0c29b003.nmb1.seetacloud.com:8443"
+    )
+    assert "authorization" in resp.headers["access-control-allow-headers"].lower()
+    assert "x-tenant-id" in resp.headers["access-control-allow-headers"].lower()
+
+
 def test_tenant_header_scopes_tasks(client: TestClient) -> None:
     visible = client.get("/tasks/tenant-a-task", headers=TENANT_A_HEADERS)
     hidden = client.get("/tasks/tenant-a-task", headers=TENANT_B_HEADERS)

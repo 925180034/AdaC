@@ -5,6 +5,8 @@ import { listTables } from '../../api/tables'
 import { getTask, startDiscover, startIntegrate, startMatch } from '../../api/tasks'
 import { useTaskStore } from '../tasks/taskStore'
 import type { TaskMode } from '../tasks/taskTypes'
+
+const defaultTenantId = import.meta.env.VITE_DEFAULT_TENANT_ID ?? 'default'
 import { AgentTracePanel } from './AgentTracePanel'
 import { ResultWorkspace } from './ResultWorkspace'
 import { TaskControlPanel } from './TaskControlPanel'
@@ -44,7 +46,7 @@ export function WorkspacePage() {
   const [sourceTableId, setSourceTableId] = useState(() => getSearchParam(params, 'source_table_id', ''))
   const [targetTableId, setTargetTableId] = useState(() => getSearchParam(params, 'target_table_id', ''))
   const [streamError, setStreamError] = useState<string | null>(null)
-  const tenantId = getSearchParam(params, 'tenant_id', 'demo-lab')
+  const tenantId = getSearchParam(params, 'tenant_id', defaultTenantId)
 
   const tablesQuery = useQuery({
     queryKey: ['tables', tenantId],

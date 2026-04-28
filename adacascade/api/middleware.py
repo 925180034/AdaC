@@ -25,6 +25,8 @@ class AuthAndTenantMiddleware(BaseHTTPMiddleware):
         request.state.tenant_id = tenant_id
 
         path = request.url.path
+        if request.method == "OPTIONS":
+            return await call_next(request)
         if settings.AUTH_ENABLED and not _is_public_path(path):
             expected = f"Bearer {settings.API_KEY}"
             if request.headers.get("Authorization") != expected:
