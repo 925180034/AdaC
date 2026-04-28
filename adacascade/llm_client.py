@@ -7,6 +7,7 @@ Switch backends by changing LLM_BASE_URL in .env — zero business logic changes
 from __future__ import annotations
 
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
@@ -18,6 +19,16 @@ _client = OpenAI(
     api_key=settings.LLM_API_KEY or "EMPTY",
     timeout=settings.LLM_TIMEOUT,
 )
+
+
+def _is_deepseek_backend() -> bool:
+    return urlparse(settings.LLM_BASE_URL).netloc.endswith("api.deepseek.com")
+
+
+def _adapt_response_format(response_format: dict[str, Any] | None) -> dict[str, Any] | None:
+    if _is_deepseek_backend() and response_format and response_format.get("type") == "json_schema":
+        return {"type": "json_object"}
+    return response_format
 
 
 def chat(
@@ -46,19 +57,22 @@ def chat(
         Raw ChatCompletion response.
     """
     extra_body: dict[str, Any] = kwargs.pop("extra_body", {})
-    extra_body.setdefault("chat_template_kwargs", {"enable_thinking": enable_thinking})
+    if not _is_deepseek_backend():
+        extra_body.setdefault("chat_template_kwargs", {"enable_thinking": enable_thinking})
 
     max_tok = max_tokens or cast(int, settings.llm_cfg.get("max_tokens", 512))
-
-    # Use extra_body for vLLM-specific params (e.g. enable_thinking).
-    # response_format is passed via extra_body to avoid openai SDK overload conflicts.
-    resp = _client.chat.completions.create(  # type: ignore[call-overload]
-        model=model or settings.LLM_MODEL,
-        messages=messages,
-        temperature=temperature,
-        response_format=response_format,
-        max_tokens=max_tok,
-        extra_body=extra_body,
+    request_kwargs: dict[str, Any] = {
+        "model": model or settings.LLM_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "response_format": _adapt_response_format(response_format),
+        "max_tokens": max_tok,
         **kwargs,
+    }
+    if extra_body:
+        request_kwargs["extra_body"] = extra_body
+
+    resp = _client.chat.completions.create(  # type: ignore[call-overload]
+        **request_kwargs,
     )
     return cast(ChatCompletion, resp)
