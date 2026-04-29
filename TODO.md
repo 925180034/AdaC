@@ -212,7 +212,8 @@
 - [x] schema-only SMD 路径跳过实例统计特征：`numeric_stats=None`、`categorical_stats=None`、`sample_values=[]`，但保留 `col_type` 与 description
 - [x] schema-only SMD 路径仍需生成 SBERT 表/列向量并 upsert Qdrant，保证可被 Matcher benchmark 与可选检索调试加载
 - [x] 小规模验证：已导入并 profile 20 张 retrieval bench JOIN 表，确认 SQLite / Qdrant / SBERT / 状态流转正确，并生成 `tfidf_benchmark_join.pkl`
-- [ ] 中规模验证：扩展到 100 / 500 张表，记录单表 Profiling 平均耗时、失败率、GPU 显存
+- [x] 中规模验证第一阶段：已扩展到 100 张 retrieval bench JOIN 表，100/100 READY，Profiling 本轮 80 张新增/待处理表成功、0 失败，并重建 `tfidf_benchmark_join.pkl`（vocabulary size 103）
+- [x] 中规模验证第二阶段：已扩展到 500 张 retrieval bench JOIN 表，500/500 READY，Profiling 本轮 400 张新增/待处理表成功、0 失败，并重建 `tfidf_benchmark_join.pkl`（vocabulary size 284）
 - [ ] 全量导入 retrieval bench JOIN + UNION，完成 7021 张候选表入湖与 Qdrant 索引
 - [x] 处理 matcher bench Wikidata 数据，四场景 source/target 8 张 Parquet 表已导入并 profile 到 `benchmark` 租户
 - [x] 处理 matcher bench MIMIC-OMOP schema-only 数据，26 MIMIC + 38 OMOP 表已导入并索引，确保无实例数据的 SMD 场景可直接进入 Matcher

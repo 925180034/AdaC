@@ -40,6 +40,7 @@ def import_manifest(
     default_status: str = "INGESTED",
     replace: bool = False,
     tenant_id: str | None = None,
+    allow_duplicate_content: bool = False,
 ) -> ImportResult:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     table_id = str(manifest["table_id"])
@@ -79,7 +80,8 @@ def import_manifest(
     table.row_count = int(manifest.get("row_count") or 0)
     table.col_count = int(manifest.get("col_count") or len(manifest.get("columns", [])))
     table.schema_hash = manifest.get("schema_hash")
-    table.content_hash = manifest.get("content_hash")
+    content_hash = manifest.get("content_hash")
+    table.content_hash = f"{content_hash}::{table_id}" if allow_duplicate_content and content_hash else content_hash
     table.uploaded_by = manifest.get("uploaded_by")
     table.uploaded_at = uploaded_at
     table.updated_at = now
@@ -110,6 +112,7 @@ def import_manifests(
     default_status: str = "INGESTED",
     replace: bool = False,
     tenant_id: str | None = None,
+    allow_duplicate_content: bool = False,
 ) -> dict[str, int]:
     engine = create_engine(settings.DATABASE_URL)
     Base.metadata.create_all(engine)
@@ -123,6 +126,7 @@ def import_manifests(
                 default_status=default_status,
                 replace=replace,
                 tenant_id=tenant_id,
+                allow_duplicate_content=allow_duplicate_content,
             )
             summary[result] += 1
     return summary
@@ -144,6 +148,11 @@ def main() -> None:
     parser.add_argument(
         "--tenant-id", help="Override manifest tenant_id for all imported tables"
     )
+    parser.add_argument(
+        "--allow-duplicate-content",
+        action="store_true",
+        help="Namespace content_hash by table_id for benchmark datasets with duplicate tables",
+    )
     args = parser.parse_args()
 
     summary = import_manifests(
@@ -151,6 +160,7 @@ def main() -> None:
         default_status=args.status,
         replace=args.replace,
         tenant_id=args.tenant_id,
+        allow_duplicate_content=args.allow_duplicate_content,
     )
     print(json.dumps(summary, sort_keys=True))
 

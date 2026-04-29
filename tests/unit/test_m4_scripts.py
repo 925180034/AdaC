@@ -95,6 +95,41 @@ def test_bulk_ingest_can_override_manifest_tenant(tmp_path: Path) -> None:
     assert table.tenant_id == "benchmark"
 
 
+def test_bulk_ingest_allows_duplicate_content_hash_when_enabled(tmp_path: Path) -> None:
+    from scripts.bulk_ingest import import_manifest
+
+    db = _session(tmp_path)
+    for table_id in ["table-1", "table-2"]:
+        table_dir = tmp_path / table_id
+        table_dir.mkdir()
+        manifest_path = table_dir / "manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "table_id": table_id,
+                    "table_name": table_id,
+                    "tenant_id": "benchmark",
+                    "source": "retrieval|join",
+                    "content_hash": "duplicate-content",
+                    "columns": [{"ordinal": 0, "name": "id", "type": "int"}],
+                }
+            )
+        )
+        import_manifest(
+            db,
+            manifest_path,
+            default_status="INGESTED",
+            tenant_id="benchmark",
+            allow_duplicate_content=True,
+        )
+
+    hashes = {row.table_id: row.content_hash for row in db.query(TableRegistry).all()}
+    assert hashes == {
+        "table-1": "duplicate-content::table-1",
+        "table-2": "duplicate-content::table-2",
+    }
+
+
 def test_bulk_ingest_rejects_cross_tenant_table_id_collision(tmp_path: Path) -> None:
     from scripts.bulk_ingest import import_manifest
 
