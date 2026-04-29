@@ -106,6 +106,7 @@ describe('WorkspacePage', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/')
     window.localStorage.clear()
+    document.documentElement.removeAttribute('data-theme')
     vi.clearAllMocks()
     useTaskStore.setState({ currentTaskId: null, events: [] })
     vi.mocked(listTables).mockResolvedValue(tablesResponse)
@@ -163,23 +164,29 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('button', { name: 'Local model', pressed: false })).toBeEnabled()
   })
 
-  it('keeps page-level theme controls non-interactive while runtime is enabled after loading', async () => {
+  it('defaults to light theme and persists root theme changes from the toolbar', async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
     expect(await screen.findByRole('heading', { name: 'AdaCascade Workbench' })).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Local model', pressed: true })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Light', pressed: true })).toBeEnabled()
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light')
+    expect(window.localStorage.getItem('adacascade.theme')).toBeNull()
 
-    const lightButton = screen.getByRole('button', { name: 'Light', pressed: true })
-    const darkButton = screen.getByRole('button', { name: 'Dark', pressed: false })
+    await user.click(screen.getByRole('button', { name: 'Dark', pressed: false }))
 
-    expect(lightButton).toBeDisabled()
-    expect(darkButton).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Dark', pressed: true })).toBeEnabled()
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
+    expect(window.localStorage.getItem('adacascade.theme')).toBe('dark')
+  })
 
-    await user.click(darkButton)
+  it('applies a saved dark theme preference on load', async () => {
+    window.localStorage.setItem('adacascade.theme', 'dark')
+    renderWorkspace()
 
-    expect(screen.getByRole('button', { name: 'Light', pressed: true })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Dark', pressed: false })).toBeDisabled()
+    expect(await screen.findByRole('heading', { name: 'AdaCascade Workbench' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dark', pressed: true })).toBeEnabled()
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
   })
 
   it('updates runtime backend through the API client and displays the response backend', async () => {

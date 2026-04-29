@@ -13,8 +13,8 @@ import { getWorkspaceCopy } from './i18n'
 import { ResultWorkspace } from './ResultWorkspace'
 import { TaskControlPanel } from './TaskControlPanel'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
-import { readLanguage, writeLanguage } from './uiPreferences'
-import type { Language } from './uiPreferences'
+import { readLanguage, readTheme, writeLanguage, writeTheme } from './uiPreferences'
+import type { Language, ThemeMode } from './uiPreferences'
 import type { RuntimeBackend } from '../../api/runtime'
 
 function getSearchParam(params: URLSearchParams, key: string, fallback: string): string {
@@ -55,7 +55,7 @@ export function WorkspacePage() {
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [pendingRuntimeBackend, setPendingRuntimeBackend] = useState<RuntimeBackend | null>(null)
   const [language, setLanguage] = useState(readLanguage)
-  const theme = 'light'
+  const [theme, setTheme] = useState(readTheme)
   const copy = getWorkspaceCopy(language)
   const tenantId = getSearchParam(params, 'tenant_id', defaultTenantId)
 
@@ -163,9 +163,18 @@ export function WorkspacePage() {
     startTaskMutation.mutate()
   }, [canRun, startTaskMutation])
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
+
   const handleLanguageChange = useCallback((nextLanguage: Language) => {
     setLanguage(nextLanguage)
     writeLanguage(nextLanguage)
+  }, [])
+
+  const handleThemeChange = useCallback((nextTheme: ThemeMode) => {
+    setTheme(nextTheme)
+    writeTheme(nextTheme)
   }, [])
 
   const handleRuntimeBackendChange = useCallback(
@@ -175,8 +184,6 @@ export function WorkspacePage() {
     },
     [isRunning, runtimeBackend, runtimeMutation],
   )
-
-  const ignorePendingThemeChange = useCallback(() => undefined, [])
 
   return (
     <div className="workspace-shell">
@@ -198,10 +205,9 @@ export function WorkspacePage() {
         isRuntimePending={runtimeMutation.isPending}
         pendingRuntimeBackend={pendingRuntimeBackend}
         isRunning={isRunning}
-        isThemeDisabled={true}
         isRuntimeDisabled={runtimeBackend === null}
         onLanguageChange={handleLanguageChange}
-        onThemeChange={ignorePendingThemeChange}
+        onThemeChange={handleThemeChange}
         onRuntimeBackendChange={handleRuntimeBackendChange}
       />
 
