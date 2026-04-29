@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { StatusBadge } from '../../components/StatusBadge'
 import type { TaskEvent } from '../tasks/taskTypes'
 import { isKnownAgentId, translateTimeline } from '../tasks/timeline'
@@ -61,9 +62,35 @@ function fallbackMessage(node: TimelineNode, copy: ReturnType<typeof getWorkspac
   return fallback ? copy.fallback(fallback) : null
 }
 
+function elapsedSeconds(step: TimelineStep, now: number): number | null {
+  if (step.latency_ms !== undefined) return Math.max(0, Math.round(step.latency_ms / 1000))
+  if (!step.started_at) return null
+  const start = Date.parse(step.started_at)
+  const end = step.finished_at ? Date.parse(step.finished_at) : now
+  if (Number.isNaN(start) || Number.isNaN(end)) return null
+  return Math.max(0, Math.round((end - start) / 1000))
+}
+
+function hasRunningStep(nodes: TimelineNode[]): boolean {
+  return nodes.some((node) => node.steps.some((step) => step.status === 'running'))
+}
+
 export function AgentTracePanel({ timeline, events, streamError = null, language = 'en' }: AgentTracePanelProps) {
   const copy = getWorkspaceCopy(language).trace
-  const nodes = Object.values(translateTimeline(timeline, language))
+  const nodes = useMemo(() => Object.values(translateTimeline(timeline, language)), [language, timeline])
+  const [now, setNow] = useState(() => Date.now())
+  const activeStepRef = useRef<HTMLLIElement | null>(null)
+  const activeStepKey = nodes.map((node) => `${node.id}:${node.currentStepId ?? ''}:${node.status}`).join('|')
+
+  useEffect(() => {
+    if (!hasRunningStep(nodes)) return undefined
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [nodes])
+
+  useEffect(() => {
+    activeStepRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [activeStepKey])
 
   return (
     <aside className="panel trace-panel" aria-labelledby="trace-title">
@@ -96,10 +123,13 @@ export function AgentTracePanel({ timeline, events, streamError = null, language
                     const isCurrent = step.id === node.currentStepId
                     const fact = stepFact(step, copy)
 
+                    const elapsed = elapsedSeconds(step, now)
+
                     return (
                       <li
                         className={`agent-step agent-step--${step.status}${isCurrent ? ' agent-step--active' : ''}`}
                         key={step.id}
+                        ref={isCurrent ? activeStepRef : undefined}
                       >
                         <div className="agent-step__main">
                           <span className="agent-step__dot" aria-hidden="true" />
@@ -107,6 +137,7 @@ export function AgentTracePanel({ timeline, events, streamError = null, language
                         </div>
                         {isCurrent ? <span className="agent-step__current">{copy.currentStep}</span> : null}
                         <p className="agent-step__summary">{step.summary}</p>
+                        {elapsed !== null ? <span className="agent-step__fact">{copy.elapsed(elapsed)}</span> : null}
                         {fact ? <span className="agent-step__fact">{fact}</span> : null}
                       </li>
                     )

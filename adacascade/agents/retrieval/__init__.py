@@ -193,7 +193,8 @@ async def run(state: IntegrationState) -> IntegrationState:
             query_cols=cast(list[dict[str, Any]], query_profile.get("columns", [])),
             task_type=state.get("subtask", "JOIN"),
             theta_3=_plan_float(plan, "theta_3", float(cfg.get("theta_3", 0.5))),
-            batch_size=int(cfg.get("l3_batch_size", 10)),
+            batch_size=int(plan.get("llm_batch_size", cfg.get("l3_batch_size", 10))),
+            concurrency=int(plan.get("llm_concurrency", settings.llm_cfg.get("concurrency", 4))),
             use_cache=bool(plan.get("llm_cache_enabled", False)),
         )
     except Exception as exc:

@@ -33,22 +33,42 @@ export type WorkspaceCopy = {
     tablesReady: (count: number) => string
     mode: string
     modes: Record<'discover' | 'integrate' | 'match', string>
+    tenantOptions: Record<'default' | 'benchmark', string>
+    executionProfile: string
+    executionProfiles: Record<'reproducible' | 'fast', string>
+    advancedParameters: string
+    l1Threshold: string
+    l2Threshold: string
+    l3Threshold: string
+    matcherThreshold: string
+    matcherTopK: string
+    resetDefaults: string
     queryTable: string
     sourceTable: string
     targetTable: string
     run: string
     running: string
+    cancel: string
     note: string
   }
   results: {
     kicker: string
     title: string
     taskLabel: (taskId: string) => string
+    summaryLabel: string
+    placeholderLabel: string
+    summaryMode: string
+    summaryRuntime: (seconds: number | null) => string
+    summaryCandidates: (count: number) => string
+    summaryMappings: (count: number) => string
+    summaryTenant: string
     viewsLabel: string
     tabs: Record<'graph' | 'ranking' | 'mappings' | 'raw', string>
     emptyTitle: string
     emptyDescription: string
     noLayerScores: string
+    noRanking: string
+    matchNoRanking: string
     rankingAria: string
     rankingTitle: string
     candidates: (count: number) => string
@@ -58,6 +78,8 @@ export type WorkspaceCopy = {
     alignments: (count: number) => string
     matched: string
     rejected: string
+    scenarioLabel: (scenario: string) => string
+    errorDetails: string
     mappingConfidence: string
     noReasoning: string
     rawTitle: string
@@ -75,6 +97,7 @@ export type WorkspaceCopy = {
     produced: (output: string) => string
     queued: (input: string) => string
     fallback: (fallback: string) => string
+    elapsed: (seconds: number) => string
     eventsTitle: string
     eventsKicker: string
     defaultActor: string
@@ -115,23 +138,43 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       tablesReady: (count) => `${count} ready`,
       mode: 'Mode',
       modes: { discover: 'Discover', integrate: 'Integrate', match: 'Match' },
+      tenantOptions: { default: 'default (demo)', benchmark: 'benchmark (full)' },
+      executionProfile: 'Execution profile',
+      executionProfiles: { reproducible: 'Reproducible', fast: 'Demo fast' },
+      advancedParameters: 'Advanced parameters',
+      l1Threshold: 'L1 threshold',
+      l2Threshold: 'L2 threshold',
+      l3Threshold: 'L3 LLM threshold',
+      matcherThreshold: 'Matcher threshold',
+      matcherTopK: 'Matcher top-k',
+      resetDefaults: 'Reset to paper defaults',
       queryTable: 'Query table',
       sourceTable: 'Source table',
       targetTable: 'Target table',
       run: 'Run AdaCascade',
       running: 'Running AdaCascade…',
+      cancel: 'Cancel task',
       note: 'Static shell preview. REST submission and SSE reconciliation will attach in the next task.',
     },
     results: {
       kicker: 'Central workspace',
       title: 'Result Workspace',
       taskLabel: (taskId) => `Task ${taskId}`,
+      summaryLabel: 'Result summary',
+      placeholderLabel: 'Result dashboard placeholder',
+      summaryMode: 'Mode',
+      summaryRuntime: (seconds) => (seconds === null ? 'Runtime pending' : `${seconds}s runtime`),
+      summaryCandidates: (count) => `${count} ${count === 1 ? 'candidate' : 'candidates'}`,
+      summaryMappings: (count) => `${count} ${count === 1 ? 'mapping' : 'mappings'}`,
+      summaryTenant: 'Tenant',
       viewsLabel: 'Result views',
       tabs: { graph: 'Graph', ranking: 'Ranking', mappings: 'Mappings', raw: 'Raw JSON' },
       emptyTitle: 'No active task',
       emptyDescription:
         'Choose a mode and table context, then run AdaCascade to populate graph, ranking, mappings, and raw JSON views. This preview intentionally does not auto-run.',
       noLayerScores: 'No layer scores',
+      noRanking: 'No discovery ranking was produced for this task.',
+      matchNoRanking: 'Match mode compares the selected source and target tables directly, so no discovery ranking is produced.',
       rankingAria: 'Ranking results',
       rankingTitle: 'Ranking',
       candidates: (count) => `${count} candidates`,
@@ -141,6 +184,8 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       alignments: (count) => `${count} alignments`,
       matched: 'Matched',
       rejected: 'Rejected',
+      scenarioLabel: (scenario) => `Scenario ${scenario}`,
+      errorDetails: 'Error details',
       mappingConfidence: 'Mapping confidence',
       noReasoning: 'No reasoning supplied.',
       rawTitle: 'Raw JSON',
@@ -158,6 +203,7 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       produced: (output) => `${output} produced`,
       queued: (input) => `${input} queued`,
       fallback: (fallback) => `Fallback: ${fallback}`,
+      elapsed: (seconds) => `${seconds}s elapsed`,
       eventsTitle: 'Recent events',
       eventsKicker: 'supporting log',
       defaultActor: 'Task',
@@ -229,22 +275,42 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       tablesReady: (count) => `${count} 张就绪`,
       mode: '模式',
       modes: { discover: '发现', integrate: '集成', match: '匹配' },
+      tenantOptions: { default: 'default（演示）', benchmark: 'benchmark（全量）' },
+      executionProfile: '执行配置',
+      executionProfiles: { reproducible: '可复现', fast: '演示加速' },
+      advancedParameters: '高级参数',
+      l1Threshold: 'L1 阈值',
+      l2Threshold: 'L2 阈值',
+      l3Threshold: 'L3 LLM 阈值',
+      matcherThreshold: 'Matcher 阈值',
+      matcherTopK: 'Matcher top-k',
+      resetDefaults: '重置为论文默认值',
       queryTable: '查询表',
       sourceTable: '源表',
       targetTable: '目标表',
       run: '运行 AdaCascade',
       running: 'AdaCascade 运行中…',
+      cancel: '取消任务',
       note: '静态外壳预览。REST 提交与 SSE 对账将在后续任务接入。',
     },
     results: {
       kicker: '中央工作区',
       title: '结果工作区',
       taskLabel: (taskId) => `任务 ${taskId}`,
+      summaryLabel: '结果摘要',
+      placeholderLabel: '结果仪表盘占位区',
+      summaryMode: '模式',
+      summaryRuntime: (seconds) => (seconds === null ? '耗时待定' : `耗时 ${seconds} 秒`),
+      summaryCandidates: (count) => `${count} 个候选`,
+      summaryMappings: (count) => `${count} 个映射`,
+      summaryTenant: '租户',
       viewsLabel: '结果视图',
       tabs: { graph: '图谱', ranking: '排序', mappings: '映射', raw: '原始 JSON' },
       emptyTitle: '暂无活跃任务',
       emptyDescription: '选择模式和表上下文后运行 AdaCascade，即可查看图谱、排序、映射和原始 JSON。此预览不会自动运行。',
       noLayerScores: '暂无层级分数',
+      noRanking: '此任务未产生发现排序结果。',
+      matchNoRanking: '匹配模式会直接比较所选源表和目标表，因此不会产生发现排序。',
       rankingAria: '排序结果',
       rankingTitle: '排序',
       candidates: (count) => `${count} 个候选`,
@@ -254,6 +320,8 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       alignments: (count) => `${count} 个对齐`,
       matched: '已匹配',
       rejected: '已拒绝',
+      scenarioLabel: (scenario) => `场景 ${scenario}`,
+      errorDetails: '错误详情',
       mappingConfidence: '映射置信度',
       noReasoning: '未提供理由。',
       rawTitle: '原始 JSON',
@@ -271,6 +339,7 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       produced: (output) => `产出 ${output}`,
       queued: (input) => `${input} 个排队`,
       fallback: (fallback) => `降级：${fallback}`,
+      elapsed: (seconds) => `已耗时 ${seconds} 秒`,
       eventsTitle: '最近事件',
       eventsKicker: '辅助日志',
       defaultActor: '任务',

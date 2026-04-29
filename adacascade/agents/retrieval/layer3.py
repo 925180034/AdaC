@@ -174,6 +174,7 @@ async def batch_verify(
     task_type: Literal["JOIN", "UNION"],
     theta_3: float,
     batch_size: int = _BATCH_SIZE,
+    concurrency: int = 4,
     use_cache: bool = False,
 ) -> list[dict[str, Any]]:
     """Run LLM batch verification on C₂, return C₃ with S₃ scores.
@@ -185,6 +186,7 @@ async def batch_verify(
         task_type: JOIN or UNION — determines prompt framing.
         theta_3: S₃ threshold.
         batch_size: Max candidates per LLM call (≤ 10).
+        concurrency: Max concurrent LLM batch requests.
 
     Returns:
         C₃ list with {table_id, s1, s2, s3} for items where S₃ > θ₃.
@@ -196,20 +198,23 @@ async def batch_verify(
     batches = [c2[i : i + batch_size] for i in range(0, len(c2), batch_size)]
     offsets = list(range(0, len(c2), batch_size))
 
+    semaphore = asyncio.Semaphore(max(1, concurrency))
+
     async def _call_one(batch: list[dict[str, Any]], offset: int) -> dict[int, float]:
         cache_key = _cache_key(query_name, query_cols, batch, task_type)
         if use_cache and cache_key in _cache:
             return _cache[cache_key]
         messages = _build_batch_prompt(query_name, query_cols, batch, task_type, offset)
         try:
-            resp = await asyncio.to_thread(
-                chat,
-                messages,
-                response_format=json_schema_format(L3BatchResult),
-                temperature=0.0,
-                enable_thinking=False,
-                max_tokens=1024,
-            )
+            async with semaphore:
+                resp = await asyncio.to_thread(
+                    chat,
+                    messages,
+                    response_format=json_schema_format(L3BatchResult),
+                    temperature=0.0,
+                    enable_thinking=False,
+                    max_tokens=1024,
+                )
             content = resp.choices[0].message.content or "{}"
             try:
                 scores = _parse_batch_response(content)
@@ -217,14 +222,15 @@ async def batch_verify(
                     _cache[cache_key] = scores
                 return scores
             except ValidationError:
-                repair_resp = await asyncio.to_thread(
-                    chat,
-                    _repair_messages(messages, content),
-                    response_format=json_schema_format(L3BatchResult),
-                    temperature=0.0,
-                    enable_thinking=False,
-                    max_tokens=1024,
-                )
+                async with semaphore:
+                    repair_resp = await asyncio.to_thread(
+                        chat,
+                        _repair_messages(messages, content),
+                        response_format=json_schema_format(L3BatchResult),
+                        temperature=0.0,
+                        enable_thinking=False,
+                        max_tokens=1024,
+                    )
                 scores = _parse_batch_response(
                     repair_resp.choices[0].message.content or "{}"
                 )

@@ -192,6 +192,39 @@ def test_wrong_tenant_task_events_returns_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_cancel_running_task_marks_failed_and_emits_terminal_event(
+    client: TestClient,
+) -> None:
+    response = client.post("/tasks/sse-task-a/cancel", headers=TENANT_A_HEADERS)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "FAILED"
+    assert body["error_message"] == "Task cancelled by user"
+    assert body["finished_at"] is not None
+
+    with get_session() as db:
+        task = db.query(IntegrationTask).filter_by(task_id="sse-task-a").one()
+        assert task.status == "FAILED"
+        assert task.error_message == "Task cancelled by user"
+
+    with client.stream(
+        "GET", "/tasks/sse-task-a/events", headers=TENANT_A_HEADERS
+    ) as stream_response:
+        assert stream_response.status_code == 200
+        event_body = stream_response.read().decode()
+
+    assert "event: task_completed" in event_body
+    assert '"status":"FAILED"' in event_body
+    assert "Task cancelled by user" in event_body
+
+
+def test_cancel_cross_tenant_task_returns_404(client: TestClient) -> None:
+    response = client.post("/tasks/sse-task-a/cancel", headers=TENANT_B_HEADERS)
+
+    assert response.status_code == 404
+
+
 def test_pre_emitted_task_events_stream_from_history(client: TestClient) -> None:
     asyncio.run(
         emit_task_event("sse-task-a", {"type": "agent_started", "agent": "Retrieval"})

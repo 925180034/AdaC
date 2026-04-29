@@ -133,7 +133,7 @@ async def run(state: IntegrationState) -> IntegrationState:
             continue
         processed_targets += 1
         started = time.perf_counter()
-        c_pi = filter_cpi(source_cols, target_cols, scenario)
+        c_pi = filter_cpi(source_cols, target_cols, scenario, theta_cand=plan.get("theta_cand"))
         truncated = truncate_per_source(c_pi)
         stage_timings_ms["candidate_filtering"] += (
             time.perf_counter() - started
@@ -167,6 +167,7 @@ async def run(state: IntegrationState) -> IntegrationState:
             source_cols,
             target_cols,
             scenario,
+            concurrency=int(plan.get("llm_concurrency", settings.llm_cfg.get("concurrency", 4))),
             use_cache=bool(plan.get("llm_cache_enabled", False)),
         )
         stage_timings_ms["llm_verification"] += (time.perf_counter() - started) * 1000
@@ -196,7 +197,7 @@ async def run(state: IntegrationState) -> IntegrationState:
         accepted = [
             item
             for item in verified
-            if item["llm_result"].is_equivalent and decide(item["llm_result"].score)
+            if item["llm_result"].is_equivalent and decide(item["llm_result"].score, theta_match=plan.get("theta_match"))
         ]
         if (
             state.get("subtask", "JOIN") == "JOIN"

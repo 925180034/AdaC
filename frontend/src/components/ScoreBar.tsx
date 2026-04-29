@@ -13,7 +13,7 @@ export function ScoreBar({ value, label = 'Score', tone = 'cyan' }: ScoreBarProp
   const score = clampScore(value)
   const percentage = Math.round(score * 100)
 
-  const formattedScore = score.toFixed(2)
+  const formattedScore = `${percentage}%`
 
   return (
     <div
@@ -23,7 +23,7 @@ export function ScoreBar({ value, label = 'Score', tone = 'cyan' }: ScoreBarProp
       aria-valuemin={0}
       aria-valuemax={1}
       aria-valuenow={score}
-      aria-valuetext={`${formattedScore} out of 1 (${percentage}%)`}
+      aria-valuetext={`${score.toFixed(2)} out of 1 (${percentage}%)`}
     >
       <div className="score-bar__track">
         <span className="score-bar__fill" style={{ width: `${percentage}%` }} />

@@ -111,7 +111,7 @@ export function ResultGraph({ graph }: ResultGraphProps) {
   const isEmpty = nodes.length === 0
 
   return (
-    <section className="graph-canvas" aria-labelledby="result-graph-title">
+    <section className="graph-canvas graph-canvas--large" aria-labelledby="result-graph-title">
       <div className="graph-canvas__header">
         <div>
           <p className="panel-kicker">Graph</p>

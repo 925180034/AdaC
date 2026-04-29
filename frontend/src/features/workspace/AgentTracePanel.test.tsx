@@ -1,5 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { applyTaskEvent, INITIAL_TIMELINE } from '../tasks/timeline'
 import type { TaskEvent } from '../tasks/taskTypes'
 import { AgentTracePanel } from './AgentTracePanel'
@@ -38,6 +38,11 @@ function timelineFromEvents() {
 }
 
 describe('AgentTracePanel', () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn()
+    vi.useRealTimers()
+  })
+
   it('renders exactly four AdaCascade agent cards with nested steps', () => {
     render(<AgentTracePanel timeline={timelineFromEvents()} events={events} />)
 
@@ -72,14 +77,27 @@ describe('AgentTracePanel', () => {
     expect(within(retrieval).getByText('降级：reuse lexical candidates')).toBeInTheDocument()
   })
 
-  it('highlights the current step and shows meaningful fallback details', () => {
-    render(<AgentTracePanel timeline={timelineFromEvents()} events={events} />)
+  it('highlights a running current step, shows elapsed time, and scrolls it into view', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-28T00:00:05Z'))
+    const runningEvents: TaskEvent[] = [
+      {
+        task_id: 'task-1',
+        type: 'agent_started',
+        agent: 'Retrieval',
+        layer: 'L2',
+        input_size: 80,
+        timestamp: '2026-04-28T00:00:00Z',
+      },
+    ]
+    const runningTimeline = runningEvents.reduce(applyTaskEvent, INITIAL_TIMELINE)
+    render(<AgentTracePanel timeline={runningTimeline} events={runningEvents} />)
 
     const retrieval = screen.getByRole('article', { name: /Retrieval/ })
     expect(within(retrieval).getByText('Current step')).toBeInTheDocument()
-    expect(within(retrieval).getByText('80 → 40 candidates')).toBeInTheDocument()
-    expect(within(retrieval).getByText('Fallback: reuse lexical candidates')).toBeInTheDocument()
-    expect(within(retrieval).getByText('Qdrant unavailable')).toBeInTheDocument()
+    expect(within(retrieval).getByText('5s elapsed')).toBeInTheDocument()
+    expect(within(retrieval).getByText('80 queued')).toBeInTheDocument()
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
   it('does not render token or latency telemetry as primary agent facts', () => {

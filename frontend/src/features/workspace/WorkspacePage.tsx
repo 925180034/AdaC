@@ -3,15 +3,22 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { subscribeTaskEvents } from '../../api/events'
 import { getLlmRuntime, updateLlmRuntime } from '../../api/runtime'
 import { listTables } from '../../api/tables'
-import { getTask, startDiscover, startIntegrate, startMatch } from '../../api/tasks'
+import { cancelTask, getTask, startDiscover, startIntegrate, startMatch } from '../../api/tasks'
 import { useTaskStore } from '../tasks/taskStore'
 import type { TaskMode } from '../tasks/taskTypes'
 
 const defaultTenantId = import.meta.env.VITE_DEFAULT_TENANT_ID ?? 'default'
+const tenantOptions = ['default', 'benchmark'] as const
 import { AgentTracePanel } from './AgentTracePanel'
 import { getWorkspaceCopy } from './i18n'
 import { ResultWorkspace } from './ResultWorkspace'
-import { TaskControlPanel } from './TaskControlPanel'
+import {
+  PAPER_PARAMETER_DEFAULTS,
+  TaskControlPanel,
+  type AdvancedParameters,
+  type ExecutionProfile,
+  type TenantOption,
+} from './TaskControlPanel'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
 import { readLanguage, readTheme, writeLanguage, writeTheme } from './uiPreferences'
 import type { Language, ThemeMode } from './uiPreferences'
@@ -47,6 +54,9 @@ export function WorkspacePage() {
   const appendEvent = useTaskStore((state) => state.appendEvent)
   const resetLiveState = useTaskStore((state) => state.resetLiveState)
 
+  const [tenantId, setTenantId] = useState(() => getSearchParam(params, 'tenant_id', defaultTenantId))
+  const [executionProfile, setExecutionProfile] = useState<ExecutionProfile>('reproducible')
+  const [parameters, setParameters] = useState<AdvancedParameters>(PAPER_PARAMETER_DEFAULTS)
   const [mode, setMode] = useState<TaskMode>(() => getInitialMode(params))
   const [queryTableId, setQueryTableId] = useState(() => getSearchParam(params, 'query_table_id', ''))
   const [sourceTableId, setSourceTableId] = useState(() => getSearchParam(params, 'source_table_id', ''))
@@ -57,7 +67,19 @@ export function WorkspacePage() {
   const [language, setLanguage] = useState(readLanguage)
   const [theme, setTheme] = useState(readTheme)
   const copy = getWorkspaceCopy(language)
-  const tenantId = getSearchParam(params, 'tenant_id', defaultTenantId)
+  const tenantSelectOptions = useMemo<TenantOption[]>(
+    () => tenantOptions.map((value) => ({ value, label: copy.control.tenantOptions[value] })),
+    [copy.control.tenantOptions],
+  )
+  const taskOptions = useMemo(
+    () => ({
+      ...parameters,
+      ...(executionProfile === 'fast'
+        ? { llm_cache_enabled: true, llm_batch_size: 10, llm_concurrency: 24 }
+        : {}),
+    }),
+    [executionProfile, parameters],
+  )
 
   const runtimeQuery = useQuery({
     queryKey: ['llm-runtime', tenantId],
@@ -101,9 +123,9 @@ export function WorkspacePage() {
 
   const startTaskMutation = useMutation({
     mutationFn: () => {
-      if (mode === 'discover') return startDiscover(tenantId, queryTableId)
-      if (mode === 'match') return startMatch(tenantId, sourceTableId, targetTableId)
-      return startIntegrate(tenantId, queryTableId)
+      if (mode === 'discover') return startDiscover(tenantId, queryTableId, taskOptions)
+      if (mode === 'match') return startMatch(tenantId, sourceTableId, targetTableId, taskOptions)
+      return startIntegrate(tenantId, queryTableId, taskOptions)
     },
     onSuccess: (task) => {
       resetLiveState()
@@ -116,6 +138,17 @@ export function WorkspacePage() {
     queryKey: ['task', tenantId, currentTaskId],
     queryFn: () => getTask(tenantId, currentTaskId ?? ''),
     enabled: Boolean(currentTaskId),
+  })
+
+  const cancelTaskMutation = useMutation({
+    mutationFn: () => cancelTask(tenantId, currentTaskId ?? ''),
+    onSuccess: (task) => {
+      queryClient.setQueryData(['task', tenantId, task.task_id], task)
+      setStreamError(null)
+    },
+    onError: (error) => {
+      setStreamError(errorMessage(error))
+    },
   })
 
   useEffect(() => {
@@ -163,6 +196,24 @@ export function WorkspacePage() {
     startTaskMutation.mutate()
   }, [canRun, startTaskMutation])
 
+  const handleCancel = useCallback(() => {
+    if (!currentTaskId || cancelTaskMutation.isPending) return
+    cancelTaskMutation.mutate()
+  }, [cancelTaskMutation, currentTaskId])
+
+  const handleTenantChange = useCallback(
+    (nextTenantId: string) => {
+      setTenantId(nextTenantId)
+      setQueryTableId('')
+      setSourceTableId('')
+      setTargetTableId('')
+      setStreamError(null)
+      setCurrentTaskId(null)
+      resetLiveState()
+    },
+    [resetLiveState, setCurrentTaskId],
+  )
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme
 
@@ -179,6 +230,15 @@ export function WorkspacePage() {
   const handleThemeChange = useCallback((nextTheme: ThemeMode) => {
     setTheme(nextTheme)
     writeTheme(nextTheme)
+  }, [])
+
+  const handleParameterChange = useCallback((key: keyof AdvancedParameters, value: number) => {
+    if (Number.isNaN(value)) return
+    setParameters((current) => ({ ...current, [key]: value }))
+  }, [])
+
+  const handleResetParameters = useCallback(() => {
+    setParameters(PAPER_PARAMETER_DEFAULTS)
   }, [])
 
   const handleRuntimeBackendChange = useCallback(
@@ -224,17 +284,25 @@ export function WorkspacePage() {
       <div className="workspace-grid">
         <TaskControlPanel
           tenantId={tenantId}
+          tenantOptions={tenantSelectOptions}
+          executionProfile={executionProfile}
+          parameters={parameters}
           mode={mode}
           tables={tables}
           queryTableId={queryTableId}
           sourceTableId={sourceTableId}
           targetTableId={targetTableId}
           isRunning={isRunning}
+          onTenantChange={handleTenantChange}
+          onExecutionProfileChange={setExecutionProfile}
+          onParameterChange={handleParameterChange}
+          onResetParameters={handleResetParameters}
           onModeChange={setMode}
           onQueryTableChange={setQueryTableId}
           onSourceTableChange={setSourceTableId}
           onTargetTableChange={setTargetTableId}
           onRun={handleRun}
+          onCancel={handleCancel}
           language={language}
         />
         <ResultWorkspace task={taskQuery.data ?? null} language={language} />

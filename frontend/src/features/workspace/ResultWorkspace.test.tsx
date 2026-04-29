@@ -39,12 +39,31 @@ const task: TaskDetail = {
 }
 
 describe('ResultWorkspace', () => {
+  it('renders a result summary dashboard above the result tabs', () => {
+    render(<ResultWorkspace task={task} />)
+
+    const summary = screen.getByRole('region', { name: 'Result summary' })
+
+    expect(summary).toHaveTextContent('INTEGRATE')
+    expect(summary).toHaveTextContent('1s runtime')
+    expect(summary).toHaveTextContent('1 candidate')
+    expect(summary).toHaveTextContent('1 mapping')
+    expect(summary).toHaveTextContent('demo')
+  })
+
+  it('uses an expanded no-task dashboard placeholder', () => {
+    render(<ResultWorkspace task={null} />)
+
+    expect(screen.getByRole('region', { name: 'Result dashboard placeholder' })).toHaveTextContent('No active task')
+  })
+
   it('renders task graph canvas from task result data', () => {
     render(<ResultWorkspace task={task} />)
 
     const graph = screen.getByRole('region', { name: 'Result graph' })
 
     expect(graph).toBeInTheDocument()
+    expect(graph).toHaveClass('graph-canvas--large')
     expect(graph).toHaveTextContent('query_customers')
     expect(graph).toHaveTextContent('candidate_orders')
     expect(screen.queryByText('React Flow canvas reserved')).not.toBeInTheDocument()
@@ -67,6 +86,27 @@ describe('ResultWorkspace', () => {
     rerender(<ResultWorkspace task={task} language="zh" />)
     await user.click(screen.getByRole('tab', { name: '排序' }))
     expect(screen.getByRole('tabpanel', { name: '排序' })).toHaveTextContent('1 个候选')
+  })
+
+  it('shows scenario badges and backend error details in results', async () => {
+    const user = userEvent.setup()
+    render(<ResultWorkspace task={{ ...task, status: 'FAILED', error_message: 'LLM timeout' }} />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('LLM timeout')
+
+    await user.click(screen.getByRole('tab', { name: 'Mappings' }))
+
+    expect(screen.getByText('Scenario SMD')).toBeInTheDocument()
+    expect(screen.getByText('87%')).toBeInTheDocument()
+  })
+
+  it('explains why match-only tasks have no ranking rows', async () => {
+    const user = userEvent.setup()
+    render(<ResultWorkspace task={{ ...task, task_type: 'MATCH_ONLY', ranking: [] }} />)
+
+    await user.click(screen.getByRole('tab', { name: 'Ranking' }))
+
+    expect(screen.getByText('Match mode compares the selected source and target tables directly, so no discovery ranking is produced.')).toBeInTheDocument()
   })
 
   it('switches between graph, ranking, mappings, and raw JSON result views', async () => {

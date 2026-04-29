@@ -33,6 +33,23 @@ function formatLayerScores(layerScores: Record<string, number> | null, emptyLabe
     .join(' · ')
 }
 
+function confidenceTone(confidence: number): 'green' | 'amber' | 'red' {
+  if (confidence >= 0.8) return 'green'
+  if (confidence >= 0.5) return 'amber'
+  return 'red'
+}
+
+function rankingEmptyMessage(task: TaskDetail, copy: ReturnType<typeof getWorkspaceCopy>['results']): string {
+  return task.task_type === 'MATCH_ONLY' ? copy.matchNoRanking : copy.noRanking
+}
+
+function runtimeSeconds(task: TaskDetail): number | null {
+  const submitted = Date.parse(task.submitted_at)
+  const finished = task.finished_at ? Date.parse(task.finished_at) : Date.now()
+  if (Number.isNaN(submitted) || Number.isNaN(finished)) return null
+  return Math.max(0, Math.round((finished - submitted) / 1000))
+}
+
 export function ResultWorkspace({ task, language = 'en' }: ResultWorkspaceProps) {
   const [activeView, setActiveView] = useState<ResultView>('graph')
   const copy = getWorkspaceCopy(language).results
@@ -46,10 +63,12 @@ export function ResultWorkspace({ task, language = 'en' }: ResultWorkspaceProps)
             <h2 id="results-title">{copy.title}</h2>
           </div>
         </div>
-        <EmptyState
-          title={copy.emptyTitle}
-          description={copy.emptyDescription}
-        />
+        <section className="result-dashboard-placeholder" aria-label={copy.placeholderLabel}>
+          <EmptyState
+            title={copy.emptyTitle}
+            description={copy.emptyDescription}
+          />
+        </section>
       </main>
     )
   }
@@ -66,6 +85,36 @@ export function ResultWorkspace({ task, language = 'en' }: ResultWorkspaceProps)
         </div>
         <StatusBadge status={task.status} />
       </div>
+
+      {task.error_message ? (
+        <section className="result-error" role="alert" aria-label={copy.errorDetails}>
+          <strong>{copy.errorDetails}</strong>
+          <p>{task.error_message}</p>
+        </section>
+      ) : null}
+
+      <section className="result-summary" aria-label={copy.summaryLabel}>
+        <article className="result-summary__card">
+          <span>{copy.summaryMode}</span>
+          <strong>{task.task_type}</strong>
+        </article>
+        <article className="result-summary__card">
+          <span>{copy.summaryRuntime(runtimeSeconds(task))}</span>
+          <strong>{task.status}</strong>
+        </article>
+        <article className="result-summary__card">
+          <span>{copy.summaryCandidates(task.ranking.length)}</span>
+          <strong>{task.ranking.length}</strong>
+        </article>
+        <article className="result-summary__card">
+          <span>{copy.summaryMappings(task.mappings.length)}</span>
+          <strong>{task.mappings.length}</strong>
+        </article>
+        <article className="result-summary__card">
+          <span>{copy.summaryTenant}</span>
+          <strong>{task.tenant_id}</strong>
+        </article>
+      </section>
 
       <div className="view-index" role="tablist" aria-label={copy.viewsLabel}>
         {RESULT_VIEWS.map((view) => (
@@ -84,18 +133,20 @@ export function ResultWorkspace({ task, language = 'en' }: ResultWorkspaceProps)
         ))}
       </div>
 
-      {activeView === 'graph' ? (
-        <div id={panelId('graph')} role="tabpanel" aria-labelledby={tabId('graph')}>
-          <ResultGraph graph={graph} />
-        </div>
-      ) : null}
+      <div className="result-content-shell">
+        {activeView === 'graph' ? (
+          <div id={panelId('graph')} role="tabpanel" aria-labelledby={tabId('graph')}>
+            <ResultGraph graph={graph} />
+          </div>
+        ) : null}
 
-      {activeView === 'ranking' ? (
-        <section id={panelId('ranking')} role="tabpanel" className="result-section" aria-label={copy.rankingAria} aria-labelledby={tabId('ranking')}>
+        {activeView === 'ranking' ? (
+          <section id={panelId('ranking')} role="tabpanel" className="result-section" aria-label={copy.rankingAria} aria-labelledby={tabId('ranking')}>
           <div className="section-title-row">
             <h3 id="ranking-title">{copy.rankingTitle}</h3>
             <span>{copy.candidates(task.ranking.length)}</span>
           </div>
+          {task.ranking.length === 0 ? <p className="result-empty-note">{rankingEmptyMessage(task, copy)}</p> : null}
           <div className="ranking-list">
             {task.ranking.map((row) => (
               <article className="ranking-row" key={`${row.rank}-${row.candidate_table}`}>
@@ -127,9 +178,11 @@ export function ResultWorkspace({ task, language = 'en' }: ResultWorkspaceProps)
                 </div>
                 <div className="mapping-card__meta">
                   <StatusBadge status={mapping.is_matched ? 'success' : 'failed'} label={mapping.is_matched ? copy.matched : copy.rejected} size="sm" />
-                  <span>{mapping.scenario}</span>
+                  <span className={`scenario-badge scenario-badge--${mapping.scenario.toLowerCase()}`}>
+                    {copy.scenarioLabel(mapping.scenario)}
+                  </span>
                 </div>
-                <ScoreBar value={mapping.confidence} label={copy.mappingConfidence} tone="violet" />
+                <ScoreBar value={mapping.confidence} label={copy.mappingConfidence} tone={confidenceTone(mapping.confidence)} />
                 <p>{mapping.reasoning ?? copy.noReasoning}</p>
               </article>
             ))}
@@ -137,11 +190,12 @@ export function ResultWorkspace({ task, language = 'en' }: ResultWorkspaceProps)
         </section>
       ) : null}
 
-      {activeView === 'raw' ? (
-        <div id={panelId('raw')} role="tabpanel" aria-labelledby={tabId('raw')}>
-          <JsonViewer data={task} title={copy.rawTitle} />
-        </div>
-      ) : null}
+        {activeView === 'raw' ? (
+          <div id={panelId('raw')} role="tabpanel" aria-labelledby={tabId('raw')}>
+            <JsonViewer data={task} title={copy.rawTitle} />
+          </div>
+        ) : null}
+      </div>
     </main>
   )
 }

@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TaskMode, TableSummary } from '../tasks/taskTypes'
-import { TaskControlPanel } from './TaskControlPanel'
+import { PAPER_PARAMETER_DEFAULTS, TaskControlPanel } from './TaskControlPanel'
 
 const tables: TableSummary[] = [
   {
@@ -24,17 +24,28 @@ const tables: TableSummary[] = [
 ]
 
 const baseProps = {
-  tenantId: 'demo',
+  tenantId: 'default',
+  tenantOptions: [
+    { value: 'default', label: 'default (demo)' },
+    { value: 'benchmark', label: 'benchmark (full)' },
+  ],
+  executionProfile: 'reproducible' as const,
+  parameters: PAPER_PARAMETER_DEFAULTS,
   tables,
   queryTableId: 'table_customers',
   sourceTableId: 'table_customers',
   targetTableId: 'table_orders',
   isRunning: false,
+  onTenantChange: vi.fn(),
+  onExecutionProfileChange: vi.fn(),
+  onParameterChange: vi.fn(),
+  onResetParameters: vi.fn(),
   onModeChange: vi.fn(),
   onQueryTableChange: vi.fn(),
   onSourceTableChange: vi.fn(),
   onTargetTableChange: vi.fn(),
   onRun: vi.fn(),
+  onCancel: vi.fn(),
 }
 
 describe('TaskControlPanel', () => {
@@ -72,6 +83,53 @@ describe('TaskControlPanel', () => {
     expect(screen.getByRole('button', { name: '运行 AdaCascade' })).toBeEnabled()
   })
 
+  it('calls onTenantChange when the tenant select changes', async () => {
+    const user = userEvent.setup()
+    render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)
+
+    await user.selectOptions(screen.getByLabelText('Tenant'), 'benchmark')
+
+    expect(baseProps.onTenantChange).toHaveBeenCalledTimes(1)
+    expect(baseProps.onTenantChange).toHaveBeenCalledWith('benchmark')
+  })
+
+  it('calls onExecutionProfileChange when the execution profile changes', async () => {
+    const user = userEvent.setup()
+    render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)
+
+    await user.selectOptions(screen.getByLabelText('Execution profile'), 'fast')
+
+    expect(baseProps.onExecutionProfileChange).toHaveBeenCalledTimes(1)
+    expect(baseProps.onExecutionProfileChange).toHaveBeenCalledWith('fast')
+  })
+
+  it('renders advanced parameter sliders and reset control', () => {
+    render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)
+
+    expect(screen.getByRole('group', { name: 'Advanced parameters' })).toBeInTheDocument()
+    expect(screen.getByLabelText('L1 threshold')).toHaveValue('0.2')
+    expect(screen.getByLabelText('L2 threshold')).toHaveValue('0.55')
+    expect(screen.getByLabelText('L3 LLM threshold')).toHaveValue('0.5')
+    expect(screen.getByLabelText('Matcher threshold')).toHaveValue('0.7')
+    expect(screen.getByLabelText('Matcher top-k')).toHaveValue('3')
+    expect(screen.getByRole('button', { name: 'Reset to paper defaults' })).toBeEnabled()
+  })
+
+  it('updates advanced parameters and resets them to paper defaults', async () => {
+    const user = userEvent.setup()
+    render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)
+
+    await user.clear(screen.getByLabelText('L3 LLM threshold'))
+    await user.type(screen.getByLabelText('L3 LLM threshold'), '0.3')
+    await user.clear(screen.getByLabelText('Matcher top-k'))
+    await user.type(screen.getByLabelText('Matcher top-k'), '5')
+    await user.click(screen.getByRole('button', { name: 'Reset to paper defaults' }))
+
+    expect(baseProps.onParameterChange).toHaveBeenCalledWith('theta_3', 0.3)
+    expect(baseProps.onParameterChange).toHaveBeenCalledWith('matcher_top_k', 5)
+    expect(baseProps.onResetParameters).toHaveBeenCalledTimes(1)
+  })
+
   it('calls onModeChange when the mode select changes', async () => {
     const user = userEvent.setup()
     render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)
@@ -92,11 +150,22 @@ describe('TaskControlPanel', () => {
     expect(baseProps.onQueryTableChange).toHaveBeenCalledWith('table_orders')
   })
 
-  it('disables Run AdaCascade and shows the running label while running', () => {
+  it('disables tenant, profile, and Run AdaCascade while running', () => {
     render(<TaskControlPanel {...baseProps} mode={'integrate' satisfies TaskMode} isRunning />)
 
+    expect(screen.getByLabelText('Tenant')).toBeDisabled()
+    expect(screen.getByLabelText('Execution profile')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Running AdaCascade…' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Run AdaCascade' })).not.toBeInTheDocument()
+  })
+
+  it('calls onCancel from a visible cancel button while running', async () => {
+    const user = userEvent.setup()
+    render(<TaskControlPanel {...baseProps} mode={'integrate' satisfies TaskMode} isRunning />)
+
+    await user.click(screen.getByRole('button', { name: 'Cancel task' }))
+
+    expect(baseProps.onCancel).toHaveBeenCalledTimes(1)
   })
 
   it('calls source and target table callbacks when match selects change', async () => {

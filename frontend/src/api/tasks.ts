@@ -7,17 +7,27 @@ export type StartTaskResponse = {
   state: Record<string, unknown>
 }
 
-export function startDiscover(tenantId: string, queryTableId: string): Promise<StartTaskResponse> {
+export type TaskOptions = Record<string, unknown>
+
+export function startDiscover(
+  tenantId: string,
+  queryTableId: string,
+  options: TaskOptions = {},
+): Promise<StartTaskResponse> {
   return apiJson<StartTaskResponse>('/discover', tenantId, {
     method: 'POST',
-    body: JSON.stringify({ query_table_id: queryTableId }),
+    body: JSON.stringify({ query_table_id: queryTableId, options }),
   })
 }
 
-export function startIntegrate(tenantId: string, queryTableId: string): Promise<StartTaskResponse> {
+export function startIntegrate(
+  tenantId: string,
+  queryTableId: string,
+  options: TaskOptions = {},
+): Promise<StartTaskResponse> {
   return apiJson<StartTaskResponse>('/integrate', tenantId, {
     method: 'POST',
-    body: JSON.stringify({ query_table_id: queryTableId }),
+    body: JSON.stringify({ query_table_id: queryTableId, options }),
   })
 }
 
@@ -25,13 +35,18 @@ export function startMatch(
   tenantId: string,
   sourceTableId: string,
   targetTableId: string,
+  options: TaskOptions = {},
 ): Promise<StartTaskResponse> {
   return apiJson<StartTaskResponse>('/match', tenantId, {
     method: 'POST',
-    body: JSON.stringify({ source_table_id: sourceTableId, target_table_id: targetTableId }),
+    body: JSON.stringify({ source_table_id: sourceTableId, target_table_id: targetTableId, options }),
   })
 }
 
 export function getTask(tenantId: string, taskId: string): Promise<TaskDetail> {
   return apiJson<TaskDetail>(`/tasks/${encodeURIComponent(taskId)}`, tenantId)
+}
+
+export function cancelTask(tenantId: string, taskId: string): Promise<TaskDetail> {
+  return apiJson<TaskDetail>(`/tasks/${encodeURIComponent(taskId)}/cancel`, tenantId, { method: 'POST' })
 }

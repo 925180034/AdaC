@@ -16,6 +16,8 @@ export type TimelineStep = {
   reason?: string
   message?: string
   fallback?: string
+  started_at?: string
+  finished_at?: string
 }
 
 export type TimelineNode = {
@@ -157,6 +159,16 @@ function getTimelineStatus(event: TaskEvent, currentStatus: TimelineStatus): Tim
   return currentStatus
 }
 
+function getStepStartedAt(event: TaskEvent, step: TimelineStep): string | undefined {
+  return event.type === 'agent_started' ? event.timestamp : step.started_at
+}
+
+function getStepFinishedAt(event: TaskEvent, step: TimelineStep): string | undefined {
+  return event.type === 'agent_completed' || event.type === 'agent_degraded' || event.type === 'agent_failed'
+    ? event.timestamp
+    : step.finished_at
+}
+
 function deriveAgentStatus(steps: TimelineStep[]): TimelineStatus {
   if (steps.some((step) => step.status === 'failed')) return 'failed'
   if (steps.some((step) => step.status === 'degraded')) return 'degraded'
@@ -198,6 +210,8 @@ export function applyTaskEvent(state: TimelineState, event: TaskEvent): Timeline
       reason: event.reason ?? step.reason,
       message: event.message ?? step.message,
       fallback: event.fallback ?? step.fallback,
+      started_at: getStepStartedAt(event, step),
+      finished_at: getStepFinishedAt(event, step),
     }
   })
   const status = deriveAgentStatus(steps)

@@ -96,6 +96,7 @@ llm:
   timeout_s:       30
   enable_thinking: false        # Qwen3 特有，判定类任务必须关闭
   max_retries:     2
+  concurrency:     4            # 默认保守并发；Demo fast 可覆盖为压测最佳值
   cache_ttl_h:     168          # L3 LLM 结果缓存 7 天
 
 # ============ Planner ============

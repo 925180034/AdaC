@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Generator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from adacascade.api.events import stream_task_events
+from adacascade.api.events import emit_task_event, stream_task_events
 from adacascade.api.middleware import get_tenant_id
 from adacascade.db.models import (
     AgentStep,
@@ -30,6 +31,47 @@ def get_db() -> Generator[Session, None, None]:
 
 def _json_or_none(raw: str | None) -> Any:
     return json.loads(raw) if raw else None
+
+
+def _task_payload(task: IntegrationTask) -> dict[str, Any]:
+    return {
+        "task_id": task.task_id,
+        "tenant_id": task.tenant_id,
+        "task_type": task.task_type,
+        "query_table_id": task.query_table_id,
+        "target_table_id": task.target_table_id,
+        "status": task.status,
+        "submitted_at": task.submitted_at.isoformat(),
+        "finished_at": task.finished_at.isoformat() if task.finished_at else None,
+        "error_message": task.error_message,
+    }
+
+
+@router.post("/{task_id}/cancel")
+async def cancel_task(
+    task_id: str, request: Request, db: Session = Depends(get_db)
+) -> dict[str, Any]:
+    """Mark a running task cancelled for the current tenant."""
+    task = db.query(IntegrationTask).filter_by(task_id=task_id).first()
+    if task is None or task.tenant_id != get_tenant_id(request):
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.status == "RUNNING":
+        task.status = "FAILED"
+        task.finished_at = datetime.now(timezone.utc)
+        task.error_message = "Task cancelled by user"
+        db.flush()
+        await emit_task_event(
+            task_id,
+            {
+                "type": "task_completed",
+                "status": "FAILED",
+                "message": "Task cancelled by user",
+                "error": "Task cancelled by user",
+            },
+        )
+
+    return _task_payload(task)
 
 
 @router.get("/{task_id}")

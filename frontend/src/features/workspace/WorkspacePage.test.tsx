@@ -6,7 +6,7 @@ import type { LlmRuntimeInfo } from '../../api/runtime'
 import { getLlmRuntime, updateLlmRuntime } from '../../api/runtime'
 import type { ListTablesResponse } from '../../api/tables'
 import { listTables } from '../../api/tables'
-import { getTask, startIntegrate } from '../../api/tasks'
+import { cancelTask, getTask, startDiscover, startIntegrate } from '../../api/tasks'
 import { useTaskStore } from '../tasks/taskStore'
 import type { TaskDetail } from '../tasks/taskTypes'
 import { WorkspacePage } from './WorkspacePage'
@@ -25,6 +25,7 @@ vi.mock('../../api/events', () => ({
 }))
 
 vi.mock('../../api/tasks', () => ({
+  cancelTask: vi.fn(),
   getTask: vi.fn(),
   startDiscover: vi.fn(),
   startIntegrate: vi.fn(),
@@ -42,6 +43,22 @@ const tablesResponse: ListTablesResponse = {
       table_name: 'Default Tenant Table',
       row_count: 10,
       col_count: 3,
+      status: 'READY',
+    },
+  ],
+}
+
+const benchmarkTablesResponse: ListTablesResponse = {
+  total: 1,
+  offset: 0,
+  limit: 200,
+  items: [
+    {
+      table_id: 'benchmark_table',
+      tenant_id: 'benchmark',
+      table_name: 'Benchmark Tenant Table',
+      row_count: 1000,
+      col_count: 12,
       status: 'READY',
     },
   ],
@@ -109,11 +126,15 @@ describe('WorkspacePage', () => {
     document.documentElement.removeAttribute('data-theme')
     vi.clearAllMocks()
     useTaskStore.setState({ currentTaskId: null, events: [] })
-    vi.mocked(listTables).mockResolvedValue(tablesResponse)
+    vi.mocked(listTables).mockImplementation((tenantId) =>
+      Promise.resolve(tenantId === 'benchmark' ? benchmarkTablesResponse : tablesResponse),
+    )
     vi.mocked(getLlmRuntime).mockResolvedValue(localRuntime)
     vi.mocked(updateLlmRuntime).mockResolvedValue(apiRuntime)
     vi.mocked(getTask).mockResolvedValue(runningTask)
+    vi.mocked(cancelTask).mockResolvedValue({ ...runningTask, status: 'FAILED', error_message: 'Task cancelled by user' })
     vi.mocked(startIntegrate).mockResolvedValue({ task_id: 'task-running', status: 'RUNNING', state: {} })
+    vi.mocked(startDiscover).mockResolvedValue({ task_id: 'task-running', status: 'RUNNING', state: {} })
   })
 
   it('loads tables for the default tenant when no tenant is in the URL', async () => {
@@ -162,6 +183,59 @@ describe('WorkspacePage', () => {
     await waitFor(() => expect(getLlmRuntime).toHaveBeenCalledWith('default'))
     expect(await screen.findByRole('button', { name: 'API model', pressed: true })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Local model', pressed: false })).toBeEnabled()
+  })
+
+  it('switches tenant and reloads tenant-scoped tables and runtime info', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Tenant'), 'benchmark')
+
+    await waitFor(() => expect(listTables).toHaveBeenCalledWith('benchmark'))
+    await waitFor(() => expect(getLlmRuntime).toHaveBeenCalledWith('benchmark'))
+    expect(await screen.findByText('Benchmark Tenant Table · 1,000 × 12')).toBeInTheDocument()
+  })
+
+  it('starts tasks with advanced parameter options', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
+    await user.clear(screen.getByLabelText('L3 LLM threshold'))
+    await user.type(screen.getByLabelText('L3 LLM threshold'), '0.3')
+    await user.clear(screen.getByLabelText('Matcher top-k'))
+    await user.type(screen.getByLabelText('Matcher top-k'), '5')
+    await user.click(screen.getByRole('button', { name: 'Run AdaCascade' }))
+
+    expect(startIntegrate).toHaveBeenCalledWith('default', 'default_table', {
+      theta_1: 0.2,
+      theta_2: 0.55,
+      theta_3: 0.3,
+      theta_match: 0.7,
+      matcher_top_k: 5,
+    })
+  })
+
+  it('starts tasks with fast execution options when demo fast profile is selected', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Execution profile'), 'fast')
+    await user.click(screen.getByRole('button', { name: 'Run AdaCascade' }))
+
+    expect(startIntegrate).toHaveBeenCalledWith('default', 'default_table', {
+      theta_1: 0.2,
+      theta_2: 0.55,
+      theta_3: 0.5,
+      theta_match: 0.7,
+      matcher_top_k: 3,
+      llm_cache_enabled: true,
+      llm_batch_size: 10,
+      llm_concurrency: 24,
+    })
   })
 
   it('defaults to light theme and persists root theme changes from the toolbar', async () => {
@@ -228,6 +302,17 @@ describe('WorkspacePage', () => {
 
     expect(await screen.findByRole('button', { name: 'Local model', pressed: true })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'API model', pressed: false })).toBeDisabled()
+  })
+
+  it('cancels the current running task from the control panel', async () => {
+    const user = userEvent.setup()
+    useTaskStore.setState({ currentTaskId: 'task-running' })
+    renderWorkspace()
+
+    await user.click(await screen.findByRole('button', { name: 'Cancel task' }))
+
+    expect(cancelTask).toHaveBeenCalledWith('default', 'task-running')
+    await waitFor(() => expect(getTask).toHaveBeenCalled())
   })
 
   it('disables runtime switching while runtime mutation is pending', async () => {

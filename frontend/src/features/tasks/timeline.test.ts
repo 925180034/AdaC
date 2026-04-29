@@ -37,6 +37,8 @@ describe('applyTaskEvent', () => {
     expect(success.Retrieval.steps.find((step) => step.id === 'L1')).toMatchObject({
       status: 'success',
       output_size: 80,
+      started_at: '2026-04-27T00:00:00Z',
+      finished_at: '2026-04-27T00:00:01Z',
     })
     expect(success).not.toHaveProperty('Retrieval:L1')
   })
