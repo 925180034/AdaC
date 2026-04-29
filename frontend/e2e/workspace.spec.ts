@@ -67,11 +67,28 @@ async function fulfillJson(route: Route, body: unknown) {
 }
 
 async function mockRunnableBackend(page: Page) {
+  let runtimeBackend: 'local' | 'api' = 'local'
+
   await page.route('http://localhost:8080/**', async (route) => {
     const url = new URL(route.request().url())
 
     if (url.pathname === '/tables') {
       await fulfillJson(route, tablesResponse)
+      return
+    }
+
+    if (url.pathname === '/runtime/llm') {
+      if (route.request().method() === 'PUT') {
+        const body = route.request().postDataJSON() as { backend?: 'local' | 'api' }
+        runtimeBackend = body.backend ?? runtimeBackend
+      }
+
+      await fulfillJson(route, {
+        backend: runtimeBackend,
+        base_url: runtimeBackend === 'local' ? 'http://localhost:8000/v1' : 'https://api.deepseek.com/v1',
+        model: runtimeBackend === 'local' ? 'qwen3.5:9b-awq' : 'deepseek-chat',
+        api_key_configured: true,
+      })
       return
     }
 
@@ -95,8 +112,14 @@ async function mockRunnableBackend(page: Page) {
         status: 200,
         contentType: 'text/event-stream',
         body: [
+          `event: agent_completed\ndata: {"task_id":"${taskId}","type":"agent_completed","agent":"Planner","status":"SUCCESS","output_size":1,"timestamp":"2026-04-28T00:00:01Z"}`,
+          `event: agent_completed\ndata: {"task_id":"${taskId}","type":"agent_completed","agent":"Profiling","status":"SUCCESS","output_size":1,"timestamp":"2026-04-28T00:00:02Z"}`,
           `event: agent_started\ndata: {"task_id":"${taskId}","type":"agent_started","agent":"Retrieval","layer":"L1","status":"RUNNING","timestamp":"2026-04-28T00:00:02Z"}`,
           `event: agent_completed\ndata: {"task_id":"${taskId}","type":"agent_completed","agent":"Retrieval","layer":"L1","status":"SUCCESS","output_size":1,"timestamp":"2026-04-28T00:00:02Z"}`,
+          `event: agent_completed\ndata: {"task_id":"${taskId}","type":"agent_completed","agent":"Retrieval","layer":"L2","status":"SUCCESS","output_size":1,"timestamp":"2026-04-28T00:00:02Z"}`,
+          `event: agent_completed\ndata: {"task_id":"${taskId}","type":"agent_completed","agent":"Retrieval","layer":"L3","status":"SUCCESS","output_size":1,"timestamp":"2026-04-28T00:00:03Z"}`,
+          `event: agent_completed\ndata: {"task_id":"${taskId}","type":"agent_completed","agent":"Matcher","layer":"filtering","status":"SUCCESS","output_size":1,"timestamp":"2026-04-28T00:00:03Z"}`,
+          `event: agent_completed\ndata: {"task_id":"${taskId}","type":"agent_completed","agent":"Matcher","layer":"LLM","status":"SUCCESS","output_size":1,"timestamp":"2026-04-28T00:00:03Z"}`,
           `event: agent_completed\ndata: {"task_id":"${taskId}","type":"agent_completed","agent":"Matcher","layer":"decision","status":"SUCCESS","output_size":1,"timestamp":"2026-04-28T00:00:03Z"}`,
           `event: task_completed\ndata: {"task_id":"${taskId}","type":"task_completed","status":"SUCCESS","timestamp":"2026-04-28T00:00:03Z"}`,
           '',
@@ -109,9 +132,49 @@ async function mockRunnableBackend(page: Page) {
   })
 }
 
+async function expectFourAgentPanel(page: Page) {
+  const agentCards = page.locator('.agent-card')
+  await expect(agentCards).toHaveCount(4)
+
+  await expect(page.getByRole('article', { name: 'Planner' })).toBeVisible()
+  await expect(page.getByRole('article', { name: 'Profiling' })).toBeVisible()
+  await expect(page.getByRole('article', { name: 'Retrieval' })).toBeVisible()
+  await expect(page.getByRole('article', { name: 'Matcher' })).toBeVisible()
+
+  await expect(page.getByText('Plan routing')).toBeVisible()
+  await expect(page.getByText('Table profiling')).toBeVisible()
+  await expect(page.getByText('Lexical filter')).toBeVisible()
+  await expect(page.getByText('Vector recall')).toBeVisible()
+  await expect(page.getByText('LLM rerank')).toBeVisible()
+  await expect(page.getByText('Candidate filter')).toBeVisible()
+  await expect(page.getByText('LLM verification')).toBeVisible()
+  await expect(page.getByText('One-to-one decision')).toBeVisible()
+}
+
 test.describe('workspace task execution', () => {
   test.beforeEach(async ({ page }) => {
     await mockRunnableBackend(page)
+  })
+
+  test('loads default light theme and switches language, theme, and runtime', async ({ page }) => {
+    await page.goto('/workspace?tenant_id=default&mode=integrate&query_table_id=toy_source')
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+    await expect(page.getByRole('heading', { name: 'AdaCascade Workbench' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Run AdaCascade' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Local model' })).toHaveAttribute('aria-pressed', 'true')
+
+    await page.getByRole('button', { name: '中文' }).click()
+    await expect(page.getByRole('heading', { name: 'AdaCascade 工作台' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '运行 AdaCascade' })).toBeVisible()
+    await expect(page.getByLabel('模式')).toBeVisible()
+    await expect(page.getByText('暂无活跃任务')).toBeVisible()
+
+    await page.getByRole('button', { name: '深色' }).click()
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+
+    await page.getByRole('button', { name: 'API 模型' }).click()
+    await expect(page.getByRole('button', { name: 'API 模型' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('starts discover and displays ranking results', async ({ page }) => {
@@ -119,10 +182,7 @@ test.describe('workspace task execution', () => {
     await page.getByRole('button', { name: 'Run AdaCascade' }).click()
 
     await expect(page.getByText('Task discover-task')).toBeVisible()
-    await expect(page.getByRole('article', { name: 'Retrieval' })).toBeVisible()
-    await expect(page.getByText('Lexical filter')).toBeVisible()
-    await expect(page.getByRole('article', { name: 'Matcher' })).toBeVisible()
-    await expect(page.getByText('One-to-one decision')).toBeVisible()
+    await expectFourAgentPanel(page)
     await page.getByRole('tab', { name: 'Ranking' }).click()
     await expect(page.getByRole('tabpanel', { name: 'Ranking' })).toContainText('toy_target')
   })
@@ -132,10 +192,7 @@ test.describe('workspace task execution', () => {
     await page.getByRole('button', { name: 'Run AdaCascade' }).click()
 
     await expect(page.getByText('Task match-task')).toBeVisible()
-    await expect(page.getByRole('article', { name: 'Retrieval' })).toBeVisible()
-    await expect(page.getByText('Lexical filter')).toBeVisible()
-    await expect(page.getByRole('article', { name: 'Matcher' })).toBeVisible()
-    await expect(page.getByText('One-to-one decision')).toBeVisible()
+    await expectFourAgentPanel(page)
     await page.getByRole('tab', { name: 'Mappings' }).click()
     await expect(page.getByRole('tabpanel', { name: 'Mappings' })).toContainText('toy_source.name')
   })
@@ -145,10 +202,7 @@ test.describe('workspace task execution', () => {
     await page.getByRole('button', { name: 'Run AdaCascade' }).click()
 
     await expect(page.getByText('Task integrate-task')).toBeVisible()
-    await expect(page.getByRole('article', { name: 'Retrieval' })).toBeVisible()
-    await expect(page.getByText('Lexical filter')).toBeVisible()
-    await expect(page.getByRole('article', { name: 'Matcher' })).toBeVisible()
-    await expect(page.getByText('One-to-one decision')).toBeVisible()
+    await expectFourAgentPanel(page)
     await page.getByRole('tab', { name: 'Ranking' }).click()
     await expect(page.getByRole('tabpanel', { name: 'Ranking' })).toContainText('toy_target')
     await page.getByRole('tab', { name: 'Mappings' }).click()
@@ -179,6 +233,16 @@ test('prefills workspace context from route params without auto-running a task',
       return
     }
 
+    if (url.pathname === '/runtime/llm') {
+      await fulfillJson(route, {
+        backend: 'local',
+        base_url: 'http://localhost:8000/v1',
+        model: 'qwen3.5:9b-awq',
+        api_key_configured: true,
+      })
+      return
+    }
+
     if (['/discover', '/integrate', '/match'].includes(url.pathname) || url.pathname.startsWith('/tasks/')) {
       taskStartRequests += 1
       await route.abort()
@@ -191,8 +255,8 @@ test('prefills workspace context from route params without auto-running a task',
   await page.goto('/workspace?tenant_id=default&mode=integrate&query_table_id=toy_source')
 
   await expect(page.getByRole('heading', { name: 'AdaCascade Workbench' })).toBeVisible()
-  await expect(page.getByLabel('Mode')).toHaveValue('integrate')
-  await expect(page.getByLabel('Query table')).toHaveValue('toy_source')
+  await expect(page.locator('#task-mode')).toHaveValue('integrate')
+  await expect(page.locator('#query-table')).toHaveValue('toy_source')
   await expect(page.getByRole('button', { name: 'Run AdaCascade' })).toBeEnabled()
   await expect(page.getByText('No active task')).toBeVisible()
   await expect(page.getByText(/This preview intentionally does not auto-run\./)).toBeVisible()
