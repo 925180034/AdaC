@@ -4,6 +4,7 @@
 Run after bulk ingest. Re-run when cumulative table count grows >= 50%.
 Usage: python scripts/rebuild_tfidf.py
 """
+
 from __future__ import annotations
 
 import pickle

@@ -96,7 +96,7 @@ def chat(
     if extra_body:
         request_kwargs["extra_body"] = extra_body
 
-    resp = client.chat.completions.create(  # type: ignore[call-overload]
+    resp = client.chat.completions.create(
         **request_kwargs,
     )
     return cast(ChatCompletion, resp)

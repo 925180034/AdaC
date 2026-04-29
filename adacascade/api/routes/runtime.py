@@ -33,6 +33,8 @@ async def get_llm_runtime() -> LlmRuntimeInfo:
 async def update_llm_runtime(payload: LlmRuntimeUpdate) -> LlmRuntimeInfo:
     """Switch the process-local LLM runtime backend."""
     try:
-        return LlmRuntimeInfo.model_validate(llm_runtime.set_active_backend(payload.backend))
+        return LlmRuntimeInfo.model_validate(
+            llm_runtime.set_active_backend(payload.backend)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

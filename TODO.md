@@ -6,7 +6,7 @@
 |---|---|---|
 | GPU | **RTX 4090 (24 GB)** | A100 (40 GB) |
 | conda 环境 | `adacascade`（Python 3.11） | 同左 |
-| vLLM | 4090 显存紧张，开发阶段用云端 API（DeepSeek / Qwen），M4 前切回本地 | 本地 vLLM |
+| LLM 运行时 | 开发/演示阶段可在前端或 `/runtime/llm` 切换 DeepSeek API 与本地 vLLM；当前默认用 API 提速 | A100 本地 vLLM 压测，API 作为降级/演示备用 |
 | SBERT 设备 | `cuda:0`（4090） | `cuda:0`（A100） |
 
 > **激活环境**：`conda activate adacascade`
@@ -156,25 +156,43 @@
 
 ## M4 · 上线（目标：1 週）
 
-- [ ] `Dockerfile` 与 `docker-compose.yml`（qdrant + vllm + adacascade 三服务）
-- [ ] `.env.example` 补全所有变量
-- [ ] `scripts/gc.py`：定期清理 ARCHIVED 记录与 Parquet 文件
-- [ ] `scripts/bulk_ingest.py`：批量导入（冷启动时批量入湖 fixture 数据）
-- [ ] `scripts/rebuild_tfidf.py`：TF-IDF 全量重训（累积表数增长 ≥ 50% 触发）
-- [ ] 运维文档（启动顺序、常见故障处理）
-- [ ] 切换 `LLM_BASE_URL` 到本地 vLLM，在 A100 全链路压测
+> 当前开发环境运行在容器/受限网络内，Docker iptables 不可用；M4 当前验收以非 Docker 启动与可复现 demo 运维流程为准，Docker 打包降级为后续可选生产部署项。
+
+### M4.1 当前环境上线 Profile（非 Docker）
+- [x] `.env.example` 补全所有变量，覆盖 API 模式、本地 vLLM 模式、数据目录、SQLite/ckpt/artifacts 路径
+- [x] 固化 Qdrant 二进制启动流程：`scripts/start_qdrant.sh` + `scripts/init_qdrant.py` + 健康检查
+- [x] 固化 FastAPI 单 worker 启动流程：主项目路径 `/root/AdaC`、`NO_PROXY`、`DATABASE_URL`、`DATA_DIR`、`CKPT_PATH`、`ARTIFACTS_DIR`
+- [x] 固化前端公开 demo 启动流程：Vite same-origin proxy、`VITE_API_BASE_URL=""`、公网 URL 访问方式
+- [x] 运维文档：启动顺序、停止/重启、端口占用排查、常见故障处理
+
+### M4.2 LLM 运行时验收
+- [x] API 模式验收：通过 `/runtime/llm` 切换到 DeepSeek `deepseek-v4-flash`，discover / match / integrate smoke test 均成功；API integrate 约 4 分 35 秒
+- [x] 本地模式验收：本地 vLLM 可用时通过前端按钮或 `/runtime/llm` 切换到 local，不再要求手动改 `LLM_BASE_URL`；空 ranking 的 integrate 不再回退全量 Matcher，smoke 约 2 秒成功结束
+- [ ] A100 全链路压测：在 local vLLM 模式下记录 `/integrate` P95、Profiling 吞吐、GPU 显存与降级情况
+
+### M4.3 数据与维护脚本
+- [x] `scripts/gc.py`：定期清理 ARCHIVED 记录与 Parquet 文件
+- [x] `scripts/bulk_ingest.py`：批量导入（冷启动时批量入湖 fixture 数据）
+- [x] `scripts/rebuild_tfidf.py`：TF-IDF 全量重训（累积表数增长 ≥ 50% 触发；已纳入运维文档验收）
+
+### M4.4 可选生产打包（当前环境不作为阻塞项）
+- [ ] `Dockerfile` 与 `docker-compose.yml` 草案（qdrant + vllm + adacascade 三服务），标注当前容器环境无法本机验收
+- [ ] 生产 nginx/systemd/tmux 方案取舍说明
 
 ### M4 验收
-- [ ] `docker-compose up` 一键启动三服务
-- [ ] `/integrate` P95 延迟 ≤ 2.8 s（OpenData JOIN，k=10）
+- [x] 非 Docker 一键/半自动启动流程可复现：Qdrant binary + FastAPI single worker + 前端公开 demo
+- [x] 前端可完成 discover / match / integrate，并展示中间结果区与四 Agent 步骤高亮
+- [x] API 模式与 local vLLM 模式可通过 UI/API 切换，不依赖手动改 `.env`
+- [ ] local vLLM 模式下 `/integrate` P95 延迟 ≤ 2.8 s（OpenData JOIN，k=10；A100 压测）
 - [ ] Profiling 吞吐 ≥ 1000 张/分钟（A100 + GPU SBERT）
+- [x] Docker Compose 仅作为后续生产环境可选验收，不阻塞当前 M4
 
 ---
 
 ## 当前状态
 
-**阶段**：✅ M1 完成 → ✅ M2 工程验收完成（Week1/2/3）→ ✅ M3 本地集成完成；论文复现 benchmark 与课题组大系统 UAT 待后续执行
-**最后更新**：2026-04-27
+**阶段**：✅ M1 完成 → ✅ M2 工程验收完成（Week1/2/3）→ ✅ M3 本地集成完成 → ✅ M3.5 前端演示工作台完成 → ✅ M4 非 Docker 上线/运维固化完成；A100 指标压测与论文复现为后续专项
+**最后更新**：2026-04-29
 
 ### M1 完成摘要
 - 所有骨架代码实现完毕（24 个 Python 源文件）
@@ -204,6 +222,19 @@
 - Retrieval Qdrant/L3 失败与 Matcher LLM 失败已具备本地降级路径，SBERT CUDA OOM 会重试 CPU
 - 本地 UAT 已覆盖 `/integrate`、`/discover`、`/match`；暂不对接课题组大系统
 - 最新验证：`ruff format adacascade/ tests/` 完成；`ruff check adacascade/ tests/ scripts/` 通过；`pytest tests/unit/ -v` 23/23 通过；`pytest tests/integration/ -v` 19/19 通过；`mypy --strict adacascade/` 通过
+
+### M4 当前完成摘要
+- 非 Docker demo/部署路径已固化：Qdrant binary + FastAPI single worker + Vite same-origin public proxy
+- `.env.example` 与 `docs/M4_Operations_Guide.md` 已覆盖 API/local runtime、主数据目录、启动顺序、维护脚本与常见故障
+- DeepSeek API 模式 smoke 已覆盖 discover / match / integrate；API integrate 约 4 分 35 秒
+- local vLLM 模式 smoke 已覆盖 runtime 切换与 integrate 空 ranking 快速结束；Matcher 不再对空 ranking 回退全量候选
+- M4 维护脚本已补齐：`scripts/bulk_ingest.py`、`scripts/gc.py`、`scripts/rebuild_tfidf.py` 运维入口
+- 最新验证：`pytest tests/unit/ tests/integration/` 74/74 通过；`npm --prefix frontend run test -- --run` 58/58 通过；`ruff check adacascade/ tests/ scripts/` 通过；`mypy --strict adacascade/` 通过
+
+### 后续专项
+- A100/local vLLM 指标压测：`/integrate` P95、Profiling 吞吐、GPU 显存与降级记录
+- 论文复现 benchmark：retrieval R@10 与 matcher SLD F1
+- 可选生产打包：Docker Compose / nginx / systemd / tmux 方案文档化
 
 ### 环境备注
 - GPU：RTX 4090，驱动 560.35.03，CUDA 12.6，PyTorch 2.6.0+cu124

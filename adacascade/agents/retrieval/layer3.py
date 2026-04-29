@@ -98,7 +98,9 @@ def _parse_batch_response(content: str) -> dict[int, float]:
     return {item.candidate_idx: item.score for item in result.scores}
 
 
-def _repair_messages(messages: list[dict[str, str]], invalid_content: str) -> list[dict[str, str]]:
+def _repair_messages(
+    messages: list[dict[str, str]], invalid_content: str
+) -> list[dict[str, str]]:
     return [
         *messages,
         {"role": "assistant", "content": invalid_content or "{}"},

@@ -21,10 +21,14 @@ def test_default_backend_is_local() -> None:
     assert "api_key" not in info
 
 
-def test_switches_to_api_backend_without_exposing_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_switches_to_api_backend_without_exposing_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     reset_runtime()
     monkeypatch.setattr(llm_runtime.settings, "LLM_API_KEY", "sk-test-secret")
-    monkeypatch.setattr(llm_runtime.settings, "LLM_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setattr(
+        llm_runtime.settings, "LLM_BASE_URL", "https://api.deepseek.com"
+    )
     monkeypatch.setattr(llm_runtime.settings, "LLM_MODEL", "deepseek-v4-flash")
 
     info = llm_runtime.set_active_backend("api")
@@ -47,7 +51,9 @@ def test_rejects_unknown_backend() -> None:
 
 def test_request_config_tracks_active_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_runtime()
-    monkeypatch.setattr(llm_runtime.settings, "LLM_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setattr(
+        llm_runtime.settings, "LLM_BASE_URL", "https://api.deepseek.com"
+    )
     monkeypatch.setattr(llm_runtime.settings, "LLM_API_KEY", "sk-test-secret")
     monkeypatch.setattr(llm_runtime.settings, "LLM_MODEL", "deepseek-v4-flash")
 
@@ -68,11 +74,17 @@ def test_request_config_tracks_active_backend(monkeypatch: pytest.MonkeyPatch) -
     assert local_config.model == llm_runtime.settings.LLM_LOCAL_MODEL
 
 
-def test_local_backend_uses_local_runtime_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_local_backend_uses_local_runtime_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     reset_runtime()
-    monkeypatch.setattr(llm_runtime.settings, "LLM_LOCAL_BASE_URL", "http://127.0.0.1:9000/v1")
+    monkeypatch.setattr(
+        llm_runtime.settings, "LLM_LOCAL_BASE_URL", "http://127.0.0.1:9000/v1"
+    )
     monkeypatch.setattr(llm_runtime.settings, "LLM_LOCAL_MODEL", "qwen-local-test")
-    monkeypatch.setattr(llm_runtime.settings, "LLM_BASE_URL", "https://api.deepseek.com")
+    monkeypatch.setattr(
+        llm_runtime.settings, "LLM_BASE_URL", "https://api.deepseek.com"
+    )
     monkeypatch.setattr(llm_runtime.settings, "LLM_MODEL", "deepseek-v4-flash")
 
     config = llm_runtime.get_request_config()

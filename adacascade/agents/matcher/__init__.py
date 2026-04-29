@@ -46,13 +46,11 @@ def _targets(state: IntegrationState) -> list[dict[str, Any]]:
         dict[str, dict[str, Any]], state.get("candidate_profiles", {})
     )
     ranking = cast(list[dict[str, Any]], state.get("ranking", []))
-    if ranking:
-        return [
-            candidate_profiles[str(item["table_id"])]
-            for item in ranking
-            if str(item.get("table_id")) in candidate_profiles
-        ]
-    return list(candidate_profiles.values())
+    return [
+        candidate_profiles[str(item["table_id"])]
+        for item in ranking
+        if str(item.get("table_id")) in candidate_profiles
+    ]
 
 
 def _mapping_entry(

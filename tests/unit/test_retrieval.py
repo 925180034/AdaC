@@ -110,21 +110,25 @@ def test_l3_batch_missing_idx_scores_zero() -> None:
 def test_l3_retries_once_when_llm_returns_missing_scores(monkeypatch) -> None:
     from adacascade.agents.retrieval import layer3
 
-    responses = iter([
-        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))]),
-        SimpleNamespace(
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(
-                        content=(
-                            '{"scores":[{"candidate_idx":1,"score":0.9,'
-                            '"reason":"same entity"}]}'
+    responses = iter(
+        [
+            SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))]
+            ),
+            SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=(
+                                '{"scores":[{"candidate_idx":1,"score":0.9,'
+                                '"reason":"same entity"}]}'
+                            )
                         )
                     )
-                )
-            ]
-        ),
-    ])
+                ]
+            ),
+        ]
+    )
     calls = 0
 
     call_kwargs = []

@@ -17,7 +17,9 @@ def client() -> TestClient:
     with (
         patch("qdrant_client.AsyncQdrantClient", return_value=raw_qdrant_mock),
         patch("adacascade.api.app.AdacQdrantClient", return_value=mock_qdrant),
-        patch("adacascade.api.app.reconcile_orphan_ingests", new=AsyncMock(return_value=0)),
+        patch(
+            "adacascade.api.app.reconcile_orphan_ingests", new=AsyncMock(return_value=0)
+        ),
     ):
         from adacascade import llm_runtime
         from adacascade.api.app import app

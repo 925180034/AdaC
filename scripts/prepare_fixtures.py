@@ -63,28 +63,38 @@ import pandas as pd
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DATASETS  = REPO_ROOT / "datasets"
-FIXTURES  = REPO_ROOT / "tests" / "fixtures"
+DATASETS = REPO_ROOT / "datasets"
+FIXTURES = REPO_ROOT / "tests" / "fixtures"
 
 # Deterministic UUID5 namespace (固定值，保证重复运行 table_id 不变)
 _UUID_NS = uuid.UUID("adac0000-0000-0000-0000-000000000001")
 
 # Pandas dtype → 系统统一类型字符串 (算法规格 §2.1)
 _DTYPE_MAP: dict[str, str] = {
-    "int8": "int", "int16": "int", "int32": "int", "int64": "int",
-    "uint8": "int", "uint16": "int", "uint32": "int", "uint64": "int",
-    "float16": "float", "float32": "float", "float64": "float",
+    "int8": "int",
+    "int16": "int",
+    "int32": "int",
+    "int64": "int",
+    "uint8": "int",
+    "uint16": "int",
+    "uint32": "int",
+    "uint64": "int",
+    "float16": "float",
+    "float32": "float",
+    "float64": "float",
     "bool": "bool",
-    "object": "str", "string": "str",
-    "datetime64[ns]": "date", "datetime64[us]": "date",
+    "object": "str",
+    "string": "str",
+    "datetime64[ns]": "date",
+    "datetime64[us]": "date",
 }
 
 # Wikidata 场景：(目录后缀, task_type, scenario)
 _WIKI_SCENARIOS: list[tuple[str, str, str]] = [
-    ("joinable",    "JOIN",  "SLD"),
-    ("semjoinable", "JOIN",  "SLD"),
-    ("unionable",   "UNION", "SLD"),
-    ("viewunion",   "UNION", "SLD"),
+    ("joinable", "JOIN", "SLD"),
+    ("semjoinable", "JOIN", "SLD"),
+    ("unionable", "UNION", "SLD"),
+    ("viewunion", "UNION", "SLD"),
 ]
 
 # toy_lake：每张 Wikidata 表采样行数
@@ -92,6 +102,7 @@ _TOY_SAMPLE_ROWS = 300
 
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
+
 
 def _stable_id(seed: str) -> str:
     """UUID5 from seed string — deterministic across runs."""
@@ -156,19 +167,19 @@ def _save_table(
     df.to_parquet(parquet_path, index=False, engine="pyarrow")
 
     manifest: dict = {
-        "table_id":    table_id,
-        "table_name":  table_name,
-        "tenant_id":   tenant_id,
-        "source":      source,
-        "row_count":   len(df),
-        "col_count":   len(df.columns),
+        "table_id": table_id,
+        "table_name": table_name,
+        "tenant_id": tenant_id,
+        "source": source,
+        "row_count": len(df),
+        "col_count": len(df.columns),
         "schema_hash": _schema_hash(df),
         "content_hash": _file_hash(parquet_path),
         "columns": [
             {
-                "ordinal":     i,
-                "name":        col,
-                "type":        _infer_col_type(df[col]),
+                "ordinal": i,
+                "name": col,
+                "type": _infer_col_type(df[col]),
                 "description": (col_descriptions or {}).get(col),
             }
             for i, col in enumerate(df.columns)
@@ -180,6 +191,7 @@ def _save_table(
 
 
 # ── 1. Toy Lake ────────────────────────────────────────────────────────────────
+
 
 def _pick_clean_webtable_pairs(n: int) -> list[tuple[str, str, str, str]]:
     """Find N WebTable JOIN pairs where both columns exist in their CSV files.
@@ -209,10 +221,14 @@ def _pick_clean_webtable_pairs(n: int) -> list[tuple[str, str, str, str]]:
                 and row["candidate_column"] in df_c.columns
             ):
                 seen.add(key)
-                result.append((
-                    row["query_table"], row["candidate_table"],
-                    row["query_column"], row["candidate_column"],
-                ))
+                result.append(
+                    (
+                        row["query_table"],
+                        row["candidate_table"],
+                        row["query_column"],
+                        row["candidate_column"],
+                    )
+                )
             if len(result) >= n:
                 break
     return result
@@ -227,18 +243,18 @@ def prepare_toy_lake() -> None:
         Total: 10 tables with annotated JOIN / UNION relationships.
     """
     print("\n[toy_lake] Building 10-table toy data lake ...")
-    out     = FIXTURES / "toy_lake"
+    out = FIXTURES / "toy_lake"
     tbl_out = out / "tables"
     tbl_out.mkdir(parents=True, exist_ok=True)
 
     ground_truth: list[dict] = []
-    name_to_id:   dict[str, str] = {}
+    name_to_id: dict[str, str] = {}
 
     # ── Wikidata (6 tables: joinable/semjoinable/unionable × source/target) ──
     wiki_base = DATASETS / "sm" / "Wikidata" / "Musicians"
 
     for scenario, task_type, sm_scenario in _WIKI_SCENARIOS[:3]:
-        folder    = wiki_base / f"Musicians_{scenario}"
+        folder = wiki_base / f"Musicians_{scenario}"
         meta_file = folder / f"metadata_Musicians_{scenario}.json"
 
         # parse column descriptions
@@ -261,7 +277,10 @@ def prepare_toy_lake() -> None:
             tid = _stable_id(f"toy|wikidata|{tbl_name}")
             name_to_id[tbl_name] = tid
             _save_table(
-                df, tbl_out / tid, tid, tbl_name,
+                df,
+                tbl_out / tid,
+                tid,
+                tbl_name,
                 tenant_id="benchmark",
                 source="wikidata",
                 col_descriptions=col_descs.get(tbl_name),
@@ -275,24 +294,28 @@ def prepare_toy_lake() -> None:
                 mapping = json.load(fh)
             src_name = f"musicians_{scenario}_source"
             tgt_name = f"musicians_{scenario}_target"
-            ground_truth.append({
-                "task_type":        task_type,
-                "scenario":         sm_scenario,
-                "source_table_id":  name_to_id.get(src_name),
-                "target_table_id":  name_to_id.get(tgt_name),
-                "source_table_name": src_name,
-                "target_table_name": tgt_name,
-                "column_matches": [
-                    {"source_column": m["source_column"],
-                     "target_column": m["target_column"]}
-                    for m in mapping["matches"]
-                ],
-            })
+            ground_truth.append(
+                {
+                    "task_type": task_type,
+                    "scenario": sm_scenario,
+                    "source_table_id": name_to_id.get(src_name),
+                    "target_table_id": name_to_id.get(tgt_name),
+                    "source_table_name": src_name,
+                    "target_table_name": tgt_name,
+                    "column_matches": [
+                        {
+                            "source_column": m["source_column"],
+                            "target_column": m["target_column"],
+                        }
+                        for m in mapping["matches"]
+                    ],
+                }
+            )
 
     # ── WebTable JOIN (4 tables: 2 clean pairs) ──
-    wt_dir      = DATASETS / "dl" / "join" / "tables"
+    wt_dir = DATASETS / "dl" / "join" / "tables"
     clean_pairs = _pick_clean_webtable_pairs(n=2)
-    added_wt:   set[str] = set()
+    added_wt: set[str] = set()
 
     for q_tbl, c_tbl, q_col, c_col in clean_pairs:
         for fname in (q_tbl, c_tbl):
@@ -307,7 +330,10 @@ def prepare_toy_lake() -> None:
             name_to_id[tbl_name] = tid
             added_wt.add(fname)
             _save_table(
-                df, tbl_out / tid, tid, tbl_name,
+                df,
+                tbl_out / tid,
+                tid,
+                tbl_name,
                 tenant_id="benchmark",
                 source="webtable",
             )
@@ -315,26 +341,29 @@ def prepare_toy_lake() -> None:
 
         q_name = q_tbl.removesuffix(".csv")
         c_name = c_tbl.removesuffix(".csv")
-        ground_truth.append({
-            "task_type":        "JOIN",
-            "scenario":         "SSD",
-            "source_table_id":  name_to_id.get(q_name),
-            "target_table_id":  name_to_id.get(c_name),
-            "source_table_name": q_name,
-            "target_table_name": c_name,
-            "column_matches": [
-                {"source_column": q_col, "target_column": c_col}
-            ],
-        })
+        ground_truth.append(
+            {
+                "task_type": "JOIN",
+                "scenario": "SSD",
+                "source_table_id": name_to_id.get(q_name),
+                "target_table_id": name_to_id.get(c_name),
+                "source_table_name": q_name,
+                "target_table_name": c_name,
+                "column_matches": [{"source_column": q_col, "target_column": c_col}],
+            }
+        )
 
     with open(out / "ground_truth.json", "w", encoding="utf-8") as fh:
         json.dump({"ground_truth": ground_truth}, fh, indent=2, ensure_ascii=False)
 
     n_tables = sum(1 for p in tbl_out.iterdir() if p.is_dir())
-    print(f"[toy_lake] Done: {n_tables} tables, {len(ground_truth)} gt pairs → {out.relative_to(REPO_ROOT)}")
+    print(
+        f"[toy_lake] Done: {n_tables} tables, {len(ground_truth)} gt pairs → {out.relative_to(REPO_ROOT)}"
+    )
 
 
 # ── 2. Retrieval Bench ─────────────────────────────────────────────────────────
+
 
 def _convert_pool(
     src_dir: Path,
@@ -398,7 +427,7 @@ def prepare_retrieval_bench(skip_existing: bool = False) -> None:
         print(f"\n[retrieval_bench/{task}] Converting tables ...")
         src_base = DATASETS / "dl" / task
         out_base = FIXTURES / "retrieval_bench" / task
-        tbl_out  = out_base / "tables"
+        tbl_out = out_base / "tables"
         tbl_out.mkdir(parents=True, exist_ok=True)
 
         # convert pool
@@ -415,16 +444,20 @@ def prepare_retrieval_bench(skip_existing: bool = False) -> None:
         with open(query_file, encoding="utf-8") as fh:
             for row in csv.DictReader(fh):
                 entry: dict = {
-                    "table_id":   name_to_id.get(row["query_table"]),
+                    "table_id": name_to_id.get(row["query_table"]),
                     "table_name": row["query_table"].removesuffix(".csv"),
                 }
-                if task == "join":          # JOIN 有列字段，UNION 无
+                if task == "join":  # JOIN 有列字段，UNION 无
                     entry["query_column"] = row["query_column"]
                 queries.append(entry)
 
         with open(out_base / "queries.json", "w", encoding="utf-8") as fh:
-            json.dump({"task_type": task.upper(), "queries": queries},
-                      fh, indent=2, ensure_ascii=False)
+            json.dump(
+                {"task_type": task.upper(), "queries": queries},
+                fh,
+                indent=2,
+                ensure_ascii=False,
+            )
 
         # ── ground_truth.json ──
         gt_file = src_base / f"webtable_{task}_ground_truth.csv"
@@ -432,19 +465,23 @@ def prepare_retrieval_bench(skip_existing: bool = False) -> None:
         with open(gt_file, encoding="utf-8") as fh:
             for row in csv.DictReader(fh):
                 entry = {
-                    "query_table_id":     name_to_id.get(row["query_table"]),
+                    "query_table_id": name_to_id.get(row["query_table"]),
                     "candidate_table_id": name_to_id.get(row["candidate_table"]),
-                    "query_table_name":     row["query_table"].removesuffix(".csv"),
+                    "query_table_name": row["query_table"].removesuffix(".csv"),
                     "candidate_table_name": row["candidate_table"].removesuffix(".csv"),
                 }
                 if task == "join":
-                    entry["query_column"]     = row["query_column"]
+                    entry["query_column"] = row["query_column"]
                     entry["candidate_column"] = row["candidate_column"]
                 pairs.append(entry)
 
         with open(out_base / "ground_truth.json", "w", encoding="utf-8") as fh:
-            json.dump({"task_type": task.upper(), "pairs": pairs},
-                      fh, indent=2, ensure_ascii=False)
+            json.dump(
+                {"task_type": task.upper(), "pairs": pairs},
+                fh,
+                indent=2,
+                ensure_ascii=False,
+            )
 
         n_tables = sum(1 for p in tbl_out.iterdir() if p.is_dir())
         print(
@@ -454,6 +491,7 @@ def prepare_retrieval_bench(skip_existing: bool = False) -> None:
 
 
 # ── 3. Matcher Bench ───────────────────────────────────────────────────────────
+
 
 def prepare_matcher_bench_wikidata() -> None:
     """Build tests/fixtures/matcher_bench/wikidata/ from Wikidata Musicians.
@@ -467,8 +505,8 @@ def prepare_matcher_bench_wikidata() -> None:
     wiki_base = DATASETS / "sm" / "Wikidata" / "Musicians"
 
     for scenario, task_type, sm_scenario in _WIKI_SCENARIOS:
-        folder    = wiki_base / f"Musicians_{scenario}"
-        out_base  = FIXTURES / "matcher_bench" / "wikidata" / scenario
+        folder = wiki_base / f"Musicians_{scenario}"
+        out_base = FIXTURES / "matcher_bench" / "wikidata" / scenario
         out_base.mkdir(parents=True, exist_ok=True)
 
         # column descriptions from metadata.json
@@ -494,7 +532,10 @@ def prepare_matcher_bench_wikidata() -> None:
             role_ids[role] = tid
             role_out = out_base / role / tid
             _save_table(
-                df, role_out, tid, tbl_name,
+                df,
+                role_out,
+                tid,
+                tbl_name,
                 tenant_id="benchmark",
                 source="wikidata",
                 col_descriptions=col_descs.get(tbl_name),
@@ -507,15 +548,17 @@ def prepare_matcher_bench_wikidata() -> None:
             with open(mapping_file, encoding="utf-8") as fh:
                 mapping = json.load(fh)
             gt = {
-                "task_type":        task_type,
-                "scenario":         sm_scenario,
-                "source_table_id":  role_ids.get("source"),
-                "target_table_id":  role_ids.get("target"),
+                "task_type": task_type,
+                "scenario": sm_scenario,
+                "source_table_id": role_ids.get("source"),
+                "target_table_id": role_ids.get("target"),
                 "source_table_name": f"musicians_{scenario}_source",
                 "target_table_name": f"musicians_{scenario}_target",
                 "column_matches": [
-                    {"source_column": m["source_column"],
-                     "target_column": m["target_column"]}
+                    {
+                        "source_column": m["source_column"],
+                        "target_column": m["target_column"],
+                    }
                     for m in mapping["matches"]
                 ],
             }
@@ -536,7 +579,7 @@ def prepare_matcher_bench_mimic() -> None:
     """
     print("\n[matcher_bench/mimic_omop] Processing MIMIC-III → OMOP (SMD) ...")
     data_dir = DATASETS / "sm" / "MIMIC_2_OMOP-main" / "data"
-    out_dir  = FIXTURES / "matcher_bench" / "mimic_omop"
+    out_dir = FIXTURES / "matcher_bench" / "mimic_omop"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     def _parse_schema(csv_path: Path) -> list[dict]:
@@ -556,21 +599,21 @@ def prepare_matcher_bench_mimic() -> None:
                 tables[tname] = {
                     "table_name": tname,
                     "table_desc": str(row.get("TableDesc", "")).strip(),
-                    "columns":    [],
+                    "columns": [],
                 }
             col_entry: dict = {
-                "ordinal":     len(tables[tname]["columns"]),
-                "name":        str(row.get("ColumnName", "")).strip(),
-                "type":        str(row.get("ColumnType", "str")).strip().lower(),
+                "ordinal": len(tables[tname]["columns"]),
+                "name": str(row.get("ColumnName", "")).strip(),
+                "type": str(row.get("ColumnType", "str")).strip().lower(),
                 "description": str(row.get("ColumnDesc", "")).strip() or None,
-                "is_pk":       str(row.get("IsPK", "NO")).strip().upper() == "YES",
-                "is_fk":       str(row.get("IsFK", "NO")).strip().upper() == "YES",
+                "is_pk": str(row.get("IsPK", "NO")).strip().upper() == "YES",
+                "is_fk": str(row.get("IsFK", "NO")).strip().upper() == "YES",
             }
             tables[tname]["columns"].append(col_entry)
         return list(tables.values())
 
     mimic_tables = _parse_schema(data_dir / "MIMIC_III_Schema.csv")
-    omop_tables  = _parse_schema(data_dir / "OMOP_Schema.csv")
+    omop_tables = _parse_schema(data_dir / "OMOP_Schema.csv")
 
     with open(out_dir / "mimic_schema.json", "w", encoding="utf-8") as fh:
         json.dump(mimic_tables, fh, indent=2, ensure_ascii=False)
@@ -583,16 +626,18 @@ def prepare_matcher_bench_mimic() -> None:
     if mapping_df is not None:
         mapping_df.columns = [c.lstrip("\ufeff").strip() for c in mapping_df.columns]
         for _, row in mapping_df.iterrows():
-            pairs.append({
-                "source_table": str(row["SRC_ENT"]).strip(),
-                "source_column": str(row["SRC_ATT"]).strip(),
-                "target_table": str(row["TGT_ENT"]).strip(),
-                "target_column": str(row["TGT_ATT"]).strip(),
-            })
+            pairs.append(
+                {
+                    "source_table": str(row["SRC_ENT"]).strip(),
+                    "source_column": str(row["SRC_ATT"]).strip(),
+                    "target_table": str(row["TGT_ENT"]).strip(),
+                    "target_column": str(row["TGT_ATT"]).strip(),
+                }
+            )
 
     gt = {
         "task_type": "MATCH_ONLY",
-        "scenario":  "SMD",
+        "scenario": "SMD",
         "note": "Schema-only: no Parquet files. Use mimic_schema.json / omop_schema.json as virtual table definitions.",
         "column_matches": pairs,
     }
@@ -607,6 +652,7 @@ def prepare_matcher_bench_mimic() -> None:
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
+
 
 def main() -> None:
     """Entry point with CLI argument parsing."""
