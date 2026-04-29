@@ -109,6 +109,36 @@ def test_filter_and_truncate_candidates() -> None:
     )
 
 
+def test_matcher_verification_uses_opt_in_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from adacascade.agents.matcher import llm_verify
+    from adacascade.llm_schemas import MatchResult
+
+    calls = 0
+
+    def fake_verify_pair(*args: object, **kwargs: object) -> MatchResult:
+        nonlocal calls
+        calls += 1
+        return MatchResult(reasoning="same", score=0.9, is_equivalent=True)
+
+    monkeypatch.setattr(llm_verify, "verify_pair", fake_verify_pair)
+    llm_verify.clear_cache()
+    pairs = [{"src_idx": 0, "tgt_idx": 0, "src_col_id": "src", "tgt_col_id": "tgt"}]
+    source_cols = [_numeric_col("name", "src")]
+    target_cols = [_numeric_col("name", "tgt")]
+
+    first = llm_verify.verify_pairs(
+        pairs, source_cols, target_cols, "SMD", use_cache=True
+    )
+    second = llm_verify.verify_pairs(
+        pairs, source_cols, target_cols, "SMD", use_cache=True
+    )
+
+    assert calls == 1
+    assert first == second
+
+
 def test_decide_and_hungarian_1to1() -> None:
     from adacascade.agents.matcher.decision import decide, hungarian_1to1
 
@@ -192,3 +222,105 @@ async def test_matcher_llm_verification_does_not_block_event_loop(
     assert not task.done()
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.anyio
+async def test_matcher_run_returns_similarity_pairs_for_benchmark(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from adacascade.agents import matcher
+    from adacascade.llm_schemas import MatchResult
+
+    async def fake_verify_pairs_async(
+        pairs: list[dict[str, object]], *args: object, **kwargs: object
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "src_idx": 0,
+                "tgt_idx": 0,
+                "src_col_id": "src",
+                "tgt_col_id": "tgt",
+                "llm_result": MatchResult(
+                    reasoning="same", score=0.9, is_equivalent=True
+                ),
+            }
+        ]
+
+    monkeypatch.setattr(
+        matcher.llm_verify, "verify_pairs_async", fake_verify_pairs_async
+    )
+
+    result = await matcher.run(
+        {
+            "task_id": "",
+            "tenant_id": "default",
+            "task_type": "MATCH_ONLY",
+            "query_profile": {
+                "table_id": "source",
+                "columns": [_numeric_col("name", "src")],
+            },
+            "target_profile": {
+                "table_id": "target",
+                "columns": [_numeric_col("name", "tgt")],
+            },
+            "plan": {},
+            "status": "RUNNING",
+            "degraded": False,
+        }
+    )
+
+    assert len(result["similarity_pairs"]) == 1
+    assert result["similarity_pairs"][0]["src_col_id"] == "src"
+
+
+@pytest.mark.anyio
+async def test_matcher_run_returns_stage_timings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from adacascade.agents import matcher
+    from adacascade.llm_schemas import MatchResult
+
+    async def fake_verify_pairs_async(
+        pairs: list[dict[str, object]], *args: object, **kwargs: object
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                "src_idx": 0,
+                "tgt_idx": 0,
+                "src_col_id": "src",
+                "tgt_col_id": "tgt",
+                "llm_result": MatchResult(
+                    reasoning="same", score=0.9, is_equivalent=True
+                ),
+            }
+        ]
+
+    monkeypatch.setattr(
+        matcher.llm_verify, "verify_pairs_async", fake_verify_pairs_async
+    )
+
+    result = await matcher.run(
+        {
+            "task_id": "",
+            "tenant_id": "default",
+            "task_type": "MATCH_ONLY",
+            "query_profile": {
+                "table_id": "source",
+                "columns": [_numeric_col("name", "src")],
+            },
+            "target_profile": {
+                "table_id": "target",
+                "columns": [_numeric_col("name", "tgt")],
+            },
+            "plan": {},
+            "status": "RUNNING",
+            "degraded": False,
+        }
+    )
+
+    assert set(result["stage_timings_ms"]) == {
+        "candidate_filtering",
+        "llm_verification",
+        "decision",
+    }
+    assert all(value >= 0 for value in result["stage_timings_ms"].values())

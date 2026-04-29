@@ -7,6 +7,7 @@ Returns C₃ = {Tc ∈ C₂ | S₃ > θ₃}.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any, Literal
 
 import structlog
@@ -19,6 +20,33 @@ from adacascade.llm_schemas import L3BatchResult, json_schema_format
 log = structlog.get_logger(__name__)
 
 _BATCH_SIZE = 10  # from configs, single LLM call max candidates
+_cache: dict[str, dict[int, float]] = {}
+
+
+def clear_cache() -> None:
+    _cache.clear()
+
+
+def _cache_key(
+    query_name: str,
+    query_cols: list[dict[str, Any]],
+    batch: list[dict[str, Any]],
+    task_type: Literal["JOIN", "UNION"],
+) -> str:
+    payload = {
+        "query_name": query_name,
+        "query_cols": query_cols,
+        "candidates": [
+            {
+                "table_id": candidate.get("table_id"),
+                "table_name": candidate.get("table_name"),
+                "columns": candidate.get("columns", []),
+            }
+            for candidate in batch
+        ],
+        "task_type": task_type,
+    }
+    return json.dumps(payload, sort_keys=True, default=str)
 
 
 def _build_batch_prompt(
@@ -146,6 +174,7 @@ async def batch_verify(
     task_type: Literal["JOIN", "UNION"],
     theta_3: float,
     batch_size: int = _BATCH_SIZE,
+    use_cache: bool = False,
 ) -> list[dict[str, Any]]:
     """Run LLM batch verification on C₂, return C₃ with S₃ scores.
 
@@ -168,6 +197,9 @@ async def batch_verify(
     offsets = list(range(0, len(c2), batch_size))
 
     async def _call_one(batch: list[dict[str, Any]], offset: int) -> dict[int, float]:
+        cache_key = _cache_key(query_name, query_cols, batch, task_type)
+        if use_cache and cache_key in _cache:
+            return _cache[cache_key]
         messages = _build_batch_prompt(query_name, query_cols, batch, task_type, offset)
         try:
             resp = await asyncio.to_thread(
@@ -180,7 +212,10 @@ async def batch_verify(
             )
             content = resp.choices[0].message.content or "{}"
             try:
-                return _parse_batch_response(content)
+                scores = _parse_batch_response(content)
+                if use_cache:
+                    _cache[cache_key] = scores
+                return scores
             except ValidationError:
                 repair_resp = await asyncio.to_thread(
                     chat,
@@ -190,9 +225,12 @@ async def batch_verify(
                     enable_thinking=False,
                     max_tokens=1024,
                 )
-                return _parse_batch_response(
+                scores = _parse_batch_response(
                     repair_resp.choices[0].message.content or "{}"
                 )
+                if use_cache:
+                    _cache[cache_key] = scores
+                return scores
         except Exception as e:
             log.warning("retrieval.l3.batch_error", error=str(e), offset=offset)
             return {}

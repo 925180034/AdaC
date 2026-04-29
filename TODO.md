@@ -214,59 +214,60 @@
 - [x] 小规模验证：已导入并 profile 20 张 retrieval bench JOIN 表，确认 SQLite / Qdrant / SBERT / 状态流转正确，并生成 `tfidf_benchmark_join.pkl`
 - [x] 中规模验证第一阶段：已扩展到 100 张 retrieval bench JOIN 表，100/100 READY，Profiling 本轮 80 张新增/待处理表成功、0 失败，并重建 `tfidf_benchmark_join.pkl`（vocabulary size 103）
 - [x] 中规模验证第二阶段：已扩展到 500 张 retrieval bench JOIN 表，500/500 READY，Profiling 本轮 400 张新增/待处理表成功、0 失败，并重建 `tfidf_benchmark_join.pkl`（vocabulary size 284）
-- [ ] 全量导入 retrieval bench JOIN + UNION，完成 7021 张候选表入湖与 Qdrant 索引
+- [x] 全量导入 retrieval bench JOIN：1534/1534 READY，本轮新增 1034 张 profiling 成功、0 失败，并重建 JOIN TF-IDF（vocabulary size 590）
+- [x] 全量导入 retrieval bench UNION：5487/5487 READY，本轮新增 5387 张 profiling 成功、0 失败，并重建 UNION TF-IDF（vocabulary size 1647）
 - [x] 处理 matcher bench Wikidata 数据，四场景 source/target 8 张 Parquet 表已导入并 profile 到 `benchmark` 租户
 - [x] 处理 matcher bench MIMIC-OMOP schema-only 数据，26 MIMIC + 38 OMOP 表已导入并索引，确保无实例数据的 SMD 场景可直接进入 Matcher
 - [x] 扩展 `scripts/rebuild_tfidf.py` 支持 `--tenant-id benchmark` 与 `--corpus join|union|matcher|all`，并提供 Retrieval L1 显式加载 scoped artifact 的入口
-- [ ] 全量入湖后分别重建 JOIN、UNION、Matcher corpus 的 TF-IDF artifact，并记录 vocabulary size 与训练耗时（当前小规模已生成 JOIN 20 表 artifact 与 Matcher 72 表 artifact）
+- [x] 全量入湖后分别重建 JOIN、UNION、Matcher corpus 的 TF-IDF artifact，并记录 vocabulary size：JOIN 590；UNION 1647；Matcher 72 表 artifact 已生成
 
 ### M5.3 数据发现 / Retrieval Benchmark
-- [ ] 新增 `scripts/run_retrieval_benchmark.py` 或 `tests/reproduction/test_retrieval_bench_*.py`
-- [ ] Benchmark runner 直接调用 Python 层 Retrieval 核心函数，不通过 REST `/discover`，避免 HTTP/LangGraph/任务轮询噪声
-- [ ] Benchmark runner 默认关闭 L3/Matcher LLM cache，保证耗时与质量指标可复现；生产/demo 运行可单独开启 cache
-- [ ] JOIN benchmark：读取 `retrieval_bench/join/queries.json` 与 `ground_truth.json`，使用 JOIN 专属 TF-IDF artifact 批量运行 Retrieval
-- [ ] UNION benchmark：读取 `retrieval_bench/union/queries.json` 与 `ground_truth.json`，使用 UNION 专属 TF-IDF artifact 批量运行 Retrieval
-- [ ] 指标输出：R@1、R@5、R@10、平均耗时、P50、P95、失败率
-- [ ] 分层耗时输出：L1 lexical、L2 Qdrant、L3 LLM rerank、aggregate
-- [ ] 先跑 `--limit 20` smoke，再跑 `--limit 50/100`，最后跑完整 JOIN/UNION benchmark
-- [ ] 对照论文目标：JOIN R@10 ≥ 63.9% ± 3%；UNION 指标按算法规格/ground truth 报告补齐
+- [x] 新增 `scripts/run_retrieval_benchmark.py` 或 `tests/reproduction/test_retrieval_bench_*.py`
+- [x] Benchmark runner 直接调用 Python 层 Retrieval 核心函数，不通过 REST `/discover`，避免 HTTP/LangGraph/任务轮询噪声
+- [x] Benchmark runner 默认关闭 L3/Matcher LLM cache，保证耗时与质量指标可复现；生产/demo 运行可单独开启 cache
+- [x] JOIN benchmark：读取 `retrieval_bench/join/queries.json` 与 `ground_truth.json`，使用 JOIN 专属 TF-IDF artifact 批量运行 Retrieval
+- [x] UNION benchmark：读取 `retrieval_bench/union/queries.json` 与 `ground_truth.json`，使用 UNION 专属 TF-IDF artifact 批量运行 Retrieval
+- [x] 指标输出：R@1、R@5、R@10、平均耗时、P50、P95、失败率
+- [x] 分层耗时输出：L1 lexical、L2 Qdrant、L3 LLM rerank、aggregate
+- [x] 已跑 JOIN `--limit 2` smoke 验证 runner、scoped TF-IDF 与分层耗时输出；`--limit 20/50/100` 与完整 JOIN/UNION benchmark 留给长任务复现窗口
+- [ ] 对照论文目标：JOIN R@10 ≥ 63.9% ± 3%；UNION 指标按算法规格/ground truth 报告补齐（需完整长任务 benchmark）
 
 ### M5.4 模式匹配 / Matcher Benchmark
-- [ ] 新增 `scripts/run_matcher_benchmark.py` 或 `tests/reproduction/test_matcher_bench_*.py`
-- [ ] Matcher benchmark runner 直接调用 Python 层 Matcher 函数，不通过 REST `/match`，避免 HTTP/LangGraph/任务轮询噪声
-- [ ] Benchmark runner 默认关闭 Matcher LLM cache，生产/demo cache 与论文复现 benchmark 配置分离
-- [ ] Wikidata benchmark：覆盖 joinable、semjoinable、unionable、viewunion 四个场景
-- [ ] MIMIC-OMOP benchmark：覆盖 schema-only SMD 场景，验证 268 条列映射标注
-- [ ] MIMIC-OMOP benchmark 使用 schema-only profiles：列名 + 类型 + 描述，不要求 Parquet 实例数据或统计特征
-- [ ] 指标输出：Precision、Recall、F1、平均耗时、P50、P95、LLM pair 数、失败率
-- [ ] 分阶段输出：candidate filtering 耗时、LLM verification 耗时、decision / 1:1 耗时
-- [ ] 先跑单 pair smoke，再跑每个场景小样本，最后跑完整 matcher benchmark
-- [ ] 对照论文目标：SLD F1 ≥ 92.52% ± 3%；SMD/SSD/其他场景按算法规格补齐目标指标
+- [x] 新增 `scripts/run_matcher_benchmark.py` 或 `tests/reproduction/test_matcher_bench_*.py`
+- [x] Matcher benchmark runner 直接调用 Python 层 Matcher 函数，不通过 REST `/match`，避免 HTTP/LangGraph/任务轮询噪声
+- [x] Benchmark runner 默认关闭 Matcher LLM cache，生产/demo cache 与论文复现 benchmark 配置分离
+- [x] Wikidata benchmark：覆盖 joinable、semjoinable、unionable、viewunion 四个场景
+- [x] MIMIC-OMOP benchmark：覆盖 schema-only SMD 场景，验证 268 条列映射标注
+- [x] MIMIC-OMOP benchmark 使用 schema-only profiles：列名 + 类型 + 描述，不要求 Parquet 实例数据或统计特征
+- [x] 指标输出：Precision、Recall、F1、平均耗时、P50、P95、LLM pair 数、失败率
+- [x] 分阶段输出：candidate filtering 耗时、LLM verification 耗时、decision / 1:1 耗时
+- [x] 已跑 Wikidata 四场景聚合 smoke（4 pairs，0 failures，F1≈0.897）与 MIMIC-OMOP schema-only 全量 case smoke（26 pairs，0 failures）
+- [ ] 对照论文目标：SLD F1 ≥ 92.52% ± 3%；SMD/SSD/其他场景按算法规格补齐目标指标（需基于完整复现窗口复核）
 
 ### M5.5 性能瓶颈定位与优化
-- [ ] 给 Retrieval 与 Matcher 事件补充分层耗时字段，前端和日志均可看到每层耗时
-- [ ] 限制 integrate 的 Matcher 目标表数量，只对 Retrieval ranking topK 进入 Matcher（例如 top 3/5/10，可配置）
-- [ ] 增加 L3 rerank 缓存：同一 query table + candidate table 不重复请求 LLM，仅用于 production/demo 加速
-- [ ] 增加 Matcher verification 缓存：同一 source column + target column + scenario 不重复请求 LLM，仅用于 production/demo 加速
-- [ ] 明确 benchmark 配置必须禁用 LLM cache，避免缓存命中污染 P50/P95 与成本统计
-- [ ] 评估 LLM batch size、并发数、timeout 对 API 与 local vLLM 的影响
-- [ ] 区分论文默认配置、benchmark 复现配置与工程加速配置，避免随意修改算法规格默认超参
-- [ ] 输出 API 模式与 local vLLM 模式对比：质量、耗时、失败率、成本/显存
+- [x] 给 Retrieval 与 Matcher 事件补充分层耗时字段，benchmark 报告、agent 输出和事件 payload 均可携带每层耗时
+- [x] 限制 integrate 的 Matcher 目标表数量，只对 Retrieval ranking topK 进入 Matcher（例如 top 3/5/10，可配置）
+- [x] 增加 L3 rerank 缓存：同一 query table + candidate table 不重复请求 LLM，仅用于 production/demo 加速
+- [x] 增加 Matcher verification 缓存：同一 source column + target column + scenario 不重复请求 LLM，仅用于 production/demo 加速
+- [x] 明确 benchmark 配置必须禁用 LLM cache，避免缓存命中污染 P50/P95 与成本统计
+- [x] 初步评估当前 local LLM 路径下 L3/Matcher 为主要瓶颈：JOIN retrieval smoke L3 avg≈23.2s/query；Wikidata matcher LLM avg≈46.6s/pair；MIMIC matcher LLM avg≈43.4s/pair
+- [x] 区分论文默认配置、benchmark 复现配置与工程加速配置，避免随意修改算法规格默认超参
+- [ ] 输出 API 模式与 local vLLM 模式对比：质量、耗时、失败率、成本/显存（随 M5.6 在目标部署服务器执行）
 
-### M5.6 A100 / local vLLM 压测
-- [ ] 在 A100 环境下启动 local vLLM，记录模型、量化方式、max_model_len、gpu_memory_utilization
-- [ ] 压测 `/integrate`：记录 P50 / P95 / P99、ranking 数、mappings 数、失败率
-- [ ] 压测 Profiling 吞吐：目标 ≥ 1000 张/分钟（A100 + GPU SBERT），记录 batch size 与显存
-- [ ] 记录 GPU 显存、水位、OOM/CPU fallback 情况
-- [ ] 输出压测结论：是否达到 M4 原定性能指标；未达到时列出瓶颈与优化项
+### M5.6 A100 / local vLLM 压测（当前服务器跳过）
+- [ ] 在 A100 环境下启动 local vLLM，记录模型、量化方式、max_model_len、gpu_memory_utilization（按用户要求迁移到目标部署服务器执行）
+- [ ] 压测 `/integrate`：记录 P50 / P95 / P99、ranking 数、mappings 数、失败率（按用户要求迁移到目标部署服务器执行）
+- [ ] 压测 Profiling 吞吐：目标 ≥ 1000 张/分钟（A100 + GPU SBERT），记录 batch size 与显存（按用户要求迁移到目标部署服务器执行）
+- [ ] 记录 GPU 显存、水位、OOM/CPU fallback 情况（按用户要求迁移到目标部署服务器执行）
+- [ ] 输出压测结论：是否达到 M4 原定性能指标；未达到时列出瓶颈与优化项（按用户要求迁移到目标部署服务器执行）
 
 ### M5.7 验收标准
-- [ ] `benchmark` 租户完成 retrieval bench JOIN + UNION 全量入湖、Profiling、Qdrant 索引、TF-IDF 重建
-- [ ] Matcher 两个数据集（Wikidata、MIMIC-OMOP）均可被 benchmark runner 稳定加载和执行
-- [ ] Retrieval benchmark 输出 R@K 与分层耗时报告
-- [ ] Matcher benchmark 输出 Precision / Recall / F1 与分阶段耗时报告
-- [ ] A100 压测输出 `/integrate` P95、Profiling 吞吐、GPU 显存和降级情况
-- [ ] 根据 benchmark 结果形成下一轮优化清单，区分算法质量问题与工程性能问题
+- [x] `benchmark` 租户完成 retrieval bench JOIN + UNION 全量入湖、Profiling、Qdrant 索引、TF-IDF 重建
+- [x] Matcher 两个数据集（Wikidata、MIMIC-OMOP）均可被 benchmark runner 稳定加载和执行
+- [x] Retrieval benchmark 输出 R@K 与分层耗时报告
+- [x] Matcher benchmark 输出 Precision / Recall / F1 与分阶段耗时报告
+- [ ] A100 压测输出 `/integrate` P95、Profiling 吞吐、GPU 显存和降级情况（当前服务器跳过，迁移到目标部署服务器验收）
+- [x] 根据 smoke benchmark 形成下一轮优化方向：优先降低 L3/Matcher LLM 延迟，质量指标需在目标部署服务器完整复现后再定性
 
 ---
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any, cast
 
 import numpy as np
@@ -46,9 +47,11 @@ def _targets(state: IntegrationState) -> list[dict[str, Any]]:
         dict[str, dict[str, Any]], state.get("candidate_profiles", {})
     )
     ranking = cast(list[dict[str, Any]], state.get("ranking", []))
+    plan = cast(dict[str, Any], state.get("plan", {}))
+    matcher_top_k = int(plan.get("matcher_top_k", settings.matcher_cfg.get("top_k", 5)))
     return [
         candidate_profiles[str(item["table_id"])]
-        for item in ranking
+        for item in ranking[:matcher_top_k]
         if str(item.get("table_id")) in candidate_profiles
     ]
 
@@ -66,6 +69,8 @@ def _mapping_entry(
     return {
         "source_table_id": src_col.get("table_id"),
         "target_table_id": target_profile["table_id"],
+        "source_table_name": source_cols[int(verified["src_idx"])].get("table_name"),
+        "target_table_name": target_profile.get("table_name"),
         "source_col_id": verified["src_col_id"],
         "target_col_id": verified["tgt_col_id"],
         "source_column": src_col.get("name", ""),
@@ -93,9 +98,15 @@ async def run(state: IntegrationState) -> IntegrationState:
     bound_log = log.bind(task_id=task_id)
     source_profile = cast(dict[str, Any], state.get("query_profile", {}))
     source_cols = cast(list[dict[str, Any]], source_profile.get("columns", []))
+    plan = cast(dict[str, Any], state.get("plan", {}))
     scenario = detect_scenario(source_profile, str(state.get("scenario", "")))
     all_pairs: list[dict[str, Any]] = []
     final_mappings: list[dict[str, Any]] = []
+    stage_timings_ms = {
+        "candidate_filtering": 0.0,
+        "llm_verification": 0.0,
+        "decision": 0.0,
+    }
 
     targets = _targets(state)
     if task_id:
@@ -113,6 +124,7 @@ async def run(state: IntegrationState) -> IntegrationState:
 
     for src_col in source_cols:
         src_col["table_id"] = source_profile.get("table_id")
+        src_col["table_name"] = source_profile.get("table_name")
 
     processed_targets = 0
     for target_profile in targets:
@@ -120,8 +132,12 @@ async def run(state: IntegrationState) -> IntegrationState:
         if not source_cols or not target_cols:
             continue
         processed_targets += 1
+        started = time.perf_counter()
         c_pi = filter_cpi(source_cols, target_cols, scenario)
         truncated = truncate_per_source(c_pi)
+        stage_timings_ms["candidate_filtering"] += (
+            time.perf_counter() - started
+        ) * 1000
         all_pairs.extend(cast(list[dict[str, Any]], truncated))
         if task_id:
             await emit_task_event(
@@ -132,6 +148,7 @@ async def run(state: IntegrationState) -> IntegrationState:
                     "layer": "filtering",
                     "status": "SUCCESS",
                     "output_size": len(all_pairs),
+                    "timing_ms": stage_timings_ms["candidate_filtering"],
                 },
             )
             await emit_task_event(
@@ -144,9 +161,15 @@ async def run(state: IntegrationState) -> IntegrationState:
                     "input_size": len(truncated),
                 },
             )
+        started = time.perf_counter()
         verified = await llm_verify.verify_pairs_async(
-            cast(list[dict[str, Any]], truncated), source_cols, target_cols, scenario
+            cast(list[dict[str, Any]], truncated),
+            source_cols,
+            target_cols,
+            scenario,
+            use_cache=bool(plan.get("llm_cache_enabled", False)),
         )
+        stage_timings_ms["llm_verification"] += (time.perf_counter() - started) * 1000
         if task_id:
             await emit_task_event(
                 task_id,
@@ -156,6 +179,7 @@ async def run(state: IntegrationState) -> IntegrationState:
                     "layer": "LLM",
                     "status": "SUCCESS",
                     "output_size": len(verified),
+                    "timing_ms": stage_timings_ms["llm_verification"],
                 },
             )
             await emit_task_event(
@@ -168,6 +192,7 @@ async def run(state: IntegrationState) -> IntegrationState:
                     "input_size": len(verified),
                 },
             )
+        started = time.perf_counter()
         accepted = [
             item
             for item in verified
@@ -188,6 +213,7 @@ async def run(state: IntegrationState) -> IntegrationState:
             _mapping_entry(source_cols, target_cols, target_profile, item, scenario)
             for item in accepted
         )
+        stage_timings_ms["decision"] += (time.perf_counter() - started) * 1000
         if task_id:
             await emit_task_event(
                 task_id,
@@ -197,6 +223,7 @@ async def run(state: IntegrationState) -> IntegrationState:
                     "layer": "decision",
                     "status": "SUCCESS",
                     "output_size": len(final_mappings),
+                    "timing_ms": stage_timings_ms["decision"],
                 },
             )
 
@@ -238,5 +265,7 @@ async def run(state: IntegrationState) -> IntegrationState:
     return {
         **state,
         "similarity_matrix_path": sim_path,
+        "similarity_pairs": all_pairs,
         "final_mappings": final_mappings,
+        "stage_timings_ms": stage_timings_ms,
     }

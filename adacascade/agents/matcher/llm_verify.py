@@ -3,11 +3,35 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 from adacascade import llm_client
 from adacascade.llm_schemas import MatchResult, json_schema_format
 from adacascade.agents.matcher.mixed import Scenario
+
+_cache: dict[str, MatchResult] = {}
+
+
+def clear_cache() -> None:
+    _cache.clear()
+
+
+def _cache_key(
+    src_col: dict[str, Any],
+    tgt_col: dict[str, Any],
+    component_scores: dict[str, float],
+    scenario: Scenario,
+) -> str:
+    payload = {
+        "src_col_id": src_col.get("col_id"),
+        "src_name": src_col.get("name"),
+        "tgt_col_id": tgt_col.get("col_id"),
+        "tgt_name": tgt_col.get("name"),
+        "component_scores": component_scores,
+        "scenario": scenario,
+    }
+    return json.dumps(payload, sort_keys=True, default=str)
 
 
 def _field(col: dict[str, Any], key: str, default: Any = "") -> Any:
@@ -122,6 +146,8 @@ def _verify_pair_entry(
     source_cols: list[dict[str, Any]],
     target_cols: list[dict[str, Any]],
     scenario: Scenario,
+    *,
+    use_cache: bool = False,
 ) -> dict[str, Any]:
     """Verify one candidate pair and attach the LLM decision."""
     src_col = source_cols[int(pair["src_idx"])]
@@ -132,7 +158,13 @@ def _verify_pair_entry(
         "sim_stat": float(pair.get("sim_stat", 0.0)),
         "m_score": float(pair.get("m_score", 0.0)),
     }
-    decision = verify_pair(src_col, tgt_col, scores, scenario)
+    cache_key = _cache_key(src_col, tgt_col, scores, scenario)
+    if use_cache and cache_key in _cache:
+        decision = _cache[cache_key]
+    else:
+        decision = verify_pair(src_col, tgt_col, scores, scenario)
+        if use_cache:
+            _cache[cache_key] = decision
     return {**pair, "llm_result": decision}
 
 
@@ -141,10 +173,15 @@ def verify_pairs(
     source_cols: list[dict[str, Any]],
     target_cols: list[dict[str, Any]],
     scenario: Scenario,
+    *,
+    use_cache: bool = False,
 ) -> list[dict[str, Any]]:
     """Verify candidate pairs sequentially and attach LLM decisions."""
     return [
-        _verify_pair_entry(pair, source_cols, target_cols, scenario) for pair in pairs
+        _verify_pair_entry(
+            pair, source_cols, target_cols, scenario, use_cache=use_cache
+        )
+        for pair in pairs
     ]
 
 
@@ -154,6 +191,8 @@ async def verify_pairs_async(
     target_cols: list[dict[str, Any]],
     scenario: Scenario,
     concurrency: int = 4,
+    *,
+    use_cache: bool = False,
 ) -> list[dict[str, Any]]:
     """Verify candidate pairs concurrently without blocking the event loop."""
     semaphore = asyncio.Semaphore(concurrency)
@@ -161,7 +200,12 @@ async def verify_pairs_async(
     async def _run(pair: dict[str, Any]) -> dict[str, Any]:
         async with semaphore:
             return await asyncio.to_thread(
-                _verify_pair_entry, pair, source_cols, target_cols, scenario
+                _verify_pair_entry,
+                pair,
+                source_cols,
+                target_cols,
+                scenario,
+                use_cache=use_cache,
             )
 
     return list(await asyncio.gather(*(_run(pair) for pair in pairs)))

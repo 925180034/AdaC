@@ -98,7 +98,13 @@ def type_jaccard(types_q: list[str], types_c: list[str]) -> float:
     return inter / union if union else 0.0
 
 
-def tfidf_cosine(blob_q: str, blob_c: str) -> float:
+def tfidf_cosine(
+    blob_q: str,
+    blob_c: str,
+    *,
+    tenant_id: str | None = None,
+    corpus: str = "all",
+) -> float:
     """Cosine similarity between two text blobs via TF-IDF (formula 3-4).
 
     Args:
@@ -108,7 +114,7 @@ def tfidf_cosine(blob_q: str, blob_c: str) -> float:
     Returns:
         Cosine similarity in [0, 1].
     """
-    vec = _load_tfidf()
+    vec = load_tfidf(tenant_id=tenant_id, corpus=corpus)
     vq = vec.transform([blob_q])
     vc = vec.transform([blob_c])
     sim: float = float(cosine_similarity(vq, vc)[0, 0])
@@ -121,6 +127,9 @@ def build_c1(
     candidates: list[dict[str, Any]],
     theta_1: float,
     k_1: int,
+    *,
+    tenant_id: str | None = None,
+    corpus: str = "all",
 ) -> list[C1Entry]:
     """Build C₁ = TopK({Tc | S1 > θ1}, k1) using a min-heap (formula 3-6).
 
@@ -134,7 +143,7 @@ def build_c1(
     Returns:
         List of C1Entry dicts ``{table_id, s1}`` sorted by s1 descending.
     """
-    vec = _load_tfidf()
+    vec = load_tfidf(tenant_id=tenant_id, corpus=corpus)
     vq = vec.transform([query_blob])
 
     heap: list[tuple[float, str]] = []  # (s1, table_id) min-heap
