@@ -13,14 +13,17 @@ export type WorkspaceToolbarCopy = {
   localModel: string
   apiModel: string
   runtimeSwitching: string
+  runtimeLoadError: string
+  runtimeSwitchError: string
 }
 
 type WorkspaceToolbarProps = {
   copy: WorkspaceToolbarCopy
   language: Language
   theme: ThemeMode
-  runtimeBackend: RuntimeBackend
+  runtimeBackend: RuntimeBackend | null
   isRuntimePending: boolean
+  pendingRuntimeBackend?: RuntimeBackend | null
   isRunning: boolean
   isThemeDisabled?: boolean
   isRuntimeDisabled?: boolean
@@ -39,6 +42,7 @@ export function WorkspaceToolbar({
   theme,
   runtimeBackend,
   isRuntimePending,
+  pendingRuntimeBackend = null,
   isRunning,
   isThemeDisabled = false,
   isRuntimeDisabled = false,
@@ -46,7 +50,7 @@ export function WorkspaceToolbar({
   onThemeChange,
   onRuntimeBackendChange,
 }: WorkspaceToolbarProps) {
-  const runtimeDisabled = isRuntimeDisabled || isRunning || isRuntimePending
+  const runtimeDisabled = isRuntimeDisabled || isRunning || isRuntimePending || runtimeBackend === null
 
   return (
     <aside className="workspace-toolbar" aria-label={copy.preferencesLabel}>
@@ -98,7 +102,7 @@ export function WorkspaceToolbar({
           onClick={() => onRuntimeBackendChange('local')}
           disabled={runtimeDisabled}
         >
-          {copy.localModel}
+          {isRuntimePending && pendingRuntimeBackend === 'local' ? copy.runtimeSwitching : copy.localModel}
         </button>
         <button
           className={selectedClass(runtimeBackend === 'api')}
@@ -107,7 +111,7 @@ export function WorkspaceToolbar({
           onClick={() => onRuntimeBackendChange('api')}
           disabled={runtimeDisabled}
         >
-          {isRuntimePending ? copy.runtimeSwitching : copy.apiModel}
+          {isRuntimePending && pendingRuntimeBackend === 'api' ? copy.runtimeSwitching : copy.apiModel}
         </button>
       </div>
     </aside>

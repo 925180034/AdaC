@@ -20,6 +20,8 @@ export type WorkspaceCopy = {
     localModel: string
     apiModel: string
     runtimeSwitching: string
+    runtimeLoadError: string
+    runtimeSwitchError: string
   }
   control: {
     kicker: string
@@ -100,6 +102,8 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       localModel: 'Local model',
       apiModel: 'API model',
       runtimeSwitching: 'Switching…',
+      runtimeLoadError: 'Runtime status is unavailable. Switching is disabled until it can be loaded.',
+      runtimeSwitchError: 'Runtime switch failed. The previous backend is still selected.',
     },
     control: {
       kicker: 'Launch vector',
@@ -212,6 +216,8 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       localModel: '本地模型',
       apiModel: 'API 模型',
       runtimeSwitching: '切换中…',
+      runtimeLoadError: '运行时状态不可用。加载成功前无法切换。',
+      runtimeSwitchError: '运行时切换失败，仍保留之前的后端。',
     },
     control: {
       kicker: '启动入口',

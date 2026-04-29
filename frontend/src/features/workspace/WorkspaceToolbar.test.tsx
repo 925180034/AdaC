@@ -14,6 +14,8 @@ const copy = {
   localModel: 'Local vLLM',
   apiModel: 'DeepSeek API',
   runtimeSwitching: 'Switching runtime…',
+  runtimeLoadError: 'Runtime status is unavailable.',
+  runtimeSwitchError: 'Runtime switch failed.',
 }
 
 describe('WorkspaceToolbar', () => {
@@ -119,6 +121,25 @@ describe('WorkspaceToolbar', () => {
     expect(onThemeChange).not.toHaveBeenCalled()
   })
 
+  it('shows no selected runtime button when backend is unknown', () => {
+    render(
+      <WorkspaceToolbar
+        copy={copy}
+        language="en"
+        theme="light"
+        runtimeBackend={null}
+        isRuntimePending={false}
+        isRunning={false}
+        onLanguageChange={vi.fn()}
+        onThemeChange={vi.fn()}
+        onRuntimeBackendChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Local vLLM', pressed: false })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'DeepSeek API', pressed: false })).toBeDisabled()
+  })
+
   it('disables runtime buttons when runtime controls are disabled', () => {
     const onRuntimeBackendChange = vi.fn()
 
@@ -178,6 +199,26 @@ describe('WorkspaceToolbar', () => {
     expect(onRuntimeBackendChange).not.toHaveBeenCalled()
   })
 
+  it('shows pending text on the targeted runtime while runtime change is pending', () => {
+    render(
+      <WorkspaceToolbar
+        copy={copy}
+        language="en"
+        theme="light"
+        runtimeBackend="api"
+        isRuntimePending={true}
+        pendingRuntimeBackend="local"
+        isRunning={false}
+        onLanguageChange={vi.fn()}
+        onThemeChange={vi.fn()}
+        onRuntimeBackendChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Switching runtime…', pressed: false })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'DeepSeek API', pressed: true })).toBeDisabled()
+  })
+
   it('disables both runtime switch buttons while runtime change is pending', () => {
     const onRuntimeBackendChange = vi.fn()
 
@@ -196,7 +237,7 @@ describe('WorkspaceToolbar', () => {
     )
 
     const localButton = screen.getByRole('button', { name: 'Local vLLM', pressed: false })
-    const apiButton = screen.getByRole('button', { name: 'Switching runtime…', pressed: true })
+    const apiButton = screen.getByRole('button', { name: 'DeepSeek API', pressed: true })
 
     expect(localButton).toBeDisabled()
     expect(apiButton).toBeDisabled()

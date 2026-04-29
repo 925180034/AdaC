@@ -52,6 +52,8 @@ export function WorkspacePage() {
   const [sourceTableId, setSourceTableId] = useState(() => getSearchParam(params, 'source_table_id', ''))
   const [targetTableId, setTargetTableId] = useState(() => getSearchParam(params, 'target_table_id', ''))
   const [streamError, setStreamError] = useState<string | null>(null)
+  const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const [pendingRuntimeBackend, setPendingRuntimeBackend] = useState<RuntimeBackend | null>(null)
   const [language, setLanguage] = useState(readLanguage)
   const theme = 'light'
   const copy = getWorkspaceCopy(language)
@@ -64,11 +66,22 @@ export function WorkspacePage() {
 
   const runtimeMutation = useMutation({
     mutationFn: (backend: RuntimeBackend) => updateLlmRuntime(tenantId, backend),
+    onMutate: (backend) => {
+      setRuntimeError(null)
+      setPendingRuntimeBackend(backend)
+    },
     onSuccess: (runtime) => {
       queryClient.setQueryData(['llm-runtime', tenantId], runtime)
     },
+    onError: () => {
+      setRuntimeError(copy.toolbar.runtimeSwitchError)
+    },
+    onSettled: () => {
+      setPendingRuntimeBackend(null)
+    },
   })
-  const runtimeBackend = runtimeQuery.data?.backend ?? 'local'
+  const runtimeBackend = runtimeQuery.data?.backend ?? null
+  const runtimeQueryError = runtimeQuery.isError ? copy.toolbar.runtimeLoadError : null
 
   const tablesQuery = useQuery({
     queryKey: ['tables', tenantId],
@@ -157,10 +170,10 @@ export function WorkspacePage() {
 
   const handleRuntimeBackendChange = useCallback(
     (backend: RuntimeBackend) => {
-      if (!runtimeQuery.data || isRunning || runtimeMutation.isPending || backend === runtimeBackend) return
+      if (runtimeBackend === null || isRunning || runtimeMutation.isPending || backend === runtimeBackend) return
       runtimeMutation.mutate(backend)
     },
-    [isRunning, runtimeBackend, runtimeMutation, runtimeQuery.data],
+    [isRunning, runtimeBackend, runtimeMutation],
   )
 
   const ignorePendingThemeChange = useCallback(() => undefined, [])
@@ -183,13 +196,20 @@ export function WorkspacePage() {
         theme={theme}
         runtimeBackend={runtimeBackend}
         isRuntimePending={runtimeMutation.isPending}
+        pendingRuntimeBackend={pendingRuntimeBackend}
         isRunning={isRunning}
         isThemeDisabled={true}
-        isRuntimeDisabled={!runtimeQuery.data}
+        isRuntimeDisabled={runtimeBackend === null}
         onLanguageChange={handleLanguageChange}
         onThemeChange={ignorePendingThemeChange}
         onRuntimeBackendChange={handleRuntimeBackendChange}
       />
+
+      {(runtimeQueryError || runtimeError) && (
+        <p className="workspace-status workspace-status--error" role="alert">
+          {runtimeQueryError ?? runtimeError}
+        </p>
+      )}
 
       <div className="workspace-grid">
         <TaskControlPanel

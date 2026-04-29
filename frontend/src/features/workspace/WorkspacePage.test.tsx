@@ -130,6 +130,30 @@ describe('WorkspacePage', () => {
     expect(screen.getByLabelText('本地演示安全提醒')).toHaveTextContent('本地演示环境')
   })
 
+  it('keeps runtime controls disabled and unselected while runtime info is loading', async () => {
+    const runtimeInfo = deferred<LlmRuntimeInfo>()
+    vi.mocked(getLlmRuntime).mockReturnValue(runtimeInfo.promise)
+    renderWorkspace()
+
+    expect(await screen.findByRole('heading', { name: 'AdaCascade Workbench' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Local model', pressed: false })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'API model', pressed: false })).toBeDisabled()
+
+    runtimeInfo.resolve(localRuntime)
+    expect(await screen.findByRole('button', { name: 'Local model', pressed: true })).toBeEnabled()
+  })
+
+  it('shows runtime query errors with disabled and unselected runtime controls', async () => {
+    vi.mocked(getLlmRuntime).mockRejectedValue(new Error('Runtime unavailable'))
+    renderWorkspace()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Runtime status is unavailable. Switching is disabled until it can be loaded.',
+    )
+    expect(screen.getByRole('button', { name: 'Local model', pressed: false })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'API model', pressed: false })).toBeDisabled()
+  })
+
   it('fetches runtime info on load and displays the selected backend', async () => {
     vi.mocked(getLlmRuntime).mockResolvedValue(apiRuntime)
     renderWorkspace()
@@ -169,6 +193,22 @@ describe('WorkspacePage', () => {
     expect(await screen.findByRole('button', { name: 'API model', pressed: true })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Local model', pressed: false })).toBeEnabled()
     expect(window.localStorage.getItem('adacascade.runtimeBackend')).toBeNull()
+  })
+
+  it('shows a runtime mutation error and preserves the previous selected backend', async () => {
+    const user = userEvent.setup()
+    vi.mocked(updateLlmRuntime).mockRejectedValue(new Error('Switch failed'))
+    renderWorkspace()
+
+    const apiButton = await screen.findByRole('button', { name: 'API model', pressed: false })
+    await user.click(apiButton)
+
+    expect(updateLlmRuntime).toHaveBeenCalledWith('default', 'api')
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Runtime switch failed. The previous backend is still selected.',
+    )
+    expect(screen.getByRole('button', { name: 'Local model', pressed: true })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'API model', pressed: false })).toBeEnabled()
   })
 
   it('disables runtime switching while a task is running', async () => {

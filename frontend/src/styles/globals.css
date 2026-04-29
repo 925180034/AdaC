@@ -154,6 +154,21 @@ h4 {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.workspace-status {
+  max-width: 1880px;
+  margin: 0 auto 1rem;
+  border-radius: 14px;
+  padding: 0.72rem 0.9rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.workspace-status--error {
+  border: 1px solid rgba(255, 93, 115, 0.38);
+  background: rgba(255, 93, 115, 0.08);
+  color: #ffd6d6;
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(18rem, 0.82fr) minmax(31rem, 1.72fr) minmax(21rem, 1fr);
