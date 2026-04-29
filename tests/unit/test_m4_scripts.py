@@ -64,6 +64,73 @@ def test_bulk_ingest_imports_prepared_fixture_manifest(tmp_path: Path) -> None:
     assert columns[1].col_description == "artist name"
 
 
+def test_bulk_ingest_can_override_manifest_tenant(tmp_path: Path) -> None:
+    from scripts.bulk_ingest import import_manifest
+
+    table_dir = tmp_path / "fixtures" / "toy" / "table-1"
+    table_dir.mkdir(parents=True)
+    manifest_path = table_dir / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "table_id": "table-1",
+                "table_name": "Musicians",
+                "tenant_id": "default",
+                "source": "toy_lake",
+                "columns": [{"ordinal": 0, "name": "id", "type": "int"}],
+            }
+        )
+    )
+    db = _session(tmp_path)
+
+    result = import_manifest(
+        db,
+        manifest_path,
+        default_status="INGESTED",
+        tenant_id="benchmark",
+    )
+
+    table = db.query(TableRegistry).one()
+    assert result == "created"
+    assert table.tenant_id == "benchmark"
+
+
+def test_bulk_ingest_rejects_cross_tenant_table_id_collision(tmp_path: Path) -> None:
+    from scripts.bulk_ingest import import_manifest
+
+    table_dir = tmp_path / "fixtures" / "toy" / "table-1"
+    table_dir.mkdir(parents=True)
+    manifest_path = table_dir / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "table_id": "table-1",
+                "table_name": "Musicians",
+                "tenant_id": "default",
+                "source": "toy_lake",
+                "columns": [{"ordinal": 0, "name": "id", "type": "int"}],
+            }
+        )
+    )
+    db = _session(tmp_path)
+    import_manifest(db, manifest_path, default_status="INGESTED")
+
+    try:
+        import_manifest(
+            db,
+            manifest_path,
+            default_status="INGESTED",
+            tenant_id="benchmark",
+            replace=True,
+        )
+    except ValueError as exc:
+        assert "already exists in tenant default" in str(exc)
+    else:
+        raise AssertionError("expected cross-tenant collision to fail")
+
+    assert db.query(TableRegistry).one().tenant_id == "default"
+
+
 def test_gc_removes_archived_table_records_and_files(tmp_path: Path) -> None:
     from scripts.gc import garbage_collect
 

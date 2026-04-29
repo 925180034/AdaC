@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
@@ -13,6 +14,10 @@ from qdrant_client.models import (
 )
 
 from adacascade.config import settings
+
+
+def _column_point_id(column_id: str) -> str:
+    return str(uuid5(NAMESPACE_URL, f"adacascade:column:{column_id}"))
 
 
 class AdacQdrantClient:
@@ -82,7 +87,7 @@ class AdacQdrantClient:
         """Batch-upsert column-level embeddings into col_embeddings."""
         structs = [
             PointStruct(
-                id=p["column_id"],
+                id=_column_point_id(str(p["column_id"])),
                 vector=p["vector"],
                 payload={
                     "column_id": p["column_id"],

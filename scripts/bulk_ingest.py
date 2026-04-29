@@ -39,10 +39,19 @@ def import_manifest(
     *,
     default_status: str = "INGESTED",
     replace: bool = False,
+    tenant_id: str | None = None,
 ) -> ImportResult:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     table_id = str(manifest["table_id"])
     existing = db.query(TableRegistry).filter_by(table_id=table_id).first()
+    target_tenant = str(
+        tenant_id or manifest.get("tenant_id") or settings.DEFAULT_TENANT_ID
+    )
+    if existing and existing.tenant_id != target_tenant:
+        raise ValueError(
+            f"table_id {table_id} already exists in tenant {existing.tenant_id}; "
+            f"cannot import into tenant {target_tenant}"
+        )
     if existing and not replace:
         return "skipped"
 
@@ -63,7 +72,7 @@ def import_manifest(
         db.add(table)
         result = "created"
 
-    table.tenant_id = str(manifest.get("tenant_id") or settings.DEFAULT_TENANT_ID)
+    table.tenant_id = target_tenant
     table.source_system = source_system
     table.source_uri = source_uri
     table.table_name = str(manifest["table_name"])
@@ -100,6 +109,7 @@ def import_manifests(
     *,
     default_status: str = "INGESTED",
     replace: bool = False,
+    tenant_id: str | None = None,
 ) -> dict[str, int]:
     engine = create_engine(settings.DATABASE_URL)
     Base.metadata.create_all(engine)
@@ -112,6 +122,7 @@ def import_manifests(
                 manifest_path,
                 default_status=default_status,
                 replace=replace,
+                tenant_id=tenant_id,
             )
             summary[result] += 1
     return summary
@@ -130,10 +141,16 @@ def main() -> None:
     parser.add_argument(
         "--replace", action="store_true", help="Update existing table rows"
     )
+    parser.add_argument(
+        "--tenant-id", help="Override manifest tenant_id for all imported tables"
+    )
     args = parser.parse_args()
 
     summary = import_manifests(
-        args.root, default_status=args.status, replace=args.replace
+        args.root,
+        default_status=args.status,
+        replace=args.replace,
+        tenant_id=args.tenant_id,
     )
     print(json.dumps(summary, sort_keys=True))
 

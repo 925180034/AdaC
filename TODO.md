@@ -183,15 +183,95 @@
 - [x] 非 Docker 一键/半自动启动流程可复现：Qdrant binary + FastAPI single worker + 前端公开 demo
 - [x] 前端可完成 discover / match / integrate，并展示中间结果区与四 Agent 步骤高亮
 - [x] API 模式与 local vLLM 模式可通过 UI/API 切换，不依赖手动改 `.env`
-- [ ] local vLLM 模式下 `/integrate` P95 延迟 ≤ 2.8 s（OpenData JOIN，k=10；A100 压测）
-- [ ] Profiling 吞吐 ≥ 1000 张/分钟（A100 + GPU SBERT）
+- [ ] local vLLM 模式下 `/integrate` P95 延迟 ≤ 2.8 s（OpenData JOIN，k=10；A100 压测，迁入 M5 性能专项）
+- [ ] Profiling 吞吐 ≥ 1000 张/分钟（A100 + GPU SBERT，迁入 M5 性能专项）
 - [x] Docker Compose 仅作为后续生产环境可选验收，不阻塞当前 M4
+
+---
+
+## M5 · 全量数据入湖、Benchmark 与性能优化（目标：论文复现 + 大规模可用）
+
+> M4 已完成 demo/运维固化；M5 的目标是把系统从 10 表 toy demo 推进到完整数据集规模，分别完成数据发现（Retrieval/Discovery）与模式匹配（Matcher）两条 benchmark 链路，并基于真实耗时做性能优化。
+
+### M5.1 数据集边界与租户规划
+- [ ] 保留 `default` 租户作为 10 表 toy demo，避免破坏当前前端演示环境
+- [ ] 新建 `benchmark` 租户用于全量数据与论文复现，避免 demo 数据与实验数据混杂
+- [ ] 明确数据发现数据集：`tests/fixtures/retrieval_bench/join/`（1534 表、230 queries、1226 gt pairs）
+- [ ] 明确数据发现数据集：`tests/fixtures/retrieval_bench/union/`（5487 表、823 queries、6512 gt pairs）
+- [ ] 明确模式匹配数据集一：`tests/fixtures/matcher_bench/wikidata/`（Musicians 四场景：joinable / semjoinable / unionable / viewunion）
+- [ ] 明确模式匹配数据集二：`tests/fixtures/matcher_bench/mimic_omop/`（MIMIC-III → OMOP，schema-only SMD，268 列映射标注）
+- [ ] 数据发现 JOIN 与 UNION 使用隔离 corpus / artifact，不共用一个 TF-IDF 模型，避免语料分布互相污染
+- [ ] MIMIC-OMOP schema-only 数据不得走依赖 Parquet 实例的常规 Profiling，必须走专用 SMD schema ingestion 路径
+- [ ] 记录每个数据集的表数、列数、ground truth 数量、任务类型（JOIN/UNION/SMD/SSD/SLD）到 benchmark 报告
+
+### M5.2 全量入湖与 Profiling 批处理
+- [x] 扩展 `scripts/bulk_ingest.py` 支持 `--tenant-id benchmark`，可覆盖 manifest 中 tenant，并拒绝跨租户 `table_id` 碰撞
+- [x] 新增 `scripts/profile_ingested.py`：批量处理有 Parquet 实例数据的 `INGESTED` 表，调用 Profiling → SBERT 编码 → Qdrant upsert → 状态转 `READY`
+- [x] `profile_ingested.py` 支持 `--tenant-id`、`--limit`、`--retry-failed`、`--source-system` 与失败摘要，`--retry-failed` 会先复位为 `INGESTED` 再重跑
+- [x] 新增 schema-only ingestion 路径：读取 MIMIC-OMOP JSON schema，写入 `TableRegistry` / `ColumnMetadata`，用表名、列名、列描述构造可加载 profile
+- [x] schema-only SMD 路径跳过实例统计特征：`numeric_stats=None`、`categorical_stats=None`、`sample_values=[]`，但保留 `col_type` 与 description
+- [x] schema-only SMD 路径仍需生成 SBERT 表/列向量并 upsert Qdrant，保证可被 Matcher benchmark 与可选检索调试加载
+- [x] 小规模验证：已导入并 profile 20 张 retrieval bench JOIN 表，确认 SQLite / Qdrant / SBERT / 状态流转正确，并生成 `tfidf_benchmark_join.pkl`
+- [ ] 中规模验证：扩展到 100 / 500 张表，记录单表 Profiling 平均耗时、失败率、GPU 显存
+- [ ] 全量导入 retrieval bench JOIN + UNION，完成 7021 张候选表入湖与 Qdrant 索引
+- [ ] 处理 matcher bench Wikidata 数据，确保 source/target 表均可被 direct Python benchmark runner 加载
+- [ ] 处理 matcher bench MIMIC-OMOP schema-only 数据，确保无实例数据的 SMD 场景可直接进入 Matcher
+- [x] 扩展 `scripts/rebuild_tfidf.py` 支持 `--tenant-id benchmark` 与 `--corpus join|union|matcher|all`，并提供 Retrieval L1 显式加载 scoped artifact 的入口
+- [ ] 全量入湖后分别重建 JOIN、UNION、Matcher corpus 的 TF-IDF artifact，并记录 vocabulary size 与训练耗时
+
+### M5.3 数据发现 / Retrieval Benchmark
+- [ ] 新增 `scripts/run_retrieval_benchmark.py` 或 `tests/reproduction/test_retrieval_bench_*.py`
+- [ ] Benchmark runner 直接调用 Python 层 Retrieval 核心函数，不通过 REST `/discover`，避免 HTTP/LangGraph/任务轮询噪声
+- [ ] Benchmark runner 默认关闭 L3/Matcher LLM cache，保证耗时与质量指标可复现；生产/demo 运行可单独开启 cache
+- [ ] JOIN benchmark：读取 `retrieval_bench/join/queries.json` 与 `ground_truth.json`，使用 JOIN 专属 TF-IDF artifact 批量运行 Retrieval
+- [ ] UNION benchmark：读取 `retrieval_bench/union/queries.json` 与 `ground_truth.json`，使用 UNION 专属 TF-IDF artifact 批量运行 Retrieval
+- [ ] 指标输出：R@1、R@5、R@10、平均耗时、P50、P95、失败率
+- [ ] 分层耗时输出：L1 lexical、L2 Qdrant、L3 LLM rerank、aggregate
+- [ ] 先跑 `--limit 20` smoke，再跑 `--limit 50/100`，最后跑完整 JOIN/UNION benchmark
+- [ ] 对照论文目标：JOIN R@10 ≥ 63.9% ± 3%；UNION 指标按算法规格/ground truth 报告补齐
+
+### M5.4 模式匹配 / Matcher Benchmark
+- [ ] 新增 `scripts/run_matcher_benchmark.py` 或 `tests/reproduction/test_matcher_bench_*.py`
+- [ ] Matcher benchmark runner 直接调用 Python 层 Matcher 函数，不通过 REST `/match`，避免 HTTP/LangGraph/任务轮询噪声
+- [ ] Benchmark runner 默认关闭 Matcher LLM cache，生产/demo cache 与论文复现 benchmark 配置分离
+- [ ] Wikidata benchmark：覆盖 joinable、semjoinable、unionable、viewunion 四个场景
+- [ ] MIMIC-OMOP benchmark：覆盖 schema-only SMD 场景，验证 268 条列映射标注
+- [ ] MIMIC-OMOP benchmark 使用 schema-only profiles：列名 + 类型 + 描述，不要求 Parquet 实例数据或统计特征
+- [ ] 指标输出：Precision、Recall、F1、平均耗时、P50、P95、LLM pair 数、失败率
+- [ ] 分阶段输出：candidate filtering 耗时、LLM verification 耗时、decision / 1:1 耗时
+- [ ] 先跑单 pair smoke，再跑每个场景小样本，最后跑完整 matcher benchmark
+- [ ] 对照论文目标：SLD F1 ≥ 92.52% ± 3%；SMD/SSD/其他场景按算法规格补齐目标指标
+
+### M5.5 性能瓶颈定位与优化
+- [ ] 给 Retrieval 与 Matcher 事件补充分层耗时字段，前端和日志均可看到每层耗时
+- [ ] 限制 integrate 的 Matcher 目标表数量，只对 Retrieval ranking topK 进入 Matcher（例如 top 3/5/10，可配置）
+- [ ] 增加 L3 rerank 缓存：同一 query table + candidate table 不重复请求 LLM，仅用于 production/demo 加速
+- [ ] 增加 Matcher verification 缓存：同一 source column + target column + scenario 不重复请求 LLM，仅用于 production/demo 加速
+- [ ] 明确 benchmark 配置必须禁用 LLM cache，避免缓存命中污染 P50/P95 与成本统计
+- [ ] 评估 LLM batch size、并发数、timeout 对 API 与 local vLLM 的影响
+- [ ] 区分论文默认配置、benchmark 复现配置与工程加速配置，避免随意修改算法规格默认超参
+- [ ] 输出 API 模式与 local vLLM 模式对比：质量、耗时、失败率、成本/显存
+
+### M5.6 A100 / local vLLM 压测
+- [ ] 在 A100 环境下启动 local vLLM，记录模型、量化方式、max_model_len、gpu_memory_utilization
+- [ ] 压测 `/integrate`：记录 P50 / P95 / P99、ranking 数、mappings 数、失败率
+- [ ] 压测 Profiling 吞吐：目标 ≥ 1000 张/分钟（A100 + GPU SBERT），记录 batch size 与显存
+- [ ] 记录 GPU 显存、水位、OOM/CPU fallback 情况
+- [ ] 输出压测结论：是否达到 M4 原定性能指标；未达到时列出瓶颈与优化项
+
+### M5.7 验收标准
+- [ ] `benchmark` 租户完成 retrieval bench JOIN + UNION 全量入湖、Profiling、Qdrant 索引、TF-IDF 重建
+- [ ] Matcher 两个数据集（Wikidata、MIMIC-OMOP）均可被 benchmark runner 稳定加载和执行
+- [ ] Retrieval benchmark 输出 R@K 与分层耗时报告
+- [ ] Matcher benchmark 输出 Precision / Recall / F1 与分阶段耗时报告
+- [ ] A100 压测输出 `/integrate` P95、Profiling 吞吐、GPU 显存和降级情况
+- [ ] 根据 benchmark 结果形成下一轮优化清单，区分算法质量问题与工程性能问题
 
 ---
 
 ## 当前状态
 
-**阶段**：✅ M1 完成 → ✅ M2 工程验收完成（Week1/2/3）→ ✅ M3 本地集成完成 → ✅ M3.5 前端演示工作台完成 → ✅ M4 非 Docker 上线/运维固化完成；A100 指标压测与论文复现为后续专项
+**阶段**：✅ M1 完成 → ✅ M2 工程验收完成（Week1/2/3）→ ✅ M3 本地集成完成 → ✅ M3.5 前端演示工作台完成 → ✅ M4 非 Docker 上线/运维固化完成 → 当前准备进入 M5 全量数据入湖、Benchmark 与性能优化
 **最后更新**：2026-04-29
 
 ### M1 完成摘要
@@ -231,9 +311,12 @@
 - M4 维护脚本已补齐：`scripts/bulk_ingest.py`、`scripts/gc.py`、`scripts/rebuild_tfidf.py` 运维入口
 - 最新验证：`pytest tests/unit/ tests/integration/` 74/74 通过；`npm --prefix frontend run test -- --run` 58/58 通过；`ruff check adacascade/ tests/ scripts/` 通过；`mypy --strict adacascade/` 通过
 
-### 后续专项
-- A100/local vLLM 指标压测：`/integrate` P95、Profiling 吞吐、GPU 显存与降级记录
+### 后续专项（M5）
+- 全量数据入湖：retrieval bench JOIN/UNION 进入 `benchmark` 租户并完成 Profiling / Qdrant / TF-IDF
+- 模式匹配数据准备：Wikidata 四场景与 MIMIC-OMOP SMD 数据均纳入 Matcher benchmark runner
 - 论文复现 benchmark：retrieval R@10 与 matcher SLD F1
+- A100/local vLLM 指标压测：`/integrate` P95、Profiling 吞吐、GPU 显存与降级记录
+- 性能优化：分层耗时、Matcher topK 限制、LLM cache、API/local 对比
 - 可选生产打包：Docker Compose / nginx / systemd / tmux 方案文档化
 
 ### 环境备注

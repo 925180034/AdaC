@@ -7,6 +7,7 @@ persisted via save_pkl / load_pkl so that LangGraph checkpoints stay small.
 from __future__ import annotations
 
 import pickle
+import re
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,10 @@ def _artifact_dir(task_id: str) -> Path:
     return d
 
 
+def _safe_artifact_name(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("_") or "artifact"
+
+
 def save_pkl(task_id: str, name: str, obj: Any) -> str:
     """Serialize obj to data/artifacts/{task_id}/{name}.pkl.
 
@@ -31,7 +36,7 @@ def save_pkl(task_id: str, name: str, obj: Any) -> str:
     Returns:
         Absolute path to the saved file (store this in state, not the object).
     """
-    path = _artifact_dir(task_id) / f"{name}.pkl"
+    path = _artifact_dir(task_id) / f"{_safe_artifact_name(name)}.pkl"
     with path.open("wb") as f:
         pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
     return str(path)

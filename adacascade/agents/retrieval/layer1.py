@@ -19,7 +19,7 @@ from adacascade.config import settings
 log = structlog.get_logger(__name__)
 
 _TFIDF_PATH = Path(settings.ARTIFACTS_DIR) / "tfidf.pkl"
-_vectorizer: Any = None
+_vectorizers: dict[str, Any] = {}
 
 
 class C1Entry(TypedDict):
@@ -29,26 +29,41 @@ class C1Entry(TypedDict):
     s1: float
 
 
-def _load_tfidf() -> Any:
-    """Load the TF-IDF vectorizer from disk (cached after first load).
+def _tfidf_path(
+    *,
+    tenant_id: str | None = None,
+    corpus: str = "all",
+    artifacts_dir: Path | None = None,
+) -> Path:
+    root = artifacts_dir or Path(settings.ARTIFACTS_DIR)
+    if corpus == "all" or tenant_id is None:
+        return root / "tfidf.pkl"
+    return root / f"tfidf_{tenant_id}_{corpus}.pkl"
 
-    Returns:
-        A fitted sklearn TfidfVectorizer.
 
-    Raises:
-        FileNotFoundError: If the vectorizer pickle does not exist.
-    """
-    global _vectorizer
-    if _vectorizer is not None:
-        return _vectorizer
-    if not _TFIDF_PATH.exists():
+def load_tfidf(
+    *,
+    tenant_id: str | None = None,
+    corpus: str = "all",
+    artifacts_dir: Path | None = None,
+) -> Any:
+    """Load a fitted TF-IDF vectorizer, optionally scoped by tenant and corpus."""
+    path = _tfidf_path(tenant_id=tenant_id, corpus=corpus, artifacts_dir=artifacts_dir)
+    cache_key = str(path)
+    if cache_key in _vectorizers:
+        return _vectorizers[cache_key]
+    if not path.exists():
         raise FileNotFoundError(
-            f"TF-IDF vectorizer not found at {_TFIDF_PATH}. "
+            f"TF-IDF vectorizer not found at {path}. "
             "Run: python scripts/rebuild_tfidf.py"
         )
-    with _TFIDF_PATH.open("rb") as f:
-        _vectorizer = pickle.load(f)  # noqa: S301
-    return _vectorizer
+    with path.open("rb") as f:
+        _vectorizers[cache_key] = pickle.load(f)  # noqa: S301
+    return _vectorizers[cache_key]
+
+
+def _load_tfidf() -> Any:
+    return load_tfidf()
 
 
 def compute_s1(tfidf_sim: float, jaccard_sim: float) -> float:
