@@ -165,6 +165,10 @@ export function WorkspacePage() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
+
+    return () => {
+      delete document.documentElement.dataset.theme
+    }
   }, [theme])
 
   const handleLanguageChange = useCallback((nextLanguage: Language) => {

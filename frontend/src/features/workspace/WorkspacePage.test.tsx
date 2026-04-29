@@ -180,13 +180,17 @@ describe('WorkspacePage', () => {
     expect(window.localStorage.getItem('adacascade.theme')).toBe('dark')
   })
 
-  it('applies a saved dark theme preference on load', async () => {
+  it('applies a saved dark theme preference on load and cleans up on unmount', async () => {
     window.localStorage.setItem('adacascade.theme', 'dark')
-    renderWorkspace()
+    const { unmount } = renderWorkspace()
 
     expect(await screen.findByRole('heading', { name: 'AdaCascade Workbench' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Dark', pressed: true })).toBeEnabled()
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark')
+
+    unmount()
+
+    expect(document.documentElement).not.toHaveAttribute('data-theme')
   })
 
   it('updates runtime backend through the API client and displays the response backend', async () => {

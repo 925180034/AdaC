@@ -17,6 +17,14 @@
   --violet: #7f6a9a;
   --amber: #b66b1f;
   --red: #b94a3f;
+  --danger-text: #7c211b;
+  --danger-surface: rgba(185, 74, 63, 0.12);
+  --danger-border: rgba(150, 49, 39, 0.42);
+  --run-button-bg: linear-gradient(135deg, #a85c18, #875116);
+  --run-button-fg: #fffaf1;
+  --run-button-border: rgba(103, 58, 18, 0.72);
+  --run-button-hover-border: rgba(79, 124, 74, 0.76);
+  --run-button-shadow: 0 12px 26px rgba(141, 77, 19, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.22);
   --accent-rgb: 182, 107, 31;
   --border-rgb: 125, 91, 56;
   --success-rgb: 79, 124, 74;
@@ -65,6 +73,14 @@
   --violet: #a998bd;
   --amber: #d99a4e;
   --red: #df7d72;
+  --danger-text: #ffd8cf;
+  --danger-surface: rgba(223, 125, 114, 0.13);
+  --danger-border: rgba(223, 125, 114, 0.42);
+  --run-button-bg: linear-gradient(135deg, rgba(217, 154, 78, 0.9), rgba(142, 169, 109, 0.64));
+  --run-button-fg: #17120d;
+  --run-button-border: rgba(239, 182, 106, 0.7);
+  --run-button-hover-border: rgba(142, 169, 109, 0.82);
+  --run-button-shadow: 0 10px 24px rgba(var(--accent-rgb), 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.16);
   --accent-rgb: 217, 154, 78;
   --border-rgb: 232, 183, 112;
   --success-rgb: 142, 169, 109;
@@ -221,9 +237,9 @@ h4 {
 }
 
 .workspace-status--error {
-  border: 1px solid rgba(var(--danger-rgb), 0.38);
-  background: rgba(var(--danger-rgb), 0.08);
-  color: #f8d3c8;
+  border: 1px solid var(--danger-border);
+  background: var(--danger-surface);
+  color: var(--danger-text);
 }
 
 .workspace-toolbar {
@@ -457,22 +473,20 @@ option {
 .run-button {
   width: 100%;
   margin-top: 1rem;
-  border: 1px solid rgba(var(--accent-rgb), 0.56);
+  border: 1px solid var(--run-button-border);
   border-radius: 16px;
   padding: 0.9rem 1rem;
-  background:
-    linear-gradient(135deg, rgba(var(--accent-rgb), 0.24), rgba(var(--success-rgb), 0.16)),
-    rgba(var(--accent-rgb), 0.08);
-  color: #fff8ed;
+  background: var(--run-button-bg);
+  color: var(--run-button-fg);
   cursor: pointer;
   font-weight: 850;
   letter-spacing: 0.02em;
-  box-shadow: 0 10px 24px rgba(var(--accent-rgb), 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  box-shadow: var(--run-button-shadow);
 }
 
 .run-button:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: rgba(var(--success-rgb), 0.72);
+  border-color: var(--run-button-hover-border);
 }
 
 .run-button:disabled {
