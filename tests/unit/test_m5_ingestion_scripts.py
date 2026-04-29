@@ -45,6 +45,19 @@ def test_save_pkl_sanitizes_artifact_name(tmp_path: Path, monkeypatch) -> None:
     assert Path(path).name == "freq_table_0_line_ramp.pkl"
 
 
+def test_qdrant_table_points_use_valid_point_ids() -> None:
+    from qdrant_client.models import PointStruct
+
+    from adacascade.indexing.qdrant_client import _table_point_id
+
+    raw_table_id = "mimic:ADMISSIONS"
+    point_id = _table_point_id(raw_table_id)
+
+    UUID(point_id)
+    PointStruct(id=point_id, vector=[0.1, 0.2], payload={"table_id": raw_table_id})
+    assert point_id == _table_point_id(raw_table_id)
+
+
 def test_qdrant_column_points_use_valid_point_ids() -> None:
     from qdrant_client.models import PointStruct
 

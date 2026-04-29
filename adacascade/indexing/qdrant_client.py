@@ -16,6 +16,10 @@ from qdrant_client.models import (
 from adacascade.config import settings
 
 
+def _table_point_id(table_id: str) -> str:
+    return str(uuid5(NAMESPACE_URL, f"adacascade:table:{table_id}"))
+
+
 def _column_point_id(column_id: str) -> str:
     return str(uuid5(NAMESPACE_URL, f"adacascade:column:{column_id}"))
 
@@ -48,7 +52,7 @@ class AdacQdrantClient:
             payload.update(extra_payload)
         await self._q.upsert(
             collection_name=self._tbl,
-            points=[PointStruct(id=table_id, vector=vector, payload=payload)],
+            points=[PointStruct(id=_table_point_id(table_id), vector=vector, payload=payload)],
         )
 
     async def search_tables(

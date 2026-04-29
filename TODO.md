@@ -194,15 +194,15 @@
 > M4 已完成 demo/运维固化；M5 的目标是把系统从 10 表 toy demo 推进到完整数据集规模，分别完成数据发现（Retrieval/Discovery）与模式匹配（Matcher）两条 benchmark 链路，并基于真实耗时做性能优化。
 
 ### M5.1 数据集边界与租户规划
-- [ ] 保留 `default` 租户作为 10 表 toy demo，避免破坏当前前端演示环境
-- [ ] 新建 `benchmark` 租户用于全量数据与论文复现，避免 demo 数据与实验数据混杂
-- [ ] 明确数据发现数据集：`tests/fixtures/retrieval_bench/join/`（1534 表、230 queries、1226 gt pairs）
-- [ ] 明确数据发现数据集：`tests/fixtures/retrieval_bench/union/`（5487 表、823 queries、6512 gt pairs）
-- [ ] 明确模式匹配数据集一：`tests/fixtures/matcher_bench/wikidata/`（Musicians 四场景：joinable / semjoinable / unionable / viewunion）
-- [ ] 明确模式匹配数据集二：`tests/fixtures/matcher_bench/mimic_omop/`（MIMIC-III → OMOP，schema-only SMD，268 列映射标注）
-- [ ] 数据发现 JOIN 与 UNION 使用隔离 corpus / artifact，不共用一个 TF-IDF 模型，避免语料分布互相污染
-- [ ] MIMIC-OMOP schema-only 数据不得走依赖 Parquet 实例的常规 Profiling，必须走专用 SMD schema ingestion 路径
-- [ ] 记录每个数据集的表数、列数、ground truth 数量、任务类型（JOIN/UNION/SMD/SSD/SLD）到 benchmark 报告
+- [x] 保留 `default` 租户作为 10 表 toy demo，避免破坏当前前端演示环境
+- [x] 新建 `benchmark` 租户用于全量数据与论文复现，避免 demo 数据与实验数据混杂
+- [x] 明确数据发现数据集：`tests/fixtures/retrieval_bench/join/`（1534 表、230 queries、1226 gt pairs）
+- [x] 明确数据发现数据集：`tests/fixtures/retrieval_bench/union/`（5487 表、823 queries、6512 gt pairs）
+- [x] 明确模式匹配数据集一：`tests/fixtures/matcher_bench/wikidata/`（Musicians 四场景：joinable / semjoinable / unionable / viewunion，各场景 source/target 一对 Parquet 表）
+- [x] 明确模式匹配数据集二：`tests/fixtures/matcher_bench/mimic_omop/`（26 MIMIC 表 + 38 OMOP 表，schema-only SMD，268 列映射标注）
+- [x] 数据发现 JOIN 与 UNION 使用隔离 corpus / artifact，不共用一个 TF-IDF 模型，避免语料分布互相污染
+- [x] MIMIC-OMOP schema-only 数据不得走依赖 Parquet 实例的常规 Profiling，必须走专用 SMD schema ingestion 路径
+- [x] 记录每个数据集的表数、列数、ground truth 数量、任务类型（JOIN/UNION/SMD/SSD/SLD）到 benchmark 报告
 
 ### M5.2 全量入湖与 Profiling 批处理
 - [x] 扩展 `scripts/bulk_ingest.py` 支持 `--tenant-id benchmark`，可覆盖 manifest 中 tenant，并拒绝跨租户 `table_id` 碰撞
@@ -214,10 +214,10 @@
 - [x] 小规模验证：已导入并 profile 20 张 retrieval bench JOIN 表，确认 SQLite / Qdrant / SBERT / 状态流转正确，并生成 `tfidf_benchmark_join.pkl`
 - [ ] 中规模验证：扩展到 100 / 500 张表，记录单表 Profiling 平均耗时、失败率、GPU 显存
 - [ ] 全量导入 retrieval bench JOIN + UNION，完成 7021 张候选表入湖与 Qdrant 索引
-- [ ] 处理 matcher bench Wikidata 数据，确保 source/target 表均可被 direct Python benchmark runner 加载
-- [ ] 处理 matcher bench MIMIC-OMOP schema-only 数据，确保无实例数据的 SMD 场景可直接进入 Matcher
+- [x] 处理 matcher bench Wikidata 数据，四场景 source/target 8 张 Parquet 表已导入并 profile 到 `benchmark` 租户
+- [x] 处理 matcher bench MIMIC-OMOP schema-only 数据，26 MIMIC + 38 OMOP 表已导入并索引，确保无实例数据的 SMD 场景可直接进入 Matcher
 - [x] 扩展 `scripts/rebuild_tfidf.py` 支持 `--tenant-id benchmark` 与 `--corpus join|union|matcher|all`，并提供 Retrieval L1 显式加载 scoped artifact 的入口
-- [ ] 全量入湖后分别重建 JOIN、UNION、Matcher corpus 的 TF-IDF artifact，并记录 vocabulary size 与训练耗时
+- [ ] 全量入湖后分别重建 JOIN、UNION、Matcher corpus 的 TF-IDF artifact，并记录 vocabulary size 与训练耗时（当前小规模已生成 JOIN 20 表 artifact 与 Matcher 72 表 artifact）
 
 ### M5.3 数据发现 / Retrieval Benchmark
 - [ ] 新增 `scripts/run_retrieval_benchmark.py` 或 `tests/reproduction/test_retrieval_bench_*.py`
