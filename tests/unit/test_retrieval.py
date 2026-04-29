@@ -1,4 +1,7 @@
 # tests/unit/test_retrieval.py
+import asyncio
+from types import SimpleNamespace
+
 import pytest
 
 
@@ -62,6 +65,26 @@ def test_c2_fallback_when_empty() -> None:
     assert len(result) > 0
 
 
+def test_l3_prompt_includes_required_json_shape() -> None:
+    from adacascade.agents.retrieval.layer3 import _build_batch_prompt
+
+    messages = _build_batch_prompt(
+        "query",
+        [{"name": "id", "dtype": "int"}],
+        [{"table_name": "candidate", "columns": [{"name": "id", "dtype": "int"}]}],
+        "JOIN",
+        0,
+    )
+
+    prompt = "\n".join(message["content"] for message in messages)
+
+    assert '"scores"' in prompt
+    assert '"candidate_idx"' in prompt
+    assert '"score"' in prompt
+    assert '"reason"' in prompt
+    assert "candidate_idx must match the numbered candidate" in prompt
+
+
 def test_l3_batch_invalid_schema_raises() -> None:
     """Mock LLM returning invalid JSON must raise via Pydantic, not silently pass."""
     from adacascade.llm_schemas import L3BatchResult
@@ -82,6 +105,60 @@ def test_l3_batch_missing_idx_scores_zero() -> None:
     assert len(result) == 1
     assert result[0]["table_id"] == "A"
     assert result[0]["s3"] == pytest.approx(0.8)
+
+
+def test_l3_retries_once_when_llm_returns_missing_scores(monkeypatch) -> None:
+    from adacascade.agents.retrieval import layer3
+
+    responses = iter([
+        SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="{}"))]),
+        SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=(
+                            '{"scores":[{"candidate_idx":1,"score":0.9,'
+                            '"reason":"same entity"}]}'
+                        )
+                    )
+                )
+            ]
+        ),
+    ])
+    calls = 0
+
+    call_kwargs = []
+
+    def fake_chat(*_args, **kwargs):
+        nonlocal calls
+        calls += 1
+        call_kwargs.append(kwargs)
+        return next(responses)
+
+    monkeypatch.setattr(layer3, "chat", fake_chat)
+
+    result = asyncio.run(
+        layer3.batch_verify(
+            c2=[
+                {
+                    "table_id": "A",
+                    "table_name": "candidate",
+                    "columns": [{"name": "id", "dtype": "int"}],
+                    "s1": 0.7,
+                    "s2": 0.8,
+                }
+            ],
+            query_name="query",
+            query_cols=[{"name": "id", "dtype": "int"}],
+            task_type="JOIN",
+            theta_3=0.5,
+        )
+    )
+
+    assert calls == 2
+    assert all(kwargs["max_tokens"] == 1024 for kwargs in call_kwargs)
+    assert result[0]["table_id"] == "A"
+    assert result[0]["s3"] == pytest.approx(0.9)
 
 
 def test_minmax_edge() -> None:

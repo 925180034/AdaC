@@ -11,6 +11,8 @@ from typing import Any, Literal
 
 import structlog
 
+from pydantic import ValidationError
+
 from adacascade.llm_client import chat
 from adacascade.llm_schemas import L3BatchResult, json_schema_format
 
@@ -50,6 +52,13 @@ def _build_batch_prompt(
             f"columns: [{columns_repr}]"
         )
     cand_lines = "\n".join(cand_lines_parts)
+    schema_instruction = (
+        "Return exactly this JSON shape with one item per candidate:\n"
+        '{"scores":[{"candidate_idx":1,"score":0.0,"reason":"short reason"}]}\n'
+        "candidate_idx must match the numbered candidate. "
+        "score must be between 0 and 1. reason must be under 60 characters.\n"
+        "Output JSON only."
+    )
     return [
         {
             "role": "system",
@@ -67,7 +76,7 @@ def _build_batch_prompt(
                 f"[Query Table]\nname: {query_name}\ncolumns: [{col_repr}]\n\n"
                 f"[Candidates]\n{cand_lines}\n\n"
                 "[Instruction]\nFor each candidate, output compatibility score in [0,1].\n"
-                "Output JSON only."
+                f"{schema_instruction}"
             ),
         },
     ]
@@ -87,6 +96,21 @@ def _parse_batch_response(content: str) -> dict[int, float]:
     """
     result = L3BatchResult.model_validate_json(content)
     return {item.candidate_idx: item.score for item in result.scores}
+
+
+def _repair_messages(messages: list[dict[str, str]], invalid_content: str) -> list[dict[str, str]]:
+    return [
+        *messages,
+        {"role": "assistant", "content": invalid_content or "{}"},
+        {
+            "role": "user",
+            "content": (
+                "The previous response is invalid. Return only valid JSON with a "
+                "required scores array. Use this exact shape: "
+                '{"scores":[{"candidate_idx":1,"score":0.0,"reason":"short reason"}]}'
+            ),
+        },
+    ]
 
 
 def _merge_scores(
@@ -150,9 +174,23 @@ async def batch_verify(
                 response_format=json_schema_format(L3BatchResult),
                 temperature=0.0,
                 enable_thinking=False,
+                max_tokens=1024,
             )
             content = resp.choices[0].message.content or "{}"
-            return _parse_batch_response(content)
+            try:
+                return _parse_batch_response(content)
+            except ValidationError:
+                repair_resp = await asyncio.to_thread(
+                    chat,
+                    _repair_messages(messages, content),
+                    response_format=json_schema_format(L3BatchResult),
+                    temperature=0.0,
+                    enable_thinking=False,
+                    max_tokens=1024,
+                )
+                return _parse_batch_response(
+                    repair_resp.choices[0].message.content or "{}"
+                )
         except Exception as e:
             log.warning("retrieval.l3.batch_error", error=str(e), offset=offset)
             return {}
