@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     QDRANT_COLLECTION_COLUMNS: str = "col_embeddings"
 
     # ── LLM ───────────────────────────────────────────────────────────────
+    LLM_LOCAL_BASE_URL: str = "http://localhost:8000/v1"
+    LLM_LOCAL_MODEL: str = "qwen3.5:9b"
     LLM_BASE_URL: str = "http://localhost:8000/v1"
     LLM_API_KEY: str = "EMPTY"
     LLM_MODEL: str = "qwen3.5:9b"

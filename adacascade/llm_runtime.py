@@ -33,9 +33,9 @@ def _backend_config(backend: LlmBackend) -> LlmRequestConfig:
     if backend == "local":
         return LlmRequestConfig(
             backend="local",
-            base_url="http://localhost:8000/v1",
+            base_url=settings.LLM_LOCAL_BASE_URL,
             api_key="EMPTY",
-            model="qwen3.5:9b",
+            model=settings.LLM_LOCAL_MODEL,
             timeout=settings.LLM_TIMEOUT,
         )
     return LlmRequestConfig(
