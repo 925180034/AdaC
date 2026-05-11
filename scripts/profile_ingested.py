@@ -34,15 +34,22 @@ def _target_tables(
     tenant_id: str,
     limit: int | None = None,
     retry_failed: bool = False,
+    refresh_ready: bool = False,
     source_system: str | None = None,
 ) -> list[TableRegistry]:
-    statuses = ["INGESTED", "FAILED"] if retry_failed else ["INGESTED"]
+    statuses = ["INGESTED"]
+    if retry_failed:
+        statuses.append("FAILED")
+    if refresh_ready:
+        statuses.append("READY")
     query = db.query(TableRegistry).filter(
         TableRegistry.tenant_id == tenant_id,
         TableRegistry.status.in_(statuses),
     )
     if source_system:
         query = query.filter(TableRegistry.source_system == source_system)
+    if refresh_ready:
+        query = query.filter(TableRegistry.source_uri.like("%.parquet"))
     query = query.order_by(TableRegistry.table_name)
     if limit is not None:
         query = query.limit(limit)
@@ -56,6 +63,7 @@ def profile_ingested_tables(
     tenant_id: str,
     limit: int | None = None,
     retry_failed: bool = False,
+    refresh_ready: bool = False,
     source_system: str | None = None,
 ) -> dict[str, int]:
     tables = _target_tables(
@@ -63,12 +71,13 @@ def profile_ingested_tables(
         tenant_id=tenant_id,
         limit=limit,
         retry_failed=retry_failed,
+        refresh_ready=refresh_ready,
         source_system=source_system,
     )
     summary = {"processed": len(tables), "succeeded": 0, "failed": 0}
     for table in tables:
         try:
-            if retry_failed and table.status == "FAILED":
+            if table.status in {"FAILED", "READY"}:
                 table.status = "INGESTED"
                 db.commit()
             asyncio.run(
@@ -90,6 +99,7 @@ def main() -> None:
     parser.add_argument("--tenant-id", default=settings.DEFAULT_TENANT_ID)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--retry-failed", action="store_true")
+    parser.add_argument("--refresh-ready", action="store_true")
     parser.add_argument("--source-system")
     args = parser.parse_args()
 
@@ -104,6 +114,7 @@ def main() -> None:
             tenant_id=args.tenant_id,
             limit=args.limit,
             retry_failed=args.retry_failed,
+            refresh_ready=args.refresh_ready,
             source_system=args.source_system,
         )
     print(json.dumps(summary, sort_keys=True))

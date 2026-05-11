@@ -123,6 +123,72 @@ def test_profile_ingested_processes_ingested_tables_for_tenant(
     assert statuses == {"benchmark-table": "READY", "default-table": "INGESTED"}
 
 
+def test_profile_ingested_refresh_ready_reprofiles_ready_tables(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from scripts import profile_ingested
+
+    db = _session(tmp_path)
+    db.add(_table("ready-table", status="READY"))
+    db.commit()
+    processed: list[str] = []
+
+    async def fake_run_profiling(*, table_id, db, qdrant, tenant_id):
+        processed.append(table_id)
+        assert db.query(TableRegistry).filter_by(table_id=table_id).one().status == "INGESTED"
+        db.query(TableRegistry).filter_by(table_id=table_id).update({"status": "READY"})
+        db.commit()
+
+    monkeypatch.setattr(profile_ingested, "run_profiling", fake_run_profiling)
+
+    summary = profile_ingested.profile_ingested_tables(
+        db,
+        qdrant=RecordingQdrant(),
+        tenant_id="benchmark",
+        refresh_ready=True,
+    )
+
+    assert summary == {"processed": 1, "succeeded": 1, "failed": 0}
+    assert processed == ["ready-table"]
+    assert db.query(TableRegistry).filter_by(table_id="ready-table").one().status == "READY"
+
+
+
+def test_profile_ingested_refresh_ready_skips_schema_only_tables(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from scripts import profile_ingested
+
+    db = _session(tmp_path)
+    db.add(
+        _table(
+            "schema-table",
+            status="READY",
+            source_system="mimic_omop",
+        )
+    )
+    db.query(TableRegistry).filter_by(table_id="schema-table").update(
+        {"source_uri": str(tmp_path / "schema.json")}
+    )
+    db.commit()
+
+    async def fake_run_profiling(*, table_id, db, qdrant, tenant_id):
+        raise AssertionError("schema-only tables should not be profiled as parquet")
+
+    monkeypatch.setattr(profile_ingested, "run_profiling", fake_run_profiling)
+
+    summary = profile_ingested.profile_ingested_tables(
+        db,
+        qdrant=RecordingQdrant(),
+        tenant_id="benchmark",
+        refresh_ready=True,
+    )
+
+    assert summary == {"processed": 0, "succeeded": 0, "failed": 0}
+    assert db.query(TableRegistry).filter_by(table_id="schema-table").one().status == "READY"
+
+
+
 def test_profile_ingested_retry_failed_resets_failed_tables(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -282,6 +348,7 @@ def test_index_schema_only_tables_upserts_embeddings(
     assert summary == {"indexed": 1}
     assert qdrant.tables[0]["table_id"] == "mimic:ADMISSIONS"
     assert qdrant.tables[0]["tenant_id"] == "benchmark"
+    assert qdrant.tables[0]["extra_payload"]["source_system"] == "mimic_omop"
     assert qdrant.columns[0][0]["column_id"] == "mimic:ADMISSIONS:0:SUBJECT_ID"
     assert columns[0].qdrant_point_id == "mimic:ADMISSIONS:0:SUBJECT_ID"
 

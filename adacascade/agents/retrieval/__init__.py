@@ -142,12 +142,14 @@ async def run(state: IntegrationState) -> IntegrationState:
     query_vector = query_profile.get("table_vector")
     if query_vector:
         try:
+            source_system = f"retrieval|{corpus}" if corpus != "all" else None
             c2, l2_degraded = await search_and_build_c2(
                 c1=cast(list[dict[str, Any]], c1),
                 query_vector=cast(list[float], query_vector),
                 tenant_id=tenant_id,
                 theta_2=_plan_float(plan, "theta_2", float(cfg.get("theta_2", 0.55))),
                 k_2=_plan_int(plan, "k_2", int(cfg.get("k_2", 40))),
+                source_system=source_system,
             )
         except Exception as exc:
             bound_log.warning("retrieval.qdrant_degraded", error=str(exc))

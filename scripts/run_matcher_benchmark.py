@@ -89,12 +89,14 @@ def _load_profiles(
     source_id: str, target_id: str, db: Session | None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if db is not None:
-        return load_table_profile(source_id, db), load_table_profile(target_id, db)
+        return load_table_profile(
+            source_id, db, include_vector=False
+        ), load_table_profile(target_id, db, include_vector=False)
     init_db(settings.DATABASE_URL)
     with get_session() as session:
-        return load_table_profile(source_id, session), load_table_profile(
-            target_id, session
-        )
+        return load_table_profile(
+            source_id, session, include_vector=False
+        ), load_table_profile(target_id, session, include_vector=False)
 
 
 def _table_id_by_name(db: Session, tenant_id: str, table_name: str, prefix: str) -> str:

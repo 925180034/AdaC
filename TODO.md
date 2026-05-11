@@ -261,13 +261,71 @@
 - [ ] 记录 GPU 显存、水位、OOM/CPU fallback 情况（按用户要求迁移到目标部署服务器执行）
 - [ ] 输出压测结论：是否达到 M4 原定性能指标；未达到时列出瓶颈与优化项（按用户要求迁移到目标部署服务器执行）
 
-### M5.7 验收标准
+### M5.7 Benchmark 异常诊断与已完成修复记录（2026-05-11）
+- [x] 修复本地 vLLM 启动默认参数：`scripts/start_llm.sh` 默认 `VLLM_GPU_MEMORY_UTILIZATION=0.55`、`VLLM_MAX_MODEL_LEN=4096`，避免 4090 上 KV cache 不足导致端口 8000 不可用
+- [x] 修复 standalone retrieval benchmark 未初始化 Qdrant registry：`scripts/run_retrieval_benchmark.py` 启动时调用 `init_qdrant_registry()`
+- [x] 修复 Retrieval L2 缺少 query table vector：`load_table_profile(..., include_vector=True)` 会生成 `table_vector`，candidate profiles 使用 `include_vector=False` 避免 7000+ 候选重复编码
+- [x] 修复 retrieval ground truth self-pair 污染：benchmark 忽略 `query_table_id == candidate_table_id` 的不可检索自匹配，并输出 `evaluation.ground_truth_pairs / ignored_self_pairs / evaluated_pairs`
+- [x] 修复旧 profile 缺少 `sample_values`：Profiling 将样本值写入 `ColumnMetadata.stat_summary`，`load_table_profile()` 恢复样本值供 L3/Matcher 使用
+- [x] 修复 L3 prompt 证据不足与上下文超限：L3 prompt 加入截断后的列样本值，本地 4096 context 下按单候选 batch 调用，避免 400 context overflow
+- [x] 修复 `profile_ingested.py --refresh-ready` 误刷新 schema-only JSON 表：refresh READY 时只选择 `.parquet` 来源表，MIMIC-OMOP schema-only 继续走专用 ingestion/index 路径
+- [x] 修复 retrieval candidate pool 混入跨语料表：`load_candidate_profiles(..., corpus="join|union")` 按 `source_system=retrieval|{corpus}` 过滤 DB 候选池
+- [x] 修复 Qdrant 表向量 L2 跨语料召回：table payload 写入 `source_system`，`search_tables(..., source_system=...)` 按 JOIN/UNION 语料过滤，并新增 `source_system` payload index
+- [x] 修复 L2 fallback 返回 C1 之外表导致后续 profile enrich 缺字段的问题：fallback 只在 C1 内选 top-3，保持交集约束链路可解释
+- [x] 刷新 benchmark profiles/Qdrant payload：`processed=7029, succeeded=7029, failed=0`
+- [x] 最新验证：`pytest tests/unit/test_retrieval.py tests/unit/test_m5_benchmark_runners.py tests/unit/test_m5_ingestion_scripts.py -q` → 50 passed；`ruff check ...` → All checks passed
+- [x] 最新 smoke：UNION `--limit 5` 为 `recall@10=0.8`；JOIN `--limit 5` 从 `recall@10=0.0` 提升到 `0.2`
+- [x] 剩余 JOIN 低召回定位：16 个真值均在候选池，但 L1 只保留 6 个，L2/L3 后剩 3 个，top10 只有 1 个；Qdrant table top40 只覆盖 3/16，说明 JOIN 需要调参或补充列级/样本值召回信号
+
+### M5.8 Optuna 超参数搜索与 JOIN 召回优化计划
+
+> 目标：在不删除论文默认配置的前提下，新增可复现实验配置与 tuned profile。允许通过 Optuna 搜索 `theta_1/theta_2/theta_3/k_1/k_2/w_1/w_2/w_3` 等超参数；若调参有效，可把最优配置作为 `benchmark_tuned` 或 `demo_fast` profile 暴露，paper-default 仍保留用于论文复现对照。
+
+#### M5.8.1 先建立可重复的调参 runner
+- [ ] 新增 `scripts/optimize_retrieval_params.py`，支持 `--fixture-dir`、`--tenant-id`、`--corpus join|union`、`--limit`、`--trials`、`--timeout`、`--seed`、`--storage`、`--study-name`、`--output`
+- [ ] 默认目标函数优先优化 `recall@10`，并用平均耗时作为 secondary penalty：`objective = recall@10 - latency_penalty`
+- [ ] 搜索空间第一版：
+  - `theta_1`: 0.05 ~ 0.30
+  - `theta_2`: 0.35 ~ 0.75
+  - `theta_3`: 0.20 ~ 0.70
+  - `k_1`: categorical `[120, 200, 300, 500, 800]`
+  - `k_2`: categorical `[40, 80, 120, 200, 400]`
+  - `w_1/w_2/w_3`: Dirichlet-like 归一化权重，分别约束到 `[0,1]` 且总和为 1
+- [ ] runner 输出 JSON 报告：best params、best value、R@1/R@5/R@10、avg/p50/p95、L1/L2/L3 平均耗时、失败数、evaluation metadata、trials 明细
+- [ ] 单元测试覆盖：搜索空间生成、权重归一化、objective 计算、study report 序列化；测试中 mock benchmark 执行，避免真实 LLM
+
+#### M5.8.2 让 retrieval benchmark 支持 plan overrides
+- [ ] 扩展 `scripts/run_retrieval_benchmark.py`：新增可选 `plan_overrides` 参数和 CLI `--plan-json`，传入 Retrieval state 的 `plan`
+- [ ] 单元测试覆盖：`--plan-json` 中的 `k_1/k_2/theta_* / w_*` 能进入 `retrieval.run(state)`，并不影响未传参数时的 paper-default 路径
+- [ ] smoke 验证：JOIN `--limit 5` 分别跑 paper-default 与 optuna trial 参数，输出两份 JSON 可对比
+
+#### M5.8.3 小样本 Optuna 搜索（当前 4090 环境）
+- [ ] 先跑 JOIN `--limit 20 --trials 20`，验证搜索流程、报告格式、失败恢复与耗时
+- [ ] 若 top trial 明显优于 paper-default，再跑 JOIN `--limit 50 --trials 50`
+- [ ] 对 UNION 只做 sanity 搜索，确认调参不会破坏当前 `recall@10≈0.8` 的 smoke 表现
+- [ ] 将最优参数写入 `configs/default.yaml` 的独立 profile（例如 `retrieval_profiles.benchmark_tuned.join`），不覆盖 `tlcf` paper-default
+
+#### M5.8.4 如纯调参不足，再设计 JOIN 专用召回增强
+- [ ] 若 Optuna 后 JOIN R@10 仍显著低于目标，新增列级/样本值补充召回设计，不直接替换 TLCF 默认路径
+- [ ] 候选方案 A：用 `col_embeddings` 对 query 高基数列检索候选表，形成 `W_col`，再与 C1/table W 合并
+- [ ] 候选方案 B：对 `sample_values` 建轻量倒排索引，针对 JOIN key 候选列做 exact/normalized value overlap 召回
+- [ ] 候选方案 C：为 JOIN 的 L1 `text_blob` 增加可选样本 token profile，仅在 tuned/experiment profile 下启用
+- [ ] 每个增强方案必须 TDD：先写真值候选进入 C1/C2 的失败测试，再实现最小代码，再跑 benchmark smoke
+
+#### M5.8.5 验收标准
+- [ ] `scripts/optimize_retrieval_params.py --corpus join --limit 20 --trials 20` 能稳定完成并输出 JSON 报告
+- [ ] paper-default 与 tuned profile 的结果可在同一 runner 中对比，报告记录所有参数
+- [ ] 若 tuned profile 优于默认，将结果记录到本 TODO，并保留默认超参作为论文复现 baseline
+- [ ] 不在当前 4090 环境执行 A100 压测；A100/local vLLM 长压测仍迁移到目标部署服务器
+
+### M5.9 验收标准
 - [x] `benchmark` 租户完成 retrieval bench JOIN + UNION 全量入湖、Profiling、Qdrant 索引、TF-IDF 重建
 - [x] Matcher 两个数据集（Wikidata、MIMIC-OMOP）均可被 benchmark runner 稳定加载和执行
 - [x] Retrieval benchmark 输出 R@K 与分层耗时报告
 - [x] Matcher benchmark 输出 Precision / Recall / F1 与分阶段耗时报告
+- [ ] Optuna 输出 JOIN/UNION tuned 参数搜索报告，并与 paper-default 对照
 - [ ] A100 压测输出 `/integrate` P95、Profiling 吞吐、GPU 显存和降级情况（当前服务器跳过，迁移到目标部署服务器验收）
-- [x] 根据 smoke benchmark 形成下一轮优化方向：优先降低 L3/Matcher LLM 延迟，质量指标需在目标部署服务器完整复现后再定性
+- [x] 根据 smoke benchmark 形成下一轮优化方向：优先做 Retrieval 参数搜索，其次评估 JOIN 专用列级/样本值召回增强
 
 ---
 

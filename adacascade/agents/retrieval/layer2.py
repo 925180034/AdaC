@@ -44,20 +44,15 @@ def intersect_c2(
 
     if len(c2) < 3 and fallback:
         log.warning("retrieval.l2.fallback", c2_size=len(c2))
-        # Merge W ∪ C1, take top-3 by Qdrant score
-        all_ids = qdrant_ids | set(c1_ids.keys())
-        merged = []
-        for tid in all_ids:
-            s2 = qdrant_scores.get(tid, 0.0)
-            s1_entry = c1_ids.get(tid, {})
-            merged.append(
-                {
-                    "table_id": tid,
-                    "s1": s1_entry.get("s1", 0.0),
-                    "s2": s2,
-                }
-            )
-        merged.sort(key=lambda x: x["s2"], reverse=True)
+        merged = [
+            {
+                "table_id": tid,
+                "s1": entry["s1"],
+                "s2": qdrant_scores.get(tid, 0.0),
+            }
+            for tid, entry in c1_ids.items()
+        ]
+        merged.sort(key=lambda x: (x["s2"], x["s1"]), reverse=True)
         c2 = merged[:3]
 
     log.info("retrieval.l2", c2_size=len(c2), theta_2=theta_2)
@@ -71,6 +66,7 @@ async def search_and_build_c2(
     tenant_id: str,
     theta_2: float,
     k_2: int,
+    source_system: str | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Run Qdrant search and compute C₂. Returns (c2, degraded).
 
@@ -80,6 +76,7 @@ async def search_and_build_c2(
         tenant_id: Tenant filter for Qdrant.
         theta_2: S₂ cosine threshold.
         k_2: Qdrant top-k to retrieve.
+        source_system: Optional corpus/source filter for Qdrant.
 
     Returns:
         Tuple of (C₂ list, degraded flag).
@@ -88,7 +85,10 @@ async def search_and_build_c2(
 
     qdrant = get_qdrant()
     hits = await qdrant.search_tables(
-        vector=query_vector, tenant_id=tenant_id, top_k=k_2
+        vector=query_vector,
+        tenant_id=tenant_id,
+        top_k=k_2,
+        source_system=source_system,
     )
 
     qdrant_ids = {h["table_id"] for h in hits}

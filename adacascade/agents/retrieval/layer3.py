@@ -20,6 +20,9 @@ from adacascade.llm_schemas import L3BatchResult, json_schema_format
 log = structlog.get_logger(__name__)
 
 _BATCH_SIZE = 10  # from configs, single LLM call max candidates
+_LLM_CANDIDATES_PER_CALL = 1
+_MAX_SAMPLE_VALUES = 2
+_MAX_SAMPLE_CHARS = 24
 _cache: dict[str, dict[int, float]] = {}
 
 
@@ -49,6 +52,33 @@ def _cache_key(
     return json.dumps(payload, sort_keys=True, default=str)
 
 
+def _short_sample(value: Any) -> str:
+    text = str(value).replace("\n", " ").strip()
+    return text[:_MAX_SAMPLE_CHARS]
+
+
+
+def _column_prompt(column: dict[str, Any]) -> str:
+    samples = [
+        _short_sample(value)
+        for value in column.get("sample_values", [])[:_MAX_SAMPLE_VALUES]
+    ]
+    sample_text = f", samples: [{', '.join(samples)}]" if samples else ""
+    return f"{column['name']}:{column['dtype']}{sample_text}"
+
+
+
+def _candidate_batches(
+    candidates: list[dict[str, Any]], batch_size: int
+) -> list[tuple[list[dict[str, Any]], int]]:
+    effective_batch_size = max(1, min(batch_size, _LLM_CANDIDATES_PER_CALL))
+    return [
+        (candidates[i : i + effective_batch_size], i)
+        for i in range(0, len(candidates), effective_batch_size)
+    ]
+
+
+
 def _build_batch_prompt(
     query_name: str,
     query_cols: list[dict[str, Any]],
@@ -68,13 +98,11 @@ def _build_batch_prompt(
     Returns:
         OpenAI-format message list for the LLM call.
     """
-    col_repr = ", ".join(f"{c['name']}:{c['dtype']}" for c in query_cols[:20])
+    col_repr = ", ".join(_column_prompt(c) for c in query_cols[:20])
     cand_lines_parts = []
     for i, candidate in enumerate(candidates):
         columns = candidate.get("columns", [])[:10]
-        columns_repr = ", ".join(
-            f"{column['name']}:{column['dtype']}" for column in columns
-        )
+        columns_repr = ", ".join(_column_prompt(column) for column in columns)
         cand_lines_parts.append(
             f"({offset + i + 1}) name: {candidate['table_name']}, "
             f"columns: [{columns_repr}]"
@@ -195,8 +223,9 @@ async def batch_verify(
         return []
 
     # Split into batches
-    batches = [c2[i : i + batch_size] for i in range(0, len(c2), batch_size)]
-    offsets = list(range(0, len(c2), batch_size))
+    batch_specs = _candidate_batches(c2, batch_size)
+    batches = [batch for batch, _ in batch_specs]
+    offsets = [offset for _, offset in batch_specs]
 
     semaphore = asyncio.Semaphore(max(1, concurrency))
 

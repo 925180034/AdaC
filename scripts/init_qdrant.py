@@ -23,6 +23,7 @@ def main() -> None:
             ("tenant_id", PayloadSchemaType.KEYWORD),
             ("table_id", PayloadSchemaType.KEYWORD),
             ("status", PayloadSchemaType.KEYWORD),
+            ("source_system", PayloadSchemaType.KEYWORD),
         ],
         settings.QDRANT_COLLECTION_COLUMNS: [
             ("tenant_id", PayloadSchemaType.KEYWORD),

@@ -138,6 +138,18 @@ def _col_sbert_input(col: ColumnMetadata, table_name: str) -> str:
     return text
 
 
+def encode_table_vector(table_name: str, columns: list[dict[str, Any]]) -> list[float]:
+    col_parts = ", ".join(
+        f"{column['col_name']} ({column['col_type']})"
+        + (f" - {column['col_description']}" if column.get("col_description") else "")
+        for column in columns
+    )
+    return _encode_with_oom_fallback(
+        [f"Table: {table_name}. Columns: {col_parts}"],
+        int(settings.profiling_cfg.get("sbert_batch_size", 256)),
+    )[0].tolist()
+
+
 # ── Statistical feature computation ──────────────────────────────────────────
 
 
@@ -339,7 +351,7 @@ async def encode_and_index(
         table_id=profile.table_id,
         tenant_id=tenant_id,
         vector=table_vec,
-        extra_payload={"table_name": tr.table_name},
+        extra_payload={"table_name": tr.table_name, "source_system": tr.source_system},
     )
 
     # ── Column-level embeddings ───────────────────────────────────────────────
@@ -411,6 +423,7 @@ async def run_profiling(
             if cp.categorical_stats:
                 stat["cat_top_k"] = cp.categorical_stats.top_k
                 stat["cat_freq_ref"] = cp.categorical_stats.freq_vector_ref
+            stat["sample_values"] = cp.sample_values
             if stat:
                 db.query(ColumnMetadata).filter_by(column_id=cp.col_id).update(
                     {
@@ -449,17 +462,20 @@ async def run_profiling(
 def _parse_stat_summary(raw: str | None) -> dict[str, Any]:
     """Parse persisted column statistics into matcher-compatible fields."""
     if not raw:
-        return {"numeric_stats": None, "categorical_stats": None}
+        return {"numeric_stats": None, "categorical_stats": None, "sample_values": []}
     data = json.loads(raw)
     return {
         "numeric_stats": data.get("numeric"),
         "categorical_stats": {"top_k": data.get("cat_top_k", [])}
         if data.get("cat_top_k") is not None
         else None,
+        "sample_values": [str(value) for value in data.get("sample_values", [])],
     }
 
 
-def load_table_profile(table_id: str, db: Session) -> dict[str, Any]:
+def load_table_profile(
+    table_id: str, db: Session, *, include_vector: bool = True
+) -> dict[str, Any]:
     """Load a lightweight table profile from SQLite metadata rows."""
     tr = db.query(TableRegistry).filter_by(table_id=table_id).one()
     col_rows: list[ColumnMetadata] = (
@@ -490,10 +506,10 @@ def load_table_profile(table_id: str, db: Session) -> dict[str, Any]:
                 "distinct_ratio": col.distinct_ratio or 0.0,
                 "numeric_stats": stats["numeric_stats"],
                 "categorical_stats": stats["categorical_stats"],
-                "sample_values": [],
+                "sample_values": stats["sample_values"],
             }
         )
-    return {
+    profile = {
         "table_id": tr.table_id,
         "table_name": tr.table_name,
         "tenant_id": tr.tenant_id,
@@ -502,23 +518,31 @@ def load_table_profile(table_id: str, db: Session) -> dict[str, Any]:
         "row_count": tr.row_count or 0,
         "columns": columns,
     }
+    if include_vector:
+        profile["table_vector"] = encode_table_vector(tr.table_name, col_dicts)
+    return profile
 
 
 def load_candidate_profiles(
-    query_table_id: str, tenant_id: str, db: Session
+    query_table_id: str,
+    tenant_id: str,
+    db: Session,
+    *,
+    corpus: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Load READY candidate profiles for a tenant, excluding the query table."""
-    rows: list[TableRegistry] = (
-        db.query(TableRegistry)
-        .filter(
-            TableRegistry.tenant_id == tenant_id,
-            TableRegistry.status == "READY",
-            TableRegistry.table_id != query_table_id,
-        )
-        .order_by(TableRegistry.table_name)
-        .all()
+    query = db.query(TableRegistry).filter(
+        TableRegistry.tenant_id == tenant_id,
+        TableRegistry.status == "READY",
+        TableRegistry.table_id != query_table_id,
     )
-    return {row.table_id: load_table_profile(row.table_id, db) for row in rows}
+    if corpus and corpus != "all":
+        query = query.filter(TableRegistry.source_system == f"retrieval|{corpus}")
+    rows: list[TableRegistry] = query.order_by(TableRegistry.table_name).all()
+    return {
+        row.table_id: load_table_profile(row.table_id, db, include_vector=False)
+        for row in rows
+    }
 
 
 async def run_pool(state: dict[str, Any]) -> dict[str, Any]:
@@ -529,7 +553,12 @@ async def run_pool(state: dict[str, Any]) -> dict[str, Any]:
     tenant_id = str(state.get("tenant_id", "default"))
     with get_session() as db:
         query_profile = load_table_profile(query_table_id, db)
-        candidate_profiles = load_candidate_profiles(query_table_id, tenant_id, db)
+        candidate_profiles = load_candidate_profiles(
+            query_table_id,
+            tenant_id,
+            db,
+            corpus=str(state.get("corpus", "all")),
+        )
     return {
         **state,
         "query_profile": query_profile,

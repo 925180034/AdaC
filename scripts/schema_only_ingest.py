@@ -178,7 +178,10 @@ def index_schema_only_tables(
                 table_id=table.table_id,
                 tenant_id=tenant_id,
                 vector=table_vec,
-                extra_payload={"table_name": table.table_name},
+                extra_payload={
+                    "table_name": table.table_name,
+                    "source_system": table.source_system,
+                },
             )
         )
         col_vecs = _encode_with_oom_fallback(

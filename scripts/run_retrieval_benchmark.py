@@ -12,6 +12,7 @@ from pathlib import Path
 from statistics import mean, median
 from typing import Any, Literal
 
+from qdrant_client import AsyncQdrantClient
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -21,6 +22,8 @@ from adacascade.agents import retrieval
 from adacascade.agents.profiling import load_candidate_profiles, load_table_profile
 from adacascade.config import settings
 from adacascade.db.session import get_session, init_db
+from adacascade.indexing.qdrant_client import AdacQdrantClient
+from adacascade.indexing.registry import init_qdrant_registry
 
 Corpus = Literal["join", "union"]
 
@@ -29,13 +32,24 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _ground_truth(path: Path) -> dict[str, set[str]]:
+def _ground_truth(path: Path) -> tuple[dict[str, set[str]], dict[str, int]]:
     data = _load_json(path)
     expected: dict[str, set[str]] = {}
+    total_pairs = 0
+    ignored_self_pairs = 0
     for pair in data.get("pairs", []):
         query_id = str(pair["query_table_id"])
-        expected.setdefault(query_id, set()).add(str(pair["candidate_table_id"]))
-    return expected
+        candidate_id = str(pair["candidate_table_id"])
+        total_pairs += 1
+        if candidate_id == query_id:
+            ignored_self_pairs += 1
+            continue
+        expected.setdefault(query_id, set()).add(candidate_id)
+    return expected, {
+        "ground_truth_pairs": total_pairs,
+        "ignored_self_pairs": ignored_self_pairs,
+        "evaluated_pairs": total_pairs - ignored_self_pairs,
+    }
 
 
 def _fallback_profile(query: dict[str, Any]) -> dict[str, Any]:
@@ -49,24 +63,38 @@ def _fallback_profile(query: dict[str, Any]) -> dict[str, Any]:
 
 
 def _profiles_from_session(
-    query: dict[str, Any], tenant_id: str, db: Session
+    query: dict[str, Any], tenant_id: str, db: Session, corpus: Corpus
 ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     query_id = str(query["table_id"])
     try:
         query_profile = load_table_profile(query_id, db)
     except SQLAlchemyError:
         query_profile = _fallback_profile(query)
-    return query_profile, load_candidate_profiles(query_id, tenant_id, db)
+    return query_profile, load_candidate_profiles(
+        query_id,
+        tenant_id,
+        db,
+        corpus=corpus,
+    )
 
 
 def _profiles(
-    query: dict[str, Any], tenant_id: str, db: Session | None
+    query: dict[str, Any], tenant_id: str, corpus: Corpus, db: Session | None
 ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     if db is not None:
-        return _profiles_from_session(query, tenant_id, db)
+        return _profiles_from_session(query, tenant_id, db, corpus)
     init_db(settings.DATABASE_URL)
     with get_session() as session:
-        return _profiles_from_session(query, tenant_id, session)
+        return _profiles_from_session(query, tenant_id, session, corpus)
+
+
+def _init_qdrant_registry() -> None:
+    init_qdrant_registry(
+        AdacQdrantClient(
+            AsyncQdrantClient(url=settings.QDRANT_URL, check_compatibility=False)
+        )
+    )
+
 
 
 def _recall(
@@ -111,10 +139,12 @@ def run_retrieval_benchmark(
     corpus: Corpus = "join",
     limit: int | None = None,
     top_k: int = 10,
+    plan_overrides: dict[str, float | int | bool] | None = None,
     db: Session | None = None,
 ) -> dict[str, Any]:
+    _init_qdrant_registry()
     queries_data = _load_json(fixture_dir / "queries.json")
-    expected = _ground_truth(fixture_dir / "ground_truth.json")
+    expected, evaluation = _ground_truth(fixture_dir / "ground_truth.json")
     queries = list(queries_data.get("queries", []))
     if limit is not None:
         queries = queries[:limit]
@@ -124,7 +154,7 @@ def run_retrieval_benchmark(
     for query in queries:
         started = time.perf_counter()
         try:
-            query_profile, candidate_profiles = _profiles(query, tenant_id, db)
+            query_profile, candidate_profiles = _profiles(query, tenant_id, corpus, db)
             state = {
                 "task_id": "",
                 "tenant_id": tenant_id,
@@ -133,7 +163,7 @@ def run_retrieval_benchmark(
                 "corpus": corpus,
                 "query_profile": query_profile,
                 "candidate_profiles": candidate_profiles,
-                "plan": {},
+                "plan": dict(plan_overrides or {}),
             }
             output = asyncio.run(retrieval.run(state))
             elapsed_ms = (time.perf_counter() - started) * 1000
@@ -159,6 +189,7 @@ def run_retrieval_benchmark(
         "corpus": corpus,
         "queries": len(queries),
         "cache": {"llm_cache_enabled": False},
+        "evaluation": evaluation,
         "completed": len(results),
         "failures": failures,
         "metrics": {
@@ -196,7 +227,12 @@ def main() -> None:
     parser.add_argument("--corpus", choices=["join", "union"], default="join")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--top-k", type=int, default=10)
+    parser.add_argument("--plan-json", help="JSON object with Retrieval plan overrides")
     args = parser.parse_args()
+
+    plan_overrides = json.loads(args.plan_json) if args.plan_json else None
+    if plan_overrides is not None and not isinstance(plan_overrides, dict):
+        raise SystemExit("--plan-json must be a JSON object")
 
     report = run_retrieval_benchmark(
         args.fixture_dir,
@@ -204,6 +240,7 @@ def main() -> None:
         corpus=args.corpus,
         limit=args.limit,
         top_k=args.top_k,
+        plan_overrides=plan_overrides,
     )
     print(json.dumps(report, sort_keys=True))
 

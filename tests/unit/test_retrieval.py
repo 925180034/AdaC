@@ -116,6 +116,113 @@ async def test_retrieval_run_returns_stage_timings(monkeypatch) -> None:
     assert all(value >= 0 for value in result["stage_timings_ms"].values())
 
 
+def test_retrieval_run_passes_source_system_to_layer2(monkeypatch) -> None:
+    from adacascade.agents import retrieval
+
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        retrieval,
+        "build_c1",
+        lambda *args, **kwargs: [{"table_id": "candidate", "s1": 0.8}],
+    )
+
+    async def fake_search_and_build_c2(*args, **kwargs):
+        seen["source_system"] = kwargs.get("source_system")
+        return [], False
+
+    monkeypatch.setattr(retrieval, "search_and_build_c2", fake_search_and_build_c2)
+
+    result = asyncio.run(
+        retrieval.run(
+            {
+                "task_id": "",
+                "tenant_id": "benchmark",
+                "corpus": "join",
+                "query_profile": {
+                    "table_id": "query",
+                    "text_blob": "query",
+                    "type_multiset": [],
+                    "table_vector": [0.1, 0.2],
+                },
+                "candidate_profiles": {
+                    "candidate": {
+                        "table_id": "candidate",
+                        "text_blob": "candidate",
+                        "type_multiset": [],
+                    }
+                },
+                "plan": {},
+            }
+        )
+    )
+
+    assert seen == {"source_system": "retrieval|join"}
+    assert result["ranking"] == []
+
+
+
+def test_search_and_build_c2_filters_qdrant_by_source_system(monkeypatch) -> None:
+    from adacascade.agents.retrieval.layer2 import search_and_build_c2
+
+    seen: dict[str, object] = {}
+
+    class FakeQdrant:
+        async def search_tables(self, **kwargs):
+            seen.update(kwargs)
+            return [{"table_id": "A", "score": 0.9}]
+
+    monkeypatch.setattr(
+        "adacascade.indexing.registry.get_qdrant", lambda: FakeQdrant()
+    )
+
+    result, degraded = asyncio.run(
+        search_and_build_c2(
+            c1=[{"table_id": "A", "s1": 0.8}],
+            query_vector=[0.1, 0.2],
+            tenant_id="benchmark",
+            theta_2=0.55,
+            k_2=40,
+            source_system="retrieval|join",
+        )
+    )
+
+    assert seen["source_system"] == "retrieval|join"
+    assert result[0]["table_id"] == "A"
+    assert degraded is True
+
+
+
+def test_qdrant_table_search_filters_source_system() -> None:
+    from adacascade.indexing.qdrant_client import AdacQdrantClient
+
+    seen: dict[str, object] = {}
+
+    class FakeClient:
+        async def query_points(self, **kwargs):
+            seen.update(kwargs)
+            return SimpleNamespace(points=[])
+
+    client = AdacQdrantClient(FakeClient())
+
+    asyncio.run(
+        client.search_tables(
+            vector=[0.1, 0.2],
+            tenant_id="benchmark",
+            top_k=40,
+            source_system="retrieval|join",
+        )
+    )
+
+    conditions = seen["query_filter"].must
+    assert any(
+        condition.key == "source_system"
+        and condition.match.value == "retrieval|join"
+        for condition in conditions
+    )
+
+
+
 def test_c2_intersection_keeps_only_overlap() -> None:
     """C2 must be C1 ∩ Qdrant_topK, not just Qdrant result."""
     from adacascade.agents.retrieval.layer2 import intersect_c2
@@ -135,13 +242,14 @@ def test_c2_intersection_keeps_only_overlap() -> None:
     assert "D" not in ids  # in W but not in C1
 
 
-def test_c2_fallback_when_empty() -> None:
+def test_c2_fallback_when_empty_stays_within_c1() -> None:
     from adacascade.agents.retrieval.layer2 import intersect_c2
 
     c1 = [{"table_id": "A", "s1": 0.8}]
-    # No overlap → should fall back to top-3 of W ∪ C1
+
     result = intersect_c2(c1, {"B"}, {"B": 0.9}, theta_2=0.55, fallback=True)
-    assert len(result) > 0
+
+    assert result == [{"table_id": "A", "s1": 0.8, "s2": 0.0}]
 
 
 def test_l3_prompt_includes_required_json_shape() -> None:

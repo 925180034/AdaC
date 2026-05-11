@@ -105,6 +105,48 @@ def test_retrieval_benchmark_reports_recall_and_timings(
     assert report["layers"]["aggregate"]["avg_ms"] == 4.0
 
 
+def test_retrieval_benchmark_ignores_unretrievable_self_pairs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from scripts.run_retrieval_benchmark import run_retrieval_benchmark
+
+    fixture_dir = tmp_path / "bench" / "join"
+    fixture_dir.mkdir(parents=True)
+    (fixture_dir / "queries.json").write_text(
+        json.dumps({"task_type": "JOIN", "queries": [{"table_id": "query"}]})
+    )
+    (fixture_dir / "ground_truth.json").write_text(
+        json.dumps(
+            {
+                "task_type": "JOIN",
+                "pairs": [
+                    {"query_table_id": "query", "candidate_table_id": "query"},
+                    {"query_table_id": "query", "candidate_table_id": "hit"},
+                ],
+            }
+        )
+    )
+
+    async def fake_run(state):
+        return {
+            **state,
+            "ranking": [{"table_id": "hit", "score": 1.0}],
+            "c1_meta": [],
+            "c2_vec": [],
+            "c3_llm": [],
+        }
+
+    monkeypatch.setattr("adacascade.agents.retrieval.run", fake_run)
+
+    report = run_retrieval_benchmark(fixture_dir, tenant_id="benchmark", corpus="join")
+
+    assert report["metrics"] == {"recall@1": 1.0, "recall@5": 1.0, "recall@10": 1.0}
+    assert report["evaluation"]["ignored_self_pairs"] == 1
+    assert report["evaluation"]["ground_truth_pairs"] == 2
+    assert report["evaluation"]["evaluated_pairs"] == 1
+
+
+
 def test_retrieval_benchmark_passes_corpus_to_retrieval_state(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -142,6 +184,217 @@ def test_retrieval_benchmark_passes_corpus_to_retrieval_state(
     run_retrieval_benchmark(fixture_dir, tenant_id="benchmark", corpus="union")
 
     assert seen["corpus"] == "union"
+
+
+def test_retrieval_benchmark_passes_plan_overrides_to_retrieval_state(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from scripts.run_retrieval_benchmark import run_retrieval_benchmark
+
+    fixture_dir = tmp_path / "bench" / "join"
+    fixture_dir.mkdir(parents=True)
+    (fixture_dir / "queries.json").write_text(
+        json.dumps({"task_type": "JOIN", "queries": [{"table_id": "query"}]})
+    )
+    (fixture_dir / "ground_truth.json").write_text(
+        json.dumps(
+            {
+                "task_type": "JOIN",
+                "pairs": [
+                    {"query_table_id": "query", "candidate_table_id": "candidate"}
+                ],
+            }
+        )
+    )
+    seen: dict[str, object] = {}
+
+    async def fake_run(state):
+        seen["plan"] = state.get("plan")
+        return {
+            **state,
+            "ranking": [{"table_id": "candidate", "score": 1.0}],
+            "c1_meta": [],
+            "c2_vec": [],
+            "c3_llm": [],
+        }
+
+    monkeypatch.setattr("adacascade.agents.retrieval.run", fake_run)
+
+    run_retrieval_benchmark(
+        fixture_dir,
+        tenant_id="benchmark",
+        corpus="join",
+        plan_overrides={"k_1": 300, "theta_2": 0.4},
+    )
+
+    assert seen["plan"] == {"k_1": 300, "theta_2": 0.4}
+
+
+
+def test_candidate_profiles_can_scope_to_retrieval_corpus(tmp_path: Path) -> None:
+    from adacascade.agents.profiling import load_candidate_profiles
+
+    db = _session(tmp_path)
+    db.add(_table("query"))
+    db.add(_table("join-candidate"))
+    union_candidate = _table("union-candidate")
+    union_candidate.source_system = "retrieval|union"
+    schema_candidate = _table("schema-candidate")
+    schema_candidate.source_system = "mimic_omop"
+    db.add(union_candidate)
+    db.add(schema_candidate)
+    db.commit()
+
+    profiles = load_candidate_profiles("query", "benchmark", db, corpus="join")
+
+    assert list(profiles) == ["join-candidate"]
+
+
+
+def test_candidate_profiles_do_not_encode_table_vectors(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from adacascade.agents.profiling import load_candidate_profiles
+
+    db = _session(tmp_path)
+    db.add_all([_table("query", table_name="Query"), _table("candidate", table_name="Candidate")])
+    db.add_all(
+        [
+            ColumnMetadata(
+                column_id="query:0:id",
+                table_id="query",
+                ordinal=0,
+                col_name="id",
+                col_type="int",
+            ),
+            ColumnMetadata(
+                column_id="candidate:0:id",
+                table_id="candidate",
+                ordinal=0,
+                col_name="id",
+                col_type="int",
+            ),
+        ]
+    )
+    db.commit()
+
+    def fail_encode(table_name, columns):
+        raise AssertionError("candidate profiles should not encode table vectors")
+
+    monkeypatch.setattr("adacascade.agents.profiling.encode_table_vector", fail_encode)
+
+    profiles = load_candidate_profiles("query", "benchmark", db)
+
+    assert list(profiles) == ["candidate"]
+    assert "table_vector" not in profiles["candidate"]
+
+
+
+def test_loaded_profile_restores_sample_values_from_stat_summary(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from adacascade.agents.profiling import load_table_profile
+
+    db = _session(tmp_path)
+    db.add(_table("query", table_name="Query"))
+    db.add(
+        ColumnMetadata(
+            column_id="query:0:id",
+            table_id="query",
+            ordinal=0,
+            col_name="id",
+            col_type="str",
+            stat_summary=json.dumps({"sample_values": ["a", "b", "c"]}),
+        )
+    )
+    db.commit()
+    monkeypatch.setattr("adacascade.agents.profiling.encode_table_vector", lambda *_: [])
+
+    profile = load_table_profile("query", db)
+
+    assert profile["columns"][0]["sample_values"] == ["a", "b", "c"]
+
+
+
+def test_l3_prompt_includes_column_sample_values() -> None:
+    from adacascade.agents.retrieval.layer3 import _build_batch_prompt
+
+    messages = _build_batch_prompt(
+        "patients",
+        [{"name": "patient_id", "dtype": "str", "sample_values": ["p1", "p2"]}],
+        [
+            {
+                "table_name": "people",
+                "columns": [
+                    {"name": "person_id", "dtype": "str", "sample_values": ["p1", "p3"]}
+                ],
+            }
+        ],
+        "JOIN",
+        0,
+    )
+
+    prompt = "\n".join(message["content"] for message in messages)
+    assert "samples: [p1, p2]" in prompt
+    assert "samples: [p1, p3]" in prompt
+
+
+
+def test_l3_prompt_truncates_long_sample_values() -> None:
+    from adacascade.agents.retrieval.layer3 import _column_prompt
+
+    prompt = _column_prompt(
+        {
+            "name": "description",
+            "dtype": "str",
+            "sample_values": ["x" * 100, "y" * 100, "z" * 100],
+        }
+    )
+
+    assert len(prompt) < 120
+    assert "xxx" in prompt
+    assert "yyy" in prompt
+
+
+
+def test_l3_batches_one_candidate_per_call_for_local_context() -> None:
+    from adacascade.agents.retrieval.layer3 import _candidate_batches
+
+    candidates = [{"table_id": str(index)} for index in range(3)]
+
+    batches = _candidate_batches(candidates, batch_size=10)
+
+    assert batches == [([candidates[0]], 0), ([candidates[1]], 1), ([candidates[2]], 2)]
+
+
+
+def test_loaded_retrieval_profile_includes_table_vector(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from adacascade.agents.profiling import load_table_profile
+
+    db = _session(tmp_path)
+    db.add(_table("query", table_name="Query"))
+    db.add(
+        ColumnMetadata(
+            column_id="query:0:id",
+            table_id="query",
+            ordinal=0,
+            col_name="id",
+            col_type="int",
+        )
+    )
+    db.commit()
+
+    monkeypatch.setattr(
+        "adacascade.agents.profiling.encode_table_vector",
+        lambda table_name, columns: [0.1, 0.2, 0.3],
+    )
+
+    profile = load_table_profile("query", db)
+
+    assert profile["table_vector"] == [0.1, 0.2, 0.3]
+
 
 
 def test_retrieval_benchmark_loads_profiles_from_db(
@@ -217,6 +470,88 @@ def test_retrieval_benchmark_loads_profiles_from_db(
     assert list(seen["candidate_profiles"].keys()) == ["candidate"]
 
 
+def test_retrieval_benchmark_initializes_qdrant_registry(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from scripts import run_retrieval_benchmark
+
+    fixture_dir = tmp_path / "bench" / "join"
+    fixture_dir.mkdir(parents=True)
+    (fixture_dir / "queries.json").write_text(
+        json.dumps({"task_type": "JOIN", "queries": [{"table_id": "query"}]})
+    )
+    (fixture_dir / "ground_truth.json").write_text(
+        json.dumps(
+            {
+                "task_type": "JOIN",
+                "pairs": [{"query_table_id": "query", "candidate_table_id": "candidate"}],
+            }
+        )
+    )
+    db = _session(tmp_path)
+    db.add_all([_table("query"), _table("candidate")])
+    db.add_all(
+        [
+            ColumnMetadata(
+                column_id="query:0:id",
+                table_id="query",
+                ordinal=0,
+                col_name="id",
+                col_type="int",
+            ),
+            ColumnMetadata(
+                column_id="candidate:0:id",
+                table_id="candidate",
+                ordinal=0,
+                col_name="id",
+                col_type="int",
+            ),
+        ]
+    )
+    db.commit()
+    seen: dict[str, object] = {}
+
+    class FakeAsyncQdrantClient:
+        def __init__(self, *, url: str, check_compatibility: bool) -> None:
+            seen["url"] = url
+            seen["check_compatibility"] = check_compatibility
+
+    async def fake_run(state):
+        return {
+            **state,
+            "ranking": [{"table_id": "candidate", "score": 1.0}],
+            "c1_meta": ["candidate"],
+            "c2_vec": ["candidate"],
+            "c3_llm": ["candidate"],
+        }
+
+    monkeypatch.setattr("adacascade.agents.retrieval.run", fake_run)
+    monkeypatch.setattr(run_retrieval_benchmark, "AsyncQdrantClient", FakeAsyncQdrantClient)
+    monkeypatch.setattr(run_retrieval_benchmark.settings, "QDRANT_URL", "http://qdrant.test")
+    monkeypatch.setattr(
+        run_retrieval_benchmark,
+        "AdacQdrantClient",
+        lambda client: {"client": client},
+    )
+    monkeypatch.setattr(
+        run_retrieval_benchmark,
+        "init_qdrant_registry",
+        lambda client: seen.setdefault("registry", client),
+    )
+
+    run_retrieval_benchmark.run_retrieval_benchmark(
+        fixture_dir,
+        tenant_id="benchmark",
+        corpus="join",
+        db=db,
+    )
+
+    assert seen["url"] == "http://qdrant.test"
+    assert seen["check_compatibility"] is False
+    assert seen["registry"]
+
+
+
 def test_retrieval_benchmark_uses_settings_database_when_db_is_not_passed(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -286,6 +621,72 @@ def test_retrieval_benchmark_uses_settings_database_when_db_is_not_passed(
 
     assert report["metrics"]["recall@1"] == 1.0
     assert list(seen["candidate_profiles"].keys()) == ["candidate"]
+
+
+def test_matcher_benchmark_does_not_encode_table_vectors(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from scripts.run_matcher_benchmark import run_matcher_benchmark
+
+    fixture_dir = tmp_path / "matcher" / "wikidata" / "joinable"
+    fixture_dir.mkdir(parents=True)
+    (fixture_dir / "ground_truth.json").write_text(
+        json.dumps(
+            {
+                "task_type": "JOIN",
+                "scenario": "SLD",
+                "source_table_id": "source",
+                "target_table_id": "target",
+                "column_matches": [{"source_column": "id", "target_column": "person_id"}],
+            }
+        )
+    )
+    db = _session(tmp_path)
+    db.add_all([_table("source"), _table("target")])
+    db.add_all(
+        [
+            ColumnMetadata(
+                column_id="source:0:id",
+                table_id="source",
+                ordinal=0,
+                col_name="id",
+                col_type="int",
+            ),
+            ColumnMetadata(
+                column_id="target:0:person_id",
+                table_id="target",
+                ordinal=0,
+                col_name="person_id",
+                col_type="int",
+            ),
+        ]
+    )
+    db.commit()
+
+    def fail_encode(table_name, columns):
+        raise AssertionError("matcher profiles should not encode table vectors")
+
+    async def fake_run(state):
+        return {
+            **state,
+            "final_mappings": [
+                {
+                    "source_table_id": "source",
+                    "source_column": "id",
+                    "target_table_id": "target",
+                    "target_column": "person_id",
+                }
+            ],
+            "similarity_pairs": [],
+        }
+
+    monkeypatch.setattr("adacascade.agents.profiling.encode_table_vector", fail_encode)
+    monkeypatch.setattr("adacascade.agents.matcher.run", fake_run)
+
+    report = run_matcher_benchmark(fixture_dir, tenant_id="benchmark", db=db)
+
+    assert report["metrics"]["recall"] == 1.0
+
 
 
 def test_matcher_benchmark_reports_precision_recall_f1(
@@ -597,6 +998,14 @@ def test_matcher_benchmark_runs_all_child_ground_truth_dirs(
     assert report["scenarios"] == ["joinable", "unionable"]
     assert report["pairs"] == 2
     assert report["metrics"] == {"precision": 1.0, "recall": 1.0, "f1": 1.0}
+
+
+def test_start_llm_defaults_fit_local_4090_kv_cache() -> None:
+    script = Path("scripts/start_llm.sh").read_text()
+
+    assert 'VLLM_GPU_MEMORY_UTILIZATION:-0.55' in script
+    assert 'VLLM_MAX_MODEL_LEN:-4096' in script
+
 
 
 def test_retrieval_benchmark_cli_imports_project_package() -> None:
