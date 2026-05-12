@@ -48,9 +48,26 @@ curl --noproxy '*' http://localhost:8000/v1/models
 
 For development/demo speed, the API runtime can be used instead of local vLLM.
 
-### 3. Start FastAPI
+### 3. Start the same-origin demo
 
-FastAPI must run as a single worker.
+The stable local browser demo uses FastAPI on port 6008 and the Vite same-origin proxy. This avoids browser CORS issues from direct `localhost:5173` frontend calls to a separate API origin.
+
+```bash
+bash scripts/start_demo.sh
+```
+
+Open `http://localhost:5173`, or the next Vite port printed by Vite if 5173 is occupied.
+
+For separate terminals, run the equivalent commands:
+
+```bash
+APP_PORT=6008 NO_PROXY=localhost,127.0.0.1 bash scripts/start_api.sh
+VITE_API_BASE_URL= npm --prefix frontend run dev -- --host 0.0.0.0
+```
+
+FastAPI must run as a single worker; `scripts/start_api.sh` enforces `--workers 1`.
+
+If you need to bypass the helper script, the expanded backend command is:
 
 ```bash
 set -a
@@ -73,9 +90,9 @@ curl --noproxy '*' -H 'Authorization: Bearer dev-local-token' -H 'X-Tenant-Id: d
 curl --noproxy '*' -H 'Authorization: Bearer dev-local-token' -H 'X-Tenant-Id: default' 'http://localhost:6008/tables?status=READY&limit=1'
 ```
 
-### 4. Start frontend demo
+### 4. Public demo entry
 
-Use same-origin API proxy for public browser testing.
+The public demo path uses the same same-origin proxy setup, with the externally mapped Vite port.
 
 ```bash
 VITE_API_BASE_URL="" \

@@ -253,3 +253,14 @@ def test_gc_does_not_delete_source_uri_outside_data_dir(tmp_path: Path) -> None:
     assert summary == {"scanned": 1, "deleted_records": 1, "deleted_dirs": 0}
     assert external_dir.exists()
     assert db.query(TableRegistry).count() == 0
+
+
+def test_demo_startup_script_documents_same_origin_proxy() -> None:
+    script = Path("scripts/start_demo.sh")
+
+    content = script.read_text()
+
+    assert "APP_PORT=6008" in content
+    assert "NO_PROXY=localhost,127.0.0.1" in content
+    assert "VITE_API_BASE_URL= npm --prefix frontend run dev -- --host 0.0.0.0" in content
+    assert "http://localhost:5173" in content
