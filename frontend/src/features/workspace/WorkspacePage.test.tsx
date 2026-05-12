@@ -238,6 +238,26 @@ describe('WorkspacePage', () => {
     })
   })
 
+  it('starts tasks with JOIN tuned recall options when that profile is selected', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Execution profile'), 'joinTuned')
+    await user.click(screen.getByRole('button', { name: 'Run AdaCascade' }))
+
+    expect(startIntegrate).toHaveBeenCalledWith('default', 'default_table', {
+      theta_1: 0.2,
+      theta_2: 0.55,
+      theta_3: 0.5,
+      theta_match: 0.7,
+      matcher_top_k: 3,
+      column_recall_enabled: true,
+      column_recall_top_k: 10,
+      column_recall_add_k: 10,
+    })
+  })
+
   it('defaults to light theme and persists root theme changes from the toolbar', async () => {
     const user = userEvent.setup()
     renderWorkspace()

@@ -97,10 +97,10 @@ describe('TaskControlPanel', () => {
     const user = userEvent.setup()
     render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)
 
-    await user.selectOptions(screen.getByLabelText('Execution profile'), 'fast')
+    await user.selectOptions(screen.getByLabelText('Execution profile'), 'joinTuned')
 
     expect(baseProps.onExecutionProfileChange).toHaveBeenCalledTimes(1)
-    expect(baseProps.onExecutionProfileChange).toHaveBeenCalledWith('fast')
+    expect(baseProps.onExecutionProfileChange).toHaveBeenCalledWith('joinTuned')
   })
 
   it('renders advanced parameter sliders and reset control', () => {

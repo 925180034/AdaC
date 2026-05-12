@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { TaskMode, TableSummary } from '../tasks/taskTypes'
 
-export type ExecutionProfile = 'reproducible' | 'fast'
+export type ExecutionProfile = 'reproducible' | 'fast' | 'joinTuned'
 
 export type TenantOption = {
   value: string
@@ -172,6 +172,7 @@ export function TaskControlPanel({
           >
             <option value="reproducible">{copy.executionProfiles.reproducible}</option>
             <option value="fast">{copy.executionProfiles.fast}</option>
+            <option value="joinTuned">{copy.executionProfiles.joinTuned}</option>
           </select>
         </label>
 

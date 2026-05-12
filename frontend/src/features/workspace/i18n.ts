@@ -35,7 +35,7 @@ export type WorkspaceCopy = {
     modes: Record<'discover' | 'integrate' | 'match', string>
     tenantOptions: Record<'default' | 'benchmark', string>
     executionProfile: string
-    executionProfiles: Record<'reproducible' | 'fast', string>
+    executionProfiles: Record<'reproducible' | 'fast' | 'joinTuned', string>
     advancedParameters: string
     l1Threshold: string
     l2Threshold: string
@@ -140,7 +140,7 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       modes: { discover: 'Discover', integrate: 'Integrate', match: 'Match' },
       tenantOptions: { default: 'default (demo)', benchmark: 'benchmark (full)' },
       executionProfile: 'Execution profile',
-      executionProfiles: { reproducible: 'Reproducible', fast: 'Demo fast' },
+      executionProfiles: { reproducible: 'Reproducible', fast: 'Demo fast', joinTuned: 'JOIN tuned recall' },
       advancedParameters: 'Advanced parameters',
       l1Threshold: 'L1 threshold',
       l2Threshold: 'L2 threshold',
@@ -277,7 +277,7 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       modes: { discover: '发现', integrate: '集成', match: '匹配' },
       tenantOptions: { default: 'default（演示）', benchmark: 'benchmark（全量）' },
       executionProfile: '执行配置',
-      executionProfiles: { reproducible: '可复现', fast: '演示加速' },
+      executionProfiles: { reproducible: '可复现', fast: '演示加速', joinTuned: 'JOIN 调优召回' },
       advancedParameters: '高级参数',
       l1Threshold: 'L1 阈值',
       l2Threshold: 'L2 阈值',
