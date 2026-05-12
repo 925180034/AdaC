@@ -327,6 +327,7 @@
 - [x] 每个已实现增强方案均按 TDD 覆盖：样本值 boost、列召回 source_system 过滤、L2 后补入、`column_recall_add_k` 限制、sample recall 与低信息 token 过滤均已有单元测试
 - [x] 代码审查收口：sample token 归一化集中到 `layer1.sample_tokens()`，L1 sample boost 只预计算一次 query sample tokens，sample recall 用 `limit` + heap 保留 top-K，避免全量排序；`pytest tests/unit/ -q` → 105 passed，`ruff check adacascade/ scripts/ tests/` → no issues
 - [x] 当前推荐实验配置：仅启用 column recall，`{"column_recall_enabled": true, "column_recall_top_k": 10, "column_recall_add_k": 10}`；sample recall 与 join sample boost 保持 default-off，不写入 paper-default `tlcf` 超参
+- [x] 前端工作台已新增显式 `JOIN tuned recall` 执行 profile，并通过 Vitest/build/lint 与浏览器请求体验证确认会发送 column recall options；默认 `Reproducible` 路径仍保持 paper-default
 
 #### M5.8.5 验收标准
 - [x] `scripts/optimize_retrieval_params.py --corpus join --limit 20 --trials 8 --timeout 900 --k2-choices 40,80,120` 可稳定输出 JSON 报告；20-trial 长搜不在当前 4090 环境继续盲跑
@@ -339,7 +340,7 @@
 - [x] Matcher 两个数据集（Wikidata、MIMIC-OMOP）均可被 benchmark runner 稳定加载和执行
 - [x] Retrieval benchmark 输出 R@K 与分层耗时报告
 - [x] Matcher benchmark 输出 Precision / Recall / F1 与分阶段耗时报告
-- [ ] Optuna 输出 JOIN/UNION tuned 参数搜索报告，并与 paper-default 对照
+- [x] Optuna 输出 JOIN/UNION 小样本 tuned 参数搜索报告，并与 paper-default 对照；结论是纯调参收益有限，采用显式 JOIN column-recall profile 作为当前 4090-safe 工程折中
 - [ ] A100 压测输出 `/integrate` P95、Profiling 吞吐、GPU 显存和降级情况（当前服务器跳过，迁移到目标部署服务器验收）
 - [x] 根据 smoke benchmark 形成下一轮优化方向：优先做 Retrieval 参数搜索，其次评估 JOIN 专用列级/样本值召回增强
 
@@ -347,8 +348,8 @@
 
 ## 当前状态
 
-**阶段**：✅ M1 完成 → ✅ M2 工程验收完成（Week1/2/3）→ ✅ M3 本地集成完成 → ✅ M3.5 前端演示工作台完成 → ✅ M4 非 Docker 上线/运维固化完成 → 当前准备进入 M5 全量数据入湖、Benchmark 与性能优化
-**最后更新**：2026-04-29
+**阶段**：✅ M1 完成 → ✅ M2 工程验收完成（Week1/2/3）→ ✅ M3 本地集成完成 → ✅ M3.5 前端演示工作台完成 → ✅ M4 非 Docker 上线/运维固化完成 → ✅ M5.8 4090-safe Retrieval 调优收口 → 当前进入 M5.9/M6 前端到端 demo 稳定性验证
+**最后更新**：2026-05-12
 
 ### M1 完成摘要
 - 所有骨架代码实现完毕（24 个 Python 源文件）
