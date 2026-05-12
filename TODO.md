@@ -343,6 +343,7 @@
 - [x] Optuna 输出 JOIN/UNION 小样本 tuned 参数搜索报告，并与 paper-default 对照；结论是纯调参收益有限，采用显式 JOIN column-recall profile 作为当前 4090-safe 工程折中
 - [ ] A100 压测输出 `/integrate` P95、Profiling 吞吐、GPU 显存和降级情况（当前服务器跳过，迁移到目标部署服务器验收）
 - [x] 根据 smoke benchmark 形成下一轮优化方向：优先做 Retrieval 参数搜索，其次评估 JOIN 专用列级/样本值召回增强
+- [x] 前端端到端 demo 稳定性验证：Vite same-origin proxy + FastAPI 6008 + Qdrant + local vLLM 下，从 UI 选择 `JOIN tuned recall` 并启动真实 integrate 任务；任务 `527cc084-c051-4e38-934a-da07bca96448` 成功结束，输出 3 个 ranking candidates、33 个 mappings，SSE trace 展示到 Retrieval/Matcher 阶段，结果区 Graph/Ranking/Mappings tab 可见
 
 ---
 
