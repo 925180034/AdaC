@@ -254,6 +254,13 @@
 - [x] 区分论文默认配置、benchmark 复现配置与工程加速配置，避免随意修改算法规格默认超参
 - [ ] 输出 API 模式与 local vLLM 模式对比：质量、耗时、失败率、成本/显存（随 M5.6 在目标部署服务器执行）
 
+#### M5.5.1 Demo integrate latency profile（2026-05-12）
+- [x] 复用已验证前端 E2E 任务 `527cc084-c051-4e38-934a-da07bca96448`，不重新触发长耗时 blind benchmark；元数据来自 `/root/AdaC/data/metadata.db`，LangGraph checkpoint 来自 `/root/AdaC/data/ckpt.db`
+- [x] 总耗时：471.5s（03:23:10.425 → 03:31:01.943），状态 SUCCESS，`ranking_count=3`，`mapping_count=33`，租户 `default`，查询表 `musicians_unionable_source`，UI 选择 JOIN tuned recall profile
+- [x] 可恢复分段耗时：Planner/routing≈0.002s；Profiling/profile load≈7.046s（1.5%）；Retrieval TLCF≈2.442s（0.5%，C1/C2/C3 均为 3）；Matcher≈462.005s（98.0%）；API/finalization 未归因约 0.022s
+- [x] 瓶颈结论：端到端延迟几乎全部集中在 Matcher LLM verification；Retrieval tuned recall profile 已把候选收敛到 3 张表，但每张候选表仍会产生大量列对验证，33 条最终映射对应约 7m42s Matcher 阶段
+- [x] 下一步动作：优先对 demo/product 路径做 Matcher verification cache 命中率与并发/批处理 profile，记录 LLM pair 数、cache hit/miss、per-call P50/P95；如仍超预算，再评估 UI demo 默认 `matcher_top_k` 或列对预过滤阈值的独立工程 profile，不修改论文默认超参
+
 ### M5.6 A100 / local vLLM 压测（当前服务器跳过）
 - [ ] 在 A100 环境下启动 local vLLM，记录模型、量化方式、max_model_len、gpu_memory_utilization（按用户要求迁移到目标部署服务器执行）
 - [ ] 压测 `/integrate`：记录 P50 / P95 / P99、ranking 数、mappings 数、失败率（按用户要求迁移到目标部署服务器执行）
