@@ -365,6 +365,7 @@ async def encode_and_index(
             "tenant_id": tenant_id,
             "vector": col_vecs[i].tolist(),
             "col_type": col_row.col_type,
+            "source_system": tr.source_system,
         }
         for i, col_row in enumerate(col_rows)
     ]

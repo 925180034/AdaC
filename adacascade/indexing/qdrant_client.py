@@ -103,6 +103,7 @@ class AdacQdrantClient:
                     "tenant_id": p["tenant_id"],
                     "col_type": p.get("col_type", "str"),
                     "status": "READY",
+                    "source_system": p.get("source_system"),
                 },
             )
             for p in points
@@ -115,17 +116,21 @@ class AdacQdrantClient:
         vector: list[float],
         tenant_id: str,
         top_k: int,
+        source_system: str | None = None,
     ) -> list[dict[str, Any]]:
         """Search column-level embeddings filtered by tenant and READY status."""
+        must = [
+            FieldCondition(key="tenant_id", match=MatchValue(value=tenant_id)),
+            FieldCondition(key="status", match=MatchValue(value="READY")),
+        ]
+        if source_system:
+            must.append(
+                FieldCondition(key="source_system", match=MatchValue(value=source_system))
+            )
         result = await self._q.query_points(
             collection_name=self._col,
             query=vector,
-            query_filter=Filter(
-                must=[
-                    FieldCondition(key="tenant_id", match=MatchValue(value=tenant_id)),
-                    FieldCondition(key="status", match=MatchValue(value="READY")),
-                ]
-            ),
+            query_filter=Filter(must=must),
             limit=top_k,
             with_payload=True,
         )

@@ -282,41 +282,57 @@
 > 目标：在不删除论文默认配置的前提下，新增可复现实验配置与 tuned profile。允许通过 Optuna 搜索 `theta_1/theta_2/theta_3/k_1/k_2/w_1/w_2/w_3` 等超参数；若调参有效，可把最优配置作为 `benchmark_tuned` 或 `demo_fast` profile 暴露，paper-default 仍保留用于论文复现对照。
 
 #### M5.8.1 先建立可重复的调参 runner
-- [ ] 新增 `scripts/optimize_retrieval_params.py`，支持 `--fixture-dir`、`--tenant-id`、`--corpus join|union`、`--limit`、`--trials`、`--timeout`、`--seed`、`--storage`、`--study-name`、`--output`
-- [ ] 默认目标函数优先优化 `recall@10`，并用平均耗时作为 secondary penalty：`objective = recall@10 - latency_penalty`
-- [ ] 搜索空间第一版：
+- [x] 新增 `scripts/optimize_retrieval_params.py`，支持 `fixture_dir`、`--tenant-id`、`--corpus join|union`、`--limit`、`--trials`、`--timeout`、`--seed`、`--storage`、`--study-name`、`--output`
+- [x] 默认目标函数优先优化 `recall@10`，并用平均耗时作为 secondary penalty：`objective = recall@10 - avg_ms / latency_penalty_ms`
+- [x] 搜索空间第一版：
   - `theta_1`: 0.05 ~ 0.30
   - `theta_2`: 0.35 ~ 0.75
   - `theta_3`: 0.20 ~ 0.70
   - `k_1`: categorical `[120, 200, 300, 500, 800]`
   - `k_2`: categorical `[40, 80, 120, 200, 400]`
   - `w_1/w_2/w_3`: Dirichlet-like 归一化权重，分别约束到 `[0,1]` 且总和为 1
-- [ ] runner 输出 JSON 报告：best params、best value、R@1/R@5/R@10、avg/p50/p95、L1/L2/L3 平均耗时、失败数、evaluation metadata、trials 明细
-- [ ] 单元测试覆盖：搜索空间生成、权重归一化、objective 计算、study report 序列化；测试中 mock benchmark 执行，避免真实 LLM
+- [x] runner 输出 JSON 报告：best params、best value、R@1/R@5/R@10、avg/p50/p95、L1/L2/L3 平均耗时、失败数、evaluation metadata、trials 明细
+- [x] 单元测试覆盖：搜索空间生成、权重归一化、objective 计算、study report 序列化；测试中 mock benchmark 执行，避免真实 LLM
+- [x] smoke 验证：JOIN `--limit 5 --trials 2` 可完成；best trial 为 `k_1=200,k_2=40,theta_1≈0.200,theta_2≈0.412,theta_3≈0.278,w≈(0.184,0.460,0.355)`，`recall@10=0.2`，`avg_ms≈18.6s`；`k_2=200` trial 未提升召回且 `avg_ms≈68.7s`
 
 #### M5.8.2 让 retrieval benchmark 支持 plan overrides
-- [ ] 扩展 `scripts/run_retrieval_benchmark.py`：新增可选 `plan_overrides` 参数和 CLI `--plan-json`，传入 Retrieval state 的 `plan`
-- [ ] 单元测试覆盖：`--plan-json` 中的 `k_1/k_2/theta_* / w_*` 能进入 `retrieval.run(state)`，并不影响未传参数时的 paper-default 路径
-- [ ] smoke 验证：JOIN `--limit 5` 分别跑 paper-default 与 optuna trial 参数，输出两份 JSON 可对比
+- [x] 扩展 `scripts/run_retrieval_benchmark.py`：新增可选 `plan_overrides` 参数和 CLI `--plan-json`，传入 Retrieval state 的 `plan`
+- [x] 单元测试覆盖：`--plan-json` 中的 `k_1/k_2/theta_* / w_*` 能进入 `retrieval.run(state)`，并不影响未传参数时的 paper-default 路径
+- [x] smoke 验证：JOIN `--limit 5` 已通过 Optuna runner 真实调用 plan overrides，输出 trial JSON 可对比
 
 #### M5.8.3 小样本 Optuna 搜索（当前 4090 环境）
-- [ ] 先跑 JOIN `--limit 20 --trials 20`，验证搜索流程、报告格式、失败恢复与耗时
-- [ ] 若 top trial 明显优于 paper-default，再跑 JOIN `--limit 50 --trials 50`
-- [ ] 对 UNION 只做 sanity 搜索，确认调参不会破坏当前 `recall@10≈0.8` 的 smoke 表现
-- [ ] 将最优参数写入 `configs/default.yaml` 的独立 profile（例如 `retrieval_profiles.benchmark_tuned.join`），不覆盖 `tlcf` paper-default
+- [x] 先跑 JOIN `--limit 20 --trials 8 --timeout 900 --k2-choices 40,80,120`，验证搜索流程、报告格式、失败恢复与耗时；900s 内完成 3 个 trial，`failures=0`
+- [x] 当前最佳 objective trial：`k_1=120,k_2=40,theta_1≈0.181,theta_2≈0.523,theta_3≈0.346,w≈(0.274,0.277,0.449)`，`recall@10=0.20`、`recall@5=0.15`、`avg_ms≈14.7s`、`L3 avg≈12.6s`
+- [x] 最高 recall trial：`k_1=120,k_2=120,theta_1≈0.093,theta_2≈0.376,theta_3≈0.674,w≈(0.472,0.044,0.484)`，`recall@10=0.25`，但 `avg_ms≈27.8s`、`L3 avg≈25.7s`，质量收益很小且延迟接近翻倍
+- [x] 结论：当前 TLCF 参数搜索没有解决 JOIN 低召回根因；不建议直接扩大到 JOIN `--limit 50 --trials 50`，应先进入 M5.8.4 的 JOIN 专用列级/样本值召回增强
+- [x] 对 UNION 做 sanity 搜索：第一次因 Qdrant/vLLM 未启动产生无效 `recall@10=0.0` 报告并已废弃；恢复 Qdrant + vLLM 后，UNION `--limit 5 --trials 2 --k2-choices 40,80,120` 有效报告为 `failures=0`、两次 trial 均 `recall@1=0.6, recall@5=0.8, recall@10=0.8`，确认没有破坏当前 UNION smoke 表现
+- [ ] 若后续增强方案稳定优于默认，再将最优参数写入 `configs/default.yaml` 的独立 profile（例如 `retrieval_profiles.benchmark_tuned.join`），不覆盖 `tlcf` paper-default
 
 #### M5.8.4 如纯调参不足，再设计 JOIN 专用召回增强
-- [ ] 若 Optuna 后 JOIN R@10 仍显著低于目标，新增列级/样本值补充召回设计，不直接替换 TLCF 默认路径
-- [ ] 候选方案 A：用 `col_embeddings` 对 query 高基数列检索候选表，形成 `W_col`，再与 C1/table W 合并
-- [ ] 候选方案 B：对 `sample_values` 建轻量倒排索引，针对 JOIN key 候选列做 exact/normalized value overlap 召回
-- [ ] 候选方案 C：为 JOIN 的 L1 `text_blob` 增加可选样本 token profile，仅在 tuned/experiment profile 下启用
-- [ ] 每个增强方案必须 TDD：先写真值候选进入 C1/C2 的失败测试，再实现最小代码，再跑 benchmark smoke
+- [x] 若 Optuna 后 JOIN R@10 仍显著低于目标，新增列级/样本值补充召回设计，不直接替换 TLCF 默认路径
+- [x] 候选方案 A：用 `col_embeddings` 对 query 列检索候选表，默认关闭在 plan 中通过 `column_recall_enabled` 启用；候选先按 `source_system=retrieval|join` 过滤，再只允许补入当前 candidate pool 中的表
+- [x] 候选方案 A 实现约束：列召回不再合并进 C1，避免挤掉 lexical 真值候选；改为 L2 后、L3 前补入，并用 `column_recall_add_k` 限制额外 L3 候选数量
+- [x] 候选方案 A 数据刷新：JOIN column Qdrant payload 已补写 `source_system`，刷新结果 `processed=1534, succeeded=1534, failed=0`，并新增 `col_embeddings.source_system` payload index
+- [x] 候选方案 A smoke 结论：Qdrant/vLLM 均恢复后，JOIN `--limit 5` + `{"column_recall_enabled": true, "column_recall_top_k": 20, "column_recall_add_k": 10}` 将 `recall@10` 从默认 baseline `0.2` 提升到 `0.4`，`recall@5` 从 `0.2` 提升到 `0.4`；C2 平均从 `25.8` 增至 `32.8`，avg latency 从 `17.98s` 增至 `21.54s`
+- [x] 候选方案 A limit=20 对照：默认 baseline 为 `recall@1=0.00, recall@5=0.15, recall@10=0.20, avg=15.68s, C2=25.0`；`top_k=20/add_k=10` 提升到 `recall@1=0.05, recall@5=0.20, recall@10=0.30, avg=18.89s, C2=32.0`，质量收益明确但 L3 成本增加约 `3.2s/query`
+- [x] 候选方案 A 小网格结论：`add_k=5` 与 `add_k=8` 均只到 `recall@10=0.20`，无法超过 baseline；`add_k=10` 达到 `recall@10=0.30`；`add_k=15` 仍为 `recall@10=0.30` 但 avg 增至 `20.69s`，没有继续扩大价值；`top_k=10/20/40` 在 `add_k=10` 下指标相同，建议当前最佳工程折中采用 `column_recall_top_k=10, column_recall_add_k=10`
+- [x] 候选方案 A query-level 诊断：limit=20 的 18 个有真值 query 中，C1 命中 13 个、baseline C2 命中 8 个、column recall 后 C2 命中 9 个；column recall 实际只新增 1 个真值候选，说明收益有限且已到平台期
+- [x] 候选方案 A k2 诊断：单独扩大 `k_2=120` 将 C2 均值从 25.0 增至 53.9，但 `recall@10` 从 baseline 0.20 降到 0.15，avg latency 增至 29.51s；继续扩大 L2/L3 候选不是有效方向，排序噪声会抵消召回收益
+- [x] 候选方案 A 环境诊断：一次 `recall@10=0.0` smoke 无效，根因是 vLLM 8000 未监听导致 L3 全部 `Connection error`；恢复 vLLM 后同一配置 `failures=0` 且 L3 正常输出
+- [x] 候选方案 B：已新增默认关闭的 `sample_recall_enabled` / `sample_recall_add_k` / `sample_recall_min_overlap`，用 query/candidate `sample_values` 的 normalized overlap 在 L2 后、L3 前补入候选；实现中过滤 `0`、`0.0`、`.000`、`null`、`n/a` 等低信息 token，避免放大高频噪声
+- [x] 候选方案 B 信号诊断：limit=20 的 84 个真值 pair 中，C1 漏掉 40 个；其中仅 7 个存在 sample overlap，且最大 overlap=1，多数为 `0`/`0.0` 这类低信息数值，说明 sample overlap 是弱信号
+- [x] 候选方案 B benchmark 结论：sample recall 单独配置 `sample_recall_add_k=10,min_overlap=1` 得到 `recall@10=0.25, recall@5=0.10, avg=18.97s, C2=33.0`，只略优于 baseline 的 R@10 但劣于 column recall；column+sample hybrid 为 `recall@10=0.30, recall@5=0.15, avg=22.12s, C2=39.95`，没有超过 column-only 且延迟更高，因此不作为当前最佳配置
+- [x] 候选方案 C 初探：已新增默认关闭的 `join_sample_boost_enabled` / `join_sample_boost_weight` 实验开关，并用单测证明样本值重叠可提升弱文本候选进入 C1
+- [x] 候选方案 C smoke 结论：JOIN `--limit 5` 开启 `join_sample_boost_weight=0.4` 后 `recall@10` 从之前 smoke 的 0.2 降到 0.0；诊断显示它没有把第 4 个 query 的缺失真值拉入 C1，反而干扰已有真值排序，因此不作为主优化方向
+- [x] 每个已实现增强方案均按 TDD 覆盖：样本值 boost、列召回 source_system 过滤、L2 后补入、`column_recall_add_k` 限制、sample recall 与低信息 token 过滤均已有单元测试
+- [x] 代码审查收口：sample token 归一化集中到 `layer1.sample_tokens()`，L1 sample boost 只预计算一次 query sample tokens，sample recall 用 `limit` + heap 保留 top-K，避免全量排序；`pytest tests/unit/ -q` → 105 passed，`ruff check adacascade/ scripts/ tests/` → no issues
+- [x] 当前推荐实验配置：仅启用 column recall，`{"column_recall_enabled": true, "column_recall_top_k": 10, "column_recall_add_k": 10}`；sample recall 与 join sample boost 保持 default-off，不写入 paper-default `tlcf` 超参
 
 #### M5.8.5 验收标准
-- [ ] `scripts/optimize_retrieval_params.py --corpus join --limit 20 --trials 20` 能稳定完成并输出 JSON 报告
-- [ ] paper-default 与 tuned profile 的结果可在同一 runner 中对比，报告记录所有参数
-- [ ] 若 tuned profile 优于默认，将结果记录到本 TODO，并保留默认超参作为论文复现 baseline
-- [ ] 不在当前 4090 环境执行 A100 压测；A100/local vLLM 长压测仍迁移到目标部署服务器
+- [x] `scripts/optimize_retrieval_params.py --corpus join --limit 20 --trials 8 --timeout 900 --k2-choices 40,80,120` 可稳定输出 JSON 报告；20-trial 长搜不在当前 4090 环境继续盲跑
+- [x] paper-default 与实验 plan override 的结果可在同一 runner 中对比，报告记录所有参数
+- [x] 当前实验 plan 优于默认但仍属 JOIN 专用增强：结论记录到本 TODO，paper-default `tlcf` 超参保持不变
+- [x] 不在当前 4090 环境执行 A100 压测；A100/local vLLM 长压测仍迁移到目标部署服务器
 
 ### M5.9 验收标准
 - [x] `benchmark` 租户完成 retrieval bench JOIN + UNION 全量入湖、Profiling、Qdrant 索引、TF-IDF 重建

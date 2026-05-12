@@ -66,6 +66,51 @@ def _load_tfidf() -> Any:
     return load_tfidf()
 
 
+_LOW_INFORMATION_SAMPLE_TOKENS = {
+    "",
+    "0",
+    "0.0",
+    "0.00",
+    "0.000",
+    ".0",
+    ".00",
+    ".000",
+    "none",
+    "null",
+    "nan",
+    "n/a",
+    "na",
+}
+
+
+def sample_tokens(columns: list[dict[str, Any]]) -> set[str]:
+    """Normalize informative column sample values for overlap scoring."""
+    tokens: set[str] = set()
+    for column in columns:
+        for value in column.get("sample_values", []):
+            token = str(value).strip().casefold()
+            if token not in _LOW_INFORMATION_SAMPLE_TOKENS:
+                tokens.add(token)
+    return tokens
+
+
+def _sample_overlap_tokens(
+    query_tokens: set[str], candidate_columns: list[dict[str, Any]]
+) -> float:
+    candidate_tokens = sample_tokens(candidate_columns)
+    union = query_tokens | candidate_tokens
+    if not union:
+        return 0.0
+    return len(query_tokens & candidate_tokens) / len(union)
+
+
+def sample_overlap(
+    query_columns: list[dict[str, Any]], candidate_columns: list[dict[str, Any]]
+) -> float:
+    """Jaccard overlap over normalized column sample values."""
+    return _sample_overlap_tokens(sample_tokens(query_columns), candidate_columns)
+
+
 def compute_s1(tfidf_sim: float, jaccard_sim: float) -> float:
     """S1 = ω1·Sim_TFIDF + ω2·Sim_Jaccard (Algorithm Spec §3.2, formula 3-3).
 
@@ -130,6 +175,9 @@ def build_c1(
     *,
     tenant_id: str | None = None,
     corpus: str = "all",
+    query_columns: list[dict[str, Any]] | None = None,
+    join_sample_boost_enabled: bool = False,
+    join_sample_boost_weight: float = 0.0,
 ) -> list[C1Entry]:
     """Build C₁ = TopK({Tc | S1 > θ1}, k1) using a min-heap (formula 3-6).
 
@@ -147,12 +195,20 @@ def build_c1(
     vq = vec.transform([query_blob])
 
     heap: list[tuple[float, str]] = []  # (s1, table_id) min-heap
+    query_sample_tokens = sample_tokens(query_columns or [])
 
     for cand in candidates:
         vc = vec.transform([cand["text_blob"]])
         sim_tf: float = float(cosine_similarity(vq, vc)[0, 0])
         sim_jac: float = type_jaccard(query_types, cand["type_multiset"])
         s1 = compute_s1(sim_tf, sim_jac)
+        if join_sample_boost_enabled:
+            s1 = min(
+                1.0,
+                s1
+                + join_sample_boost_weight
+                * _sample_overlap_tokens(query_sample_tokens, list(cand.get("columns", []))),
+            )
 
         if s1 <= theta_1:
             continue

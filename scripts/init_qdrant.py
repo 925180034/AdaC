@@ -31,6 +31,7 @@ def main() -> None:
             ("column_id", PayloadSchemaType.KEYWORD),
             ("status", PayloadSchemaType.KEYWORD),
             ("col_type", PayloadSchemaType.KEYWORD),
+            ("source_system", PayloadSchemaType.KEYWORD),
         ],
     }
 
