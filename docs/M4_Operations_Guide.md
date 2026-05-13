@@ -90,21 +90,24 @@ curl --noproxy '*' -H 'Authorization: Bearer dev-local-token' -H 'X-Tenant-Id: d
 curl --noproxy '*' -H 'Authorization: Bearer dev-local-token' -H 'X-Tenant-Id: default' 'http://localhost:6008/tables?status=READY&limit=1'
 ```
 
-### 4. Public demo entry
+### 4. AutoDL public demo entry
 
-The public demo path uses the same same-origin proxy setup, with the externally mapped Vite port.
-
-```bash
-VITE_API_BASE_URL="" \
-VITE_API_KEY="dev-local-token" \
-npm --prefix /root/AdaC/frontend run dev -- --host 0.0.0.0 --port 6006
-```
-
-Public entry:
+AutoDL exposes service port `6006` through the HTTPS URL in `AutoDLService6006URL`. In the current demo server this resolves to:
 
 ```text
 https://u307207-94cd-0c29b003.nmb1.seetacloud.com:8443/?tenant_id=default
 ```
+
+For public browser access from a Windows machine, run FastAPI on internal port `6008` and run Vite on internal port `6006`. The browser only opens the AutoDL `6006` public URL; backend API traffic is proxied by Vite to `localhost:6008` inside the server.
+
+```bash
+APP_PORT=6008 NO_PROXY=localhost,127.0.0.1 bash scripts/start_api.sh
+VITE_API_BASE_URL="" VITE_API_KEY="dev-local-token" npm --prefix /root/AdaC/frontend run dev -- --host 0.0.0.0 --port 6006
+```
+
+If Qdrant or local vLLM are not already running, start them first with steps 1 and 2 above. Local vLLM can still take several minutes to become ready; the UI can use the API runtime while it loads.
+
+The Vite proxy means no local SSH tunnel is required, and the backend `6008` URL does not need to be opened directly from the browser.
 
 Proxy checks:
 

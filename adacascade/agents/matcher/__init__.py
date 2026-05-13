@@ -92,6 +92,47 @@ def _apply_one_to_one(
     return {(src_idx, tgt_idx) for src_idx, tgt_idx in assignments.items()}
 
 
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, int(round((len(ordered) - 1) * percentile)))
+    return float(ordered[index])
+
+
+def _empty_matcher_metrics() -> dict[str, float | int]:
+    return {
+        "verified_pair_count": 0,
+        "cache_hit_count": 0,
+        "cache_miss_count": 0,
+        "llm_call_count": 0,
+        "matcher_verify_ms": 0.0,
+        "llm_verify_p50_ms": 0.0,
+        "llm_verify_p95_ms": 0.0,
+    }
+
+
+def _add_verified_metrics(
+    metrics: dict[str, float | int],
+    verified: list[dict[str, Any]],
+    aggregate_llm_latencies: list[float],
+) -> None:
+    cache_hits = sum(1 for item in verified if bool(item.get("cache_hit", False)))
+    llm_latencies = [
+        float(item.get("llm_latency_ms", 0.0))
+        for item in verified
+        if not bool(item.get("cache_hit", False))
+    ]
+    aggregate_llm_latencies.extend(llm_latencies)
+    metrics["verified_pair_count"] = int(metrics["verified_pair_count"]) + len(verified)
+    metrics["cache_hit_count"] = int(metrics["cache_hit_count"]) + cache_hits
+    metrics["cache_miss_count"] = int(metrics["cache_miss_count"]) + len(verified) - cache_hits
+    metrics["llm_call_count"] = int(metrics["llm_call_count"]) + len(llm_latencies)
+    if aggregate_llm_latencies:
+        metrics["llm_verify_p50_ms"] = _percentile(aggregate_llm_latencies, 0.50)
+        metrics["llm_verify_p95_ms"] = _percentile(aggregate_llm_latencies, 0.95)
+
+
 async def run(state: IntegrationState) -> IntegrationState:
     """LangGraph node: compute final column mappings."""
     task_id = state.get("task_id", "")
@@ -107,6 +148,8 @@ async def run(state: IntegrationState) -> IntegrationState:
         "llm_verification": 0.0,
         "decision": 0.0,
     }
+    matcher_metrics = _empty_matcher_metrics()
+    aggregate_llm_latencies: list[float] = []
 
     targets = _targets(state)
     if task_id:
@@ -167,10 +210,17 @@ async def run(state: IntegrationState) -> IntegrationState:
             source_cols,
             target_cols,
             scenario,
-            concurrency=int(plan.get("llm_concurrency", settings.llm_cfg.get("concurrency", 4))),
+            concurrency=int(
+                plan.get(
+                    "matcher_llm_concurrency",
+                    plan.get("llm_concurrency", settings.llm_cfg.get("concurrency", 4)),
+                )
+            ),
             use_cache=bool(plan.get("llm_cache_enabled", False)),
         )
         stage_timings_ms["llm_verification"] += (time.perf_counter() - started) * 1000
+        _add_verified_metrics(matcher_metrics, verified, aggregate_llm_latencies)
+        matcher_metrics["matcher_verify_ms"] = stage_timings_ms["llm_verification"]
         if task_id:
             await emit_task_event(
                 task_id,
@@ -181,6 +231,7 @@ async def run(state: IntegrationState) -> IntegrationState:
                     "status": "SUCCESS",
                     "output_size": len(verified),
                     "timing_ms": stage_timings_ms["llm_verification"],
+                    "metrics": matcher_metrics,
                 },
             )
             await emit_task_event(
@@ -250,16 +301,16 @@ async def run(state: IntegrationState) -> IntegrationState:
                     "input_size": 0,
                 },
             )
-            await emit_task_event(
-                task_id,
-                {
-                    "type": "agent_completed",
-                    "agent": "Matcher",
-                    "layer": layer,
-                    "status": "SUCCESS",
-                    "output_size": 0,
-                },
-            )
+            payload: dict[str, Any] = {
+                "type": "agent_completed",
+                "agent": "Matcher",
+                "layer": layer,
+                "status": "SUCCESS",
+                "output_size": 0,
+            }
+            if layer == "LLM":
+                payload["metrics"] = matcher_metrics
+            await emit_task_event(task_id, payload)
 
     sim_path = save_pkl(task_id, "sim", all_pairs) if task_id else None
     bound_log.info("matcher.done", pairs=len(all_pairs), mappings=len(final_mappings))
@@ -269,4 +320,5 @@ async def run(state: IntegrationState) -> IntegrationState:
         "similarity_pairs": all_pairs,
         "final_mappings": final_mappings,
         "stage_timings_ms": stage_timings_ms,
+        "matcher_metrics": matcher_metrics,
     }

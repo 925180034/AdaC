@@ -261,6 +261,14 @@
 - [x] 瓶颈结论：端到端延迟几乎全部集中在 Matcher LLM verification；Retrieval tuned recall profile 已把候选收敛到 3 张表，但每张候选表仍会产生大量列对验证，33 条最终映射对应约 7m42s Matcher 阶段
 - [x] 下一步动作：优先对 demo/product 路径做 Matcher verification cache 命中率与并发/批处理 profile，记录 LLM pair 数、cache hit/miss、per-call P50/P95；如仍超预算，再评估 UI demo 默认 `matcher_top_k` 或列对预过滤阈值的独立工程 profile，不修改论文默认超参
 
+#### M5.5.2 Matcher verification 无损加速（2026-05-13）
+- [x] 阶段 1：实现进程内 Matcher verification cache，cache key 覆盖 source/target column profile、scenario、prompt/schema version、runtime backend 与 model，确保 production/demo 可复用结果但 benchmark 可禁用
+- [x] 阶段 1：对 cache miss 的 Matcher LLM verification 增加 `matcher_llm_concurrency` 并发控制，默认保守，Demo fast / JOIN tuned profile 可显式提高
+- [x] 阶段 1：记录 `verified_pair_count`、`cache_hit_count`、`cache_miss_count`、`llm_call_count`、`matcher_verify_ms`、`llm_verify_p50_ms`、`llm_verify_p95_ms`，用于定位 pair 数、cache 命中率与单次 LLM 延迟
+- [x] 阶段 1 聚焦验证：`pytest tests/unit/test_matcher_llm.py tests/unit/test_matcher.py tests/unit/test_m5_performance.py -q` → 22 passed；`npm --prefix frontend run test -- --run WorkspacePage.test.tsx TaskControlPanel.test.tsx` → 30 passed；`ruff check adacascade/agents/matcher tests/unit/test_matcher.py tests/unit/test_matcher_llm.py` → All checks passed
+- [ ] 阶段 1 实测验证：同一 demo integrate 输入连续运行两次，第二次 cache hit 明显上升、Matcher verification latency 明显下降，ranking/mapping 结果保持一致
+- [ ] 阶段 2 预留：若阶段 1 收益明确，再将 cache 落到 SQLite `matcher_verification_cache`，实现 memory → SQLite → LLM 的持久缓存链路
+
 ### M5.6 A100 / local vLLM 压测（当前服务器跳过）
 - [ ] 在 A100 环境下启动 local vLLM，记录模型、量化方式、max_model_len、gpu_memory_utilization（按用户要求迁移到目标部署服务器执行）
 - [ ] 压测 `/integrate`：记录 P50 / P95 / P99、ranking 数、mappings 数、失败率（按用户要求迁移到目标部署服务器执行）

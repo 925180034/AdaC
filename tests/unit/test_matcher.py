@@ -136,7 +136,10 @@ def test_matcher_verification_uses_opt_in_cache(
     )
 
     assert calls == 1
-    assert first == second
+    assert first[0]["llm_result"] == second[0]["llm_result"]
+    assert first[0]["cache_key"] == second[0]["cache_key"]
+    assert first[0]["cache_hit"] is False
+    assert second[0]["cache_hit"] is True
 
 
 def test_decide_and_hungarian_1to1() -> None:
@@ -324,3 +327,138 @@ async def test_matcher_run_returns_stage_timings(
         "decision",
     }
     assert all(value >= 0 for value in result["stage_timings_ms"].values())
+
+
+@pytest.mark.anyio
+async def test_matcher_run_aggregates_llm_verification_metrics_across_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from adacascade.agents import matcher
+    from adacascade.llm_schemas import MatchResult
+
+    seen_kwargs: dict[str, object] = {}
+    call_index = 0
+
+    async def fake_verify_pairs_async(
+        pairs: list[dict[str, object]], *_args: object, **kwargs: object
+    ) -> list[dict[str, object]]:
+        nonlocal call_index
+        seen_kwargs.update(kwargs)
+        if call_index == 0:
+            verified = [
+                {
+                    **pairs[0],
+                    "llm_result": MatchResult(reasoning="same", score=0.9, is_equivalent=True),
+                    "cache_hit": False,
+                    "llm_latency_ms": 10.0,
+                },
+                {
+                    **pairs[1],
+                    "llm_result": MatchResult(reasoning="same", score=0.8, is_equivalent=True),
+                    "cache_hit": False,
+                    "llm_latency_ms": 20.0,
+                },
+            ]
+        else:
+            verified = [
+                {
+                    **pairs[0],
+                    "llm_result": MatchResult(reasoning="same", score=0.7, is_equivalent=True),
+                    "cache_hit": False,
+                    "llm_latency_ms": 30.0,
+                },
+                {
+                    **pairs[1],
+                    "llm_result": MatchResult(reasoning="same", score=0.6, is_equivalent=True),
+                    "cache_hit": True,
+                    "llm_latency_ms": 0.0,
+                },
+            ]
+        call_index += 1
+        return verified
+
+    def fake_filter_cpi(_source_cols, _target_cols, _scenario, theta_cand=None):
+        return [
+            {"src_idx": 0, "tgt_idx": 0, "src_col_id": "src_a", "tgt_col_id": "tgt_a", "m_score": 0.9},
+            {"src_idx": 1, "tgt_idx": 1, "src_col_id": "src_b", "tgt_col_id": "tgt_b", "m_score": 0.8},
+        ]
+
+    monkeypatch.setattr(matcher, "filter_cpi", fake_filter_cpi)
+    monkeypatch.setattr(matcher, "truncate_per_source", lambda pairs: pairs)
+    monkeypatch.setattr(matcher.llm_verify, "verify_pairs_async", fake_verify_pairs_async)
+
+    result = await matcher.run(
+        {
+            "task_id": "",
+            "tenant_id": "default",
+            "task_type": "INTEGRATE",
+            "query_profile": {
+                "table_id": "source",
+                "columns": [_numeric_col("name_a", "src_a"), _numeric_col("name_b", "src_b")],
+            },
+            "candidate_profiles": {
+                "target_1": {
+                    "table_id": "target_1",
+                    "columns": [_numeric_col("name_a", "tgt_a"), _numeric_col("name_b", "tgt_b")],
+                },
+                "target_2": {
+                    "table_id": "target_2",
+                    "columns": [_numeric_col("name_a", "tgt_a"), _numeric_col("name_b", "tgt_b")],
+                },
+            },
+            "ranking": [{"table_id": "target_1"}, {"table_id": "target_2"}],
+            "plan": {"matcher_llm_concurrency": 12, "llm_cache_enabled": True},
+            "status": "RUNNING",
+            "degraded": False,
+        }
+    )
+
+    assert call_index == 2
+    assert seen_kwargs["concurrency"] == 12
+    assert seen_kwargs["use_cache"] is True
+    assert result["matcher_metrics"] == {
+        "verified_pair_count": 4,
+        "cache_hit_count": 1,
+        "cache_miss_count": 3,
+        "llm_call_count": 3,
+        "matcher_verify_ms": pytest.approx(result["stage_timings_ms"]["llm_verification"]),
+        "llm_verify_p50_ms": 20.0,
+        "llm_verify_p95_ms": 30.0,
+    }
+
+
+@pytest.mark.anyio
+async def test_matcher_zero_processed_targets_llm_completion_includes_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from adacascade.agents import matcher
+
+    events: list[dict[str, object]] = []
+
+    async def fake_emit_task_event(_task_id: str, payload: dict[str, object]) -> None:
+        events.append(payload)
+
+    monkeypatch.setattr(matcher, "emit_task_event", fake_emit_task_event)
+    monkeypatch.setattr(matcher, "save_pkl", lambda *_args: "/tmp/sim.pkl")
+
+    result = await matcher.run(
+        {
+            "task_id": "task-empty",
+            "tenant_id": "default",
+            "task_type": "MATCH_ONLY",
+            "query_profile": {
+                "table_id": "source",
+                "columns": [_numeric_col("name", "src")],
+            },
+            "plan": {},
+            "status": "RUNNING",
+            "degraded": False,
+        }
+    )
+
+    llm_completion = next(
+        event
+        for event in events
+        if event["type"] == "agent_completed" and event["layer"] == "LLM"
+    )
+    assert llm_completion["metrics"] == result["matcher_metrics"]

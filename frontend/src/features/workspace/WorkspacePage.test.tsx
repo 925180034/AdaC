@@ -235,6 +235,7 @@ describe('WorkspacePage', () => {
       llm_cache_enabled: true,
       llm_batch_size: 10,
       llm_concurrency: 24,
+      matcher_llm_concurrency: 8,
     })
   })
 
@@ -255,6 +256,7 @@ describe('WorkspacePage', () => {
       column_recall_enabled: true,
       column_recall_top_k: 10,
       column_recall_add_k: 10,
+      matcher_llm_concurrency: 8,
     })
   })
 
