@@ -100,11 +100,11 @@ async def run(state: IntegrationState) -> IntegrationState:
 
     # task_type is set by the API route — Planner only validates
     task_type = state.get("task_type", "INTEGRATE")
+    plan_raw = state.get("plan", {}) or {}
 
     subtask = "JOIN"  # default
     if task_type != "MATCH_ONLY":
         query_profile: dict[str, Any] = state.get("query_profile", {})
-        plan_raw = state.get("plan", {}) or {}
         user_hint: str = str(plan_raw.get("user_hint", ""))
         if query_profile:
             col_names: list[str] = [c["name"] for c in query_profile.get("columns", [])]
@@ -132,9 +132,10 @@ async def run(state: IntegrationState) -> IntegrationState:
                 )
 
     raw_plans = settings.planner_cfg.get("default_plans") or {}
-    plan_cfg: dict[str, float | int] = dict(
-        raw_plans.get(subtask, _DEFAULT_PLANS[subtask])
-    )
+    plan_cfg: dict[str, Any] = {
+        **dict(raw_plans.get(subtask, _DEFAULT_PLANS[subtask])),
+        **plan_raw,
+    }
     task_subtask: Literal["JOIN", "UNION"] = "JOIN" if subtask == "JOIN" else "UNION"
     return {
         **state,

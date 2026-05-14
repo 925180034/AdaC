@@ -42,6 +42,9 @@ class IntegrationState(TypedDict, total=False):
     # 大对象外置：只存路径，矩阵在 data/artifacts/{task_id}/sim.pkl
     similarity_matrix_path: Optional[str]
     final_mappings: list[dict[str, object]]
+    stage_timings_ms: dict[str, float]
+    matcher_metrics: dict[str, float | int]
+    llm_runtime: dict[str, object]
 
     # ── 执行状态 ──────────────────────────────────────────────────────────
     trace: list[dict[str, object]]

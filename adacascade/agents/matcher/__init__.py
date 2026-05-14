@@ -13,6 +13,7 @@ from adacascade.agents.matcher.candidates import filter_cpi, truncate_per_source
 from adacascade.agents.matcher.decision import decide, hungarian_1to1
 from adacascade.agents.matcher.mixed import Scenario
 from adacascade.api.events import emit_task_event
+from adacascade import llm_runtime
 from adacascade.artifacts import save_pkl
 from adacascade.config import settings
 from adacascade.state import IntegrationState
@@ -321,4 +322,5 @@ async def run(state: IntegrationState) -> IntegrationState:
         "final_mappings": final_mappings,
         "stage_timings_ms": stage_timings_ms,
         "matcher_metrics": matcher_metrics,
+        "llm_runtime": llm_runtime.get_runtime_info(),
     }
