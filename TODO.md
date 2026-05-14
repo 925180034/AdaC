@@ -266,7 +266,7 @@
 - [x] 阶段 1：对 cache miss 的 Matcher LLM verification 增加 `matcher_llm_concurrency` 并发控制，默认保守，Demo fast / JOIN tuned profile 可显式提高
 - [x] 阶段 1：记录 `verified_pair_count`、`cache_hit_count`、`cache_miss_count`、`llm_call_count`、`matcher_verify_ms`、`llm_verify_p50_ms`、`llm_verify_p95_ms`，用于定位 pair 数、cache 命中率与单次 LLM 延迟
 - [x] 阶段 1 聚焦验证：`pytest tests/unit/test_matcher_llm.py tests/unit/test_matcher.py tests/unit/test_m5_performance.py -q` → 22 passed；`npm --prefix frontend run test -- --run WorkspacePage.test.tsx TaskControlPanel.test.tsx` → 30 passed；`ruff check adacascade/agents/matcher tests/unit/test_matcher.py tests/unit/test_matcher_llm.py` → All checks passed
-- [ ] 阶段 1 实测验证：同一 demo integrate 输入连续运行两次，第二次 cache hit 明显上升、Matcher verification latency 明显下降，ranking/mapping 结果保持一致
+- [x] 阶段 1 实测验证：同一 demo integrate 输入连续运行两次，用户前端验证 Demo fast / integrate 流程正常；API 复测同一 `musicians_unionable_source` integrate 两次，ranking IDs 完全一致（`94e5ce3b...`、`f5375a3f...`），mapping_count 均为 15；第二次 Matcher cache hit 从 173/381 提升到 381/381，LLM calls 从 208 降到 0，Matcher verification 从 112.6s 降到 0.132s，端到端从 112.8s 降到 0.35s
 - [x] 阶段 2：将 cache 落到 SQLite `matcher_verification_cache`，实现 memory → SQLite → LLM 的持久缓存链路，FastAPI 重启后 Demo fast 可复用 Matcher verification 结果，并记录 memory/sqlite cache source 指标
 - [x] 阶段 2 API 实测验证（2026-05-14）：`/match` 使用 DeepSeek API runtime、`llm_cache_enabled=true`、`matcher_llm_concurrency=8`；冷启动 10 verified pairs → 10 LLM calls、端到端 2.84s；FastAPI 重启后同输入 9 SQLite hits / 1 LLM call，证明持久缓存跨进程生效；同进程再跑 10 memory hits / 0 LLM calls，端到端 0.064s
 
