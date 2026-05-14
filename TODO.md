@@ -267,7 +267,8 @@
 - [x] 阶段 1：记录 `verified_pair_count`、`cache_hit_count`、`cache_miss_count`、`llm_call_count`、`matcher_verify_ms`、`llm_verify_p50_ms`、`llm_verify_p95_ms`，用于定位 pair 数、cache 命中率与单次 LLM 延迟
 - [x] 阶段 1 聚焦验证：`pytest tests/unit/test_matcher_llm.py tests/unit/test_matcher.py tests/unit/test_m5_performance.py -q` → 22 passed；`npm --prefix frontend run test -- --run WorkspacePage.test.tsx TaskControlPanel.test.tsx` → 30 passed；`ruff check adacascade/agents/matcher tests/unit/test_matcher.py tests/unit/test_matcher_llm.py` → All checks passed
 - [ ] 阶段 1 实测验证：同一 demo integrate 输入连续运行两次，第二次 cache hit 明显上升、Matcher verification latency 明显下降，ranking/mapping 结果保持一致
-- [ ] 阶段 2 预留：若阶段 1 收益明确，再将 cache 落到 SQLite `matcher_verification_cache`，实现 memory → SQLite → LLM 的持久缓存链路
+- [x] 阶段 2：将 cache 落到 SQLite `matcher_verification_cache`，实现 memory → SQLite → LLM 的持久缓存链路，FastAPI 重启后 Demo fast 可复用 Matcher verification 结果，并记录 memory/sqlite cache source 指标
+- [x] 阶段 2 API 实测验证（2026-05-14）：`/match` 使用 DeepSeek API runtime、`llm_cache_enabled=true`、`matcher_llm_concurrency=8`；冷启动 10 verified pairs → 10 LLM calls、端到端 2.84s；FastAPI 重启后同输入 9 SQLite hits / 1 LLM call，证明持久缓存跨进程生效；同进程再跑 10 memory hits / 0 LLM calls，端到端 0.064s
 
 ### M5.6 A100 / local vLLM 压测（当前服务器跳过）
 - [ ] 在 A100 环境下启动 local vLLM，记录模型、量化方式、max_model_len、gpu_memory_utilization（按用户要求迁移到目标部署服务器执行）

@@ -191,3 +191,30 @@ class ModelVersion(Base):
     version: Mapped[str] = mapped_column(String, nullable=False)
     params: Mapped[str | None] = mapped_column(Text)  # JSON
     activated_at: Mapped[datetime] = mapped_column(nullable=False)
+
+
+class MatcherVerificationCache(Base):
+    """Persistent cache for Matcher LLM verification results."""
+
+    __tablename__ = "matcher_verification_cache"
+    __table_args__ = (
+        Index("ix_mvc_backend_model", "backend", "model"),
+        Index("ix_mvc_created", "created_at"),
+        Index("ix_mvc_last_hit", "last_hit_at"),
+    )
+
+    cache_key: Mapped[str] = mapped_column(String, primary_key=True)
+    backend: Mapped[str] = mapped_column(String, nullable=False)
+    base_url: Mapped[str] = mapped_column(String, nullable=False)
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String, nullable=False)
+    scenario: Mapped[str] = mapped_column(String, nullable=False)
+    src_column_id: Mapped[str | None] = mapped_column(String)
+    tgt_column_id: Mapped[str | None] = mapped_column(String)
+    src_payload: Mapped[str] = mapped_column(Text, nullable=False)
+    tgt_payload: Mapped[str] = mapped_column(Text, nullable=False)
+    component_scores: Mapped[str] = mapped_column(Text, nullable=False)
+    result: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(nullable=False)
+    last_hit_at: Mapped[datetime | None] = mapped_column()
+    hit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

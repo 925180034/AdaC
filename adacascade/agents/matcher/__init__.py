@@ -105,6 +105,8 @@ def _empty_matcher_metrics() -> dict[str, float | int]:
     return {
         "verified_pair_count": 0,
         "cache_hit_count": 0,
+        "memory_cache_hit_count": 0,
+        "sqlite_cache_hit_count": 0,
         "cache_miss_count": 0,
         "llm_call_count": 0,
         "matcher_verify_ms": 0.0,
@@ -118,7 +120,15 @@ def _add_verified_metrics(
     verified: list[dict[str, Any]],
     aggregate_llm_latencies: list[float],
 ) -> None:
-    cache_hits = sum(1 for item in verified if bool(item.get("cache_hit", False)))
+    memory_hits = sum(1 for item in verified if item.get("cache_source") == "memory")
+    sqlite_hits = sum(1 for item in verified if item.get("cache_source") == "sqlite")
+    fallback_hits = sum(
+        1
+        for item in verified
+        if bool(item.get("cache_hit", False))
+        and item.get("cache_source") not in {"memory", "sqlite"}
+    )
+    cache_hits = memory_hits + sqlite_hits + fallback_hits
     llm_latencies = [
         float(item.get("llm_latency_ms", 0.0))
         for item in verified
@@ -127,6 +137,8 @@ def _add_verified_metrics(
     aggregate_llm_latencies.extend(llm_latencies)
     metrics["verified_pair_count"] = int(metrics["verified_pair_count"]) + len(verified)
     metrics["cache_hit_count"] = int(metrics["cache_hit_count"]) + cache_hits
+    metrics["memory_cache_hit_count"] = int(metrics["memory_cache_hit_count"]) + memory_hits
+    metrics["sqlite_cache_hit_count"] = int(metrics["sqlite_cache_hit_count"]) + sqlite_hits
     metrics["cache_miss_count"] = int(metrics["cache_miss_count"]) + len(verified) - cache_hits
     metrics["llm_call_count"] = int(metrics["llm_call_count"]) + len(llm_latencies)
     if aggregate_llm_latencies:

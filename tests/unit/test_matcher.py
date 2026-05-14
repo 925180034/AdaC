@@ -350,12 +350,14 @@ async def test_matcher_run_aggregates_llm_verification_metrics_across_targets(
                     **pairs[0],
                     "llm_result": MatchResult(reasoning="same", score=0.9, is_equivalent=True),
                     "cache_hit": False,
+                    "cache_source": "miss",
                     "llm_latency_ms": 10.0,
                 },
                 {
                     **pairs[1],
                     "llm_result": MatchResult(reasoning="same", score=0.8, is_equivalent=True),
                     "cache_hit": False,
+                    "cache_source": "miss",
                     "llm_latency_ms": 20.0,
                 },
             ]
@@ -365,12 +367,14 @@ async def test_matcher_run_aggregates_llm_verification_metrics_across_targets(
                     **pairs[0],
                     "llm_result": MatchResult(reasoning="same", score=0.7, is_equivalent=True),
                     "cache_hit": False,
+                    "cache_source": "miss",
                     "llm_latency_ms": 30.0,
                 },
                 {
                     **pairs[1],
                     "llm_result": MatchResult(reasoning="same", score=0.6, is_equivalent=True),
                     "cache_hit": True,
+                    "cache_source": "sqlite",
                     "llm_latency_ms": 0.0,
                 },
             ]
@@ -419,6 +423,8 @@ async def test_matcher_run_aggregates_llm_verification_metrics_across_targets(
     assert result["matcher_metrics"] == {
         "verified_pair_count": 4,
         "cache_hit_count": 1,
+        "memory_cache_hit_count": 0,
+        "sqlite_cache_hit_count": 1,
         "cache_miss_count": 3,
         "llm_call_count": 3,
         "matcher_verify_ms": pytest.approx(result["stage_timings_ms"]["llm_verification"]),

@@ -146,3 +146,72 @@ def test_verify_pairs_does_not_reuse_cache_across_runtime_configs(
     assert first[0]["cache_hit"] is False
     assert second[0]["cache_hit"] is False
     assert first[0]["cache_key"] != second[0]["cache_key"]
+
+
+def test_verify_pairs_reuses_sqlite_cache_after_memory_clear(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    source_col: dict[str, object],
+    target_col: dict[str, object],
+) -> None:
+    from adacascade.agents.matcher import llm_verify
+    from adacascade.db.session import init_db
+    from adacascade.llm_schemas import MatchResult
+
+    init_db(f"sqlite:///{tmp_path / 'metadata.db'}")
+    calls = 0
+
+    def fake_verify_pair(*_args: object, **_kwargs: object) -> MatchResult:
+        nonlocal calls
+        calls += 1
+        return MatchResult(reasoning="same", score=0.9, is_equivalent=True)
+
+    monkeypatch.setattr(llm_verify, "verify_pair", fake_verify_pair)
+    llm_verify.clear_cache()
+    pairs = [{"src_idx": 0, "tgt_idx": 0, "src_col_id": "s1", "tgt_col_id": "t1"}]
+
+    first = llm_verify.verify_pairs(pairs, [source_col], [target_col], "SMD", use_cache=True)
+    llm_verify.clear_cache()
+    second = llm_verify.verify_pairs(pairs, [source_col], [target_col], "SMD", use_cache=True)
+
+    assert calls == 1
+    assert first[0]["cache_hit"] is False
+    assert first[0]["cache_source"] == "miss"
+    assert second[0]["cache_hit"] is True
+    assert second[0]["cache_source"] == "sqlite"
+    assert second[0]["llm_latency_ms"] == 0.0
+
+
+def test_verify_pairs_does_not_persist_when_cache_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    source_col: dict[str, object],
+    target_col: dict[str, object],
+) -> None:
+    from adacascade.agents.matcher import llm_verify
+    from adacascade.db.models import MatcherVerificationCache
+    from adacascade.db.session import get_session, init_db
+    from adacascade.llm_schemas import MatchResult
+
+    init_db(f"sqlite:///{tmp_path / 'metadata.db'}")
+    calls = 0
+
+    def fake_verify_pair(*_args: object, **_kwargs: object) -> MatchResult:
+        nonlocal calls
+        calls += 1
+        return MatchResult(reasoning="same", score=0.9, is_equivalent=True)
+
+    monkeypatch.setattr(llm_verify, "verify_pair", fake_verify_pair)
+    llm_verify.clear_cache()
+    pairs = [{"src_idx": 0, "tgt_idx": 0, "src_col_id": "s1", "tgt_col_id": "t1"}]
+
+    first = llm_verify.verify_pairs(pairs, [source_col], [target_col], "SMD", use_cache=False)
+    second = llm_verify.verify_pairs(pairs, [source_col], [target_col], "SMD", use_cache=False)
+
+    with get_session() as db:
+        persisted = db.query(MatcherVerificationCache).count()
+
+    assert calls == 2
+    assert first[0]["cache_source"] == "disabled"
+    assert second[0]["cache_source"] == "disabled"
+    assert persisted == 0

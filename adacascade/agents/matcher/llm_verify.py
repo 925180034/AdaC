@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from adacascade import llm_client, llm_runtime
+from adacascade.agents.matcher import cache_store
 from adacascade.llm_schemas import MatchResult, json_schema_format
 from adacascade.agents.matcher.mixed import Scenario
 
@@ -19,6 +20,10 @@ _cache: dict[str, MatchResult] = {}
 
 def clear_cache() -> None:
     _cache.clear()
+
+
+def _memory_put(cache_key: str, decision: MatchResult) -> None:
+    _cache[cache_key] = decision
 
 
 def _stable_payload(value: Any) -> Any:
@@ -188,22 +193,46 @@ def _verify_pair_entry(
         "sim_stat": float(pair.get("sim_stat", 0.0)),
         "m_score": float(pair.get("m_score", 0.0)),
     }
+    runtime_config = llm_runtime.get_request_config()
     cache_key = _cache_key(src_col, tgt_col, scores, scenario)
-    cache_hit = bool(use_cache and cache_key in _cache)
+    cache_source = "disabled"
     latency_ms = 0.0
-    if cache_hit:
+    if use_cache and cache_key in _cache:
         decision = _cache[cache_key]
+        cache_source = "memory"
+    elif use_cache:
+        decision = cache_store.get(cache_key)
+        if decision is not None:
+            _memory_put(cache_key, decision)
+            cache_source = "sqlite"
+        else:
+            started = time.perf_counter()
+            decision = verify_pair(src_col, tgt_col, scores, scenario)
+            latency_ms = (time.perf_counter() - started) * 1000
+            cache_source = "miss"
+            _memory_put(cache_key, decision)
+            cache_store.put(
+                cache_key,
+                runtime_config=runtime_config,
+                prompt_version=PROMPT_VERSION,
+                scenario=scenario,
+                src_col=src_col,
+                tgt_col=tgt_col,
+                src_payload=_column_payload(src_col),
+                tgt_payload=_column_payload(tgt_col),
+                component_scores=scores,
+                result=decision,
+            )
     else:
         started = time.perf_counter()
         decision = verify_pair(src_col, tgt_col, scores, scenario)
         latency_ms = (time.perf_counter() - started) * 1000
-        if use_cache:
-            _cache[cache_key] = decision
     return {
         **pair,
         "llm_result": decision,
         "cache_key": cache_key,
-        "cache_hit": cache_hit,
+        "cache_hit": cache_source in {"memory", "sqlite"},
+        "cache_source": cache_source,
         "llm_latency_ms": latency_ms,
     }
 
