@@ -14,13 +14,13 @@ import structlog
 
 from pydantic import ValidationError
 
+from adacascade.config import settings
 from adacascade.llm_client import chat
 from adacascade.llm_schemas import L3BatchResult, json_schema_format
 
 log = structlog.get_logger(__name__)
 
-_BATCH_SIZE = 10  # from configs, single LLM call max candidates
-_LLM_CANDIDATES_PER_CALL = 1
+_BATCH_SIZE = 10
 _MAX_SAMPLE_VALUES = 2
 _MAX_SAMPLE_CHARS = 24
 _cache: dict[str, dict[int, float]] = {}
@@ -71,7 +71,8 @@ def _column_prompt(column: dict[str, Any]) -> str:
 def _candidate_batches(
     candidates: list[dict[str, Any]], batch_size: int
 ) -> list[tuple[list[dict[str, Any]], int]]:
-    effective_batch_size = max(1, min(batch_size, _LLM_CANDIDATES_PER_CALL))
+    candidates_per_call = settings.TLCF_L3_CANDIDATES_PER_CALL
+    effective_batch_size = max(1, min(batch_size, candidates_per_call))
     return [
         (candidates[i : i + effective_batch_size], i)
         for i in range(0, len(candidates), effective_batch_size)

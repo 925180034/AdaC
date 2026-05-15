@@ -1,4 +1,4 @@
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const apiKey = import.meta.env.VITE_API_KEY ?? 'dev-local-token'
 
 export const API_BASE_URL = apiBaseUrl
@@ -7,7 +7,7 @@ export const API_KEY = apiKey
 export function joinUrl(baseUrl: string, path: string): string {
   const trimmedBase = baseUrl.replace(/\/+$/, '')
   const trimmedPath = path.replace(/^\/+/, '')
-  return `${trimmedBase}/${trimmedPath}`
+  return trimmedBase ? `${trimmedBase}/${trimmedPath}` : `/${trimmedPath}`
 }
 
 export function buildHeaders(tenantId: string): Record<string, string> {

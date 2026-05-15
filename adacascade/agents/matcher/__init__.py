@@ -327,12 +327,14 @@ async def run(state: IntegrationState) -> IntegrationState:
 
     sim_path = save_pkl(task_id, "sim", all_pairs) if task_id else None
     bound_log.info("matcher.done", pairs=len(all_pairs), mappings=len(final_mappings))
-    return {
+    output: IntegrationState = {
         **state,
         "similarity_matrix_path": sim_path,
-        "similarity_pairs": all_pairs,
         "final_mappings": final_mappings,
         "stage_timings_ms": stage_timings_ms,
         "matcher_metrics": matcher_metrics,
-        "llm_runtime": llm_runtime.get_runtime_info(),
+        "llm_runtime": dict(llm_runtime.get_runtime_info()),
     }
+    if not task_id:
+        output["similarity_pairs"] = all_pairs
+    return output

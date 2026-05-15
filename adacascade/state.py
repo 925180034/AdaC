@@ -22,6 +22,7 @@ class IntegrationState(TypedDict, total=False):
     query_table_id: str
     target_table_id: Optional[str]
     subtask: Literal["JOIN", "UNION"]
+    corpus: Literal["join", "union", "all"]
     created_at: datetime
 
     # ── Planner 输出 ───────────────────────────────────────────────────────
@@ -41,6 +42,7 @@ class IntegrationState(TypedDict, total=False):
     ranking: list[dict[str, object]]  # 候选排名（含 layer_scores）
     # 大对象外置：只存路径，矩阵在 data/artifacts/{task_id}/sim.pkl
     similarity_matrix_path: Optional[str]
+    similarity_pairs: list[dict[str, object]]
     final_mappings: list[dict[str, object]]
     stage_timings_ms: dict[str, float]
     matcher_metrics: dict[str, float | int]

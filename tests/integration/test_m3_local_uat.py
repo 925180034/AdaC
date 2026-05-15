@@ -61,7 +61,7 @@ def client() -> Generator[TestClient, None, None]:
                         }
                     ]
                 )
-                return {**state, "ranking": ranking, "final_mappings": mappings}
+                return {**state, "ranking": ranking, "final_mappings": mappings, "seen_plan": state.get("plan")}
 
         with TestClient(app, raise_server_exceptions=False) as c:
             app.state.graph = FakeGraph()
@@ -155,3 +155,19 @@ def test_local_uat_routes(
     assert task["status"] == "SUCCESS"
     assert bool(task["ranking"]) is expect_ranking
     assert bool(task["mappings"]) is expect_mapping
+
+
+
+def test_discover_top_level_user_hint_is_written_to_plan(client: TestClient) -> None:
+    resp = client.post(
+        "/discover",
+        json={"query_table_id": "uat_source", "user_hint": "union append rows"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert body["state"]["plan"]["user_hint"] == "union append rows"
+
+    task = _poll_task(client, str(body["task_id"]))
+    assert task["plan_config"]["user_hint"] == "union append rows"

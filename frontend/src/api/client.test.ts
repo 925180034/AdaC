@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { buildHeaders, joinUrl } from './client'
+import { API_BASE_URL, buildHeaders, joinUrl } from './client'
 
 describe('API client helpers', () => {
+  it('defaults to same-origin API paths', () => {
+    expect(API_BASE_URL).toBe('')
+    expect(joinUrl(API_BASE_URL, '/tables')).toBe('/tables')
+  })
+
   it('joins base URL and path without duplicate slash', () => {
     expect(joinUrl('http://localhost:8080/', '/tables')).toBe('http://localhost:8080/tables')
     expect(joinUrl('http://localhost:8080//', '//tasks/task-1')).toBe(

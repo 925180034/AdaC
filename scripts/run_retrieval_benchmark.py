@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 from statistics import mean, median
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from qdrant_client import AsyncQdrantClient
 from sqlalchemy.exc import SQLAlchemyError
@@ -24,12 +24,13 @@ from adacascade.config import settings
 from adacascade.db.session import get_session, init_db
 from adacascade.indexing.qdrant_client import AdacQdrantClient
 from adacascade.indexing.registry import init_qdrant_registry
+from adacascade.state import IntegrationState
 
 Corpus = Literal["join", "union"]
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
 def _ground_truth(path: Path) -> tuple[dict[str, set[str]], dict[str, int]]:
@@ -83,9 +84,12 @@ def _profiles(
 ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     if db is not None:
         return _profiles_from_session(query, tenant_id, db, corpus)
-    init_db(settings.DATABASE_URL)
-    with get_session() as session:
-        return _profiles_from_session(query, tenant_id, session, corpus)
+    try:
+        init_db(settings.DATABASE_URL)
+        with get_session() as session:
+            return _profiles_from_session(query, tenant_id, session, corpus)
+    except SQLAlchemyError:
+        return _fallback_profile(query), {}
 
 
 def _init_qdrant_registry() -> None:
@@ -155,11 +159,12 @@ def run_retrieval_benchmark(
         started = time.perf_counter()
         try:
             query_profile, candidate_profiles = _profiles(query, tenant_id, corpus, db)
-            state = {
+            subtask = str(queries_data.get("task_type") or corpus.upper())
+            state: IntegrationState = {
                 "task_id": "",
                 "tenant_id": tenant_id,
-                "task_type": "DISCOVER",
-                "subtask": str(queries_data.get("task_type") or corpus.upper()),
+                "task_type": "DISCOVER_ONLY",
+                "subtask": "UNION" if subtask == "UNION" else "JOIN",
                 "corpus": corpus,
                 "query_profile": query_profile,
                 "candidate_profiles": candidate_profiles,

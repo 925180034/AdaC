@@ -111,7 +111,7 @@
 ### M2 验收
 - [x] `pytest tests/unit/` 全通过
 - [x] `pytest tests/integration/` 全通过
-- [x] `mypy --strict adacascade/` 无错误
+- [x] `mypy --strict adacascade/` 无错误（2026-05-15 复核通过）
 - [x] `ruff check adacascade/` 无警告
 
 ---
@@ -150,7 +150,7 @@
 - [x] discover / match / integrate 三种模式均可从前端启动并展示结果
 - [x] SSE 实时显示 Agent + Layer 级阶段进度
 - [x] 图谱、ranking、mappings、Raw JSON 四种结果视图可切换并联动
-- [x] `npm run lint`、`npm run test`、`npm run build` 通过；Playwright demo 流程通过或有明确本地验收命令
+- [x] `npm run lint`（0 warning）、`npm run test`、`npm run build` 通过；Playwright demo 流程通过或有明确本地验收命令
 
 ---
 
@@ -229,7 +229,7 @@
 - [x] UNION benchmark：读取 `retrieval_bench/union/queries.json` 与 `ground_truth.json`，使用 UNION 专属 TF-IDF artifact 批量运行 Retrieval
 - [x] 指标输出：R@1、R@5、R@10、平均耗时、P50、P95、失败率
 - [x] 分层耗时输出：L1 lexical、L2 Qdrant、L3 LLM rerank、aggregate
-- [x] 已跑 JOIN `--limit 2` smoke 验证 runner、scoped TF-IDF 与分层耗时输出；`--limit 20/50/100` 与完整 JOIN/UNION benchmark 留给长任务复现窗口
+- [x] 已跑 JOIN `--limit 2` smoke 验证 runner、scoped TF-IDF 与分层耗时输出；runner/smoke 完成不等于论文指标验收，`--limit 20/50/100` 与完整 JOIN/UNION benchmark 留给长任务复现窗口
 - [ ] 对照论文目标：JOIN R@10 ≥ 63.9% ± 3%；UNION 指标按算法规格/ground truth 报告补齐（需完整长任务 benchmark）
 
 ### M5.4 模式匹配 / Matcher Benchmark
@@ -241,7 +241,7 @@
 - [x] MIMIC-OMOP benchmark 使用 schema-only profiles：列名 + 类型 + 描述，不要求 Parquet 实例数据或统计特征
 - [x] 指标输出：Precision、Recall、F1、平均耗时、P50、P95、LLM pair 数、失败率
 - [x] 分阶段输出：candidate filtering 耗时、LLM verification 耗时、decision / 1:1 耗时
-- [x] 已跑 Wikidata 四场景聚合 smoke（4 pairs，0 failures，F1≈0.897）与 MIMIC-OMOP schema-only 全量 case smoke（26 pairs，0 failures）
+- [x] 已跑 Wikidata 四场景聚合 smoke（4 pairs，0 failures，F1≈0.897）与 MIMIC-OMOP schema-only 全量 case smoke（26 pairs，0 failures）；smoke 完成不等于论文目标 F1 验收
 - [ ] 对照论文目标：SLD F1 ≥ 92.52% ± 3%；SMD/SSD/其他场景按算法规格补齐目标指标（需基于完整复现窗口复核）
 
 ### M5.5 性能瓶颈定位与优化
@@ -377,14 +377,14 @@
 ### M2 当前完成摘要
 - Retrieval Layer 1 已完成：TF-IDF + type Jaccard + C₁ 构建
 - Retrieval Layer 2 已完成：Qdrant 召回、`C₁ ∩ topK` 交集约束、回退策略
-- Retrieval Layer 3 已完成：LLM 批处理验证、Pydantic JSON Schema 校验、缺失分数按 0 排除
+- Retrieval Layer 3 已完成：LLM 批处理验证、Pydantic JSON Schema 校验、缺失分数按 0 排除；local 4096 context 下 `l3_candidates_per_call=1`，A100/长上下文可调高
 - Retrieval aggregate 已完成：C₃ 内 min-max 归一化 + `S_final` 加权排序
 - Matcher Week2 公式层已完成：名称/类型/统计相似度、场景权重、候选过滤、Top-N 截断、布尔判定、1:1 匈牙利
 - Matcher Week3 已完成：五段式 LLM verification、图节点真实状态流转、`/integrate` / `/discover` / `/match` / `/tasks/{task_id}`、toy 端到端测试
 - 本地 Qwen AWQ 已部署到 `/root/autodl-tmp/models/qwen3.5-9b-awq`，`/root/models/qwen3.5-9b-awq` 为软链接
 - vLLM 已可用：运行时验证参数为 `VLLM_GPU_MEMORY_UTILIZATION=0.35 VLLM_MAX_MODEL_LEN=4096`
 - SBERT 已验证运行在 `cuda:0`，可与 vLLM 同时使用
-- 最新验证：`pytest tests/unit/ -v` 23/23 通过；`pytest tests/integration/ -v` 10/10 通过；`ruff format adacascade/ tests/` 完成；`ruff check adacascade/ tests/ scripts/` 通过；`mypy --strict adacascade/` 通过
+- 最新验证（2026-05-15）：`mypy --strict adacascade/`、`ruff check adacascade/ tests/ scripts/`、`pytest tests/unit/ -q`（116 passed）、`pytest tests/integration/ -q`（36 passed）通过；局部回归覆盖 L2 degraded、L3 batch 配置、user_hint 透传与前端 API fallback
 
 ### M2 剩余工作
 - 论文复现测试：retrieval R@10 与 matcher SLD F1（需要完整 benchmark run，不属于本次 toy/offline 工程验收）
@@ -395,7 +395,7 @@
 - `/metrics` 已通过 `prometheus-fastapi-instrumentator` 暴露，structlog 已配置 JSONRenderer
 - Retrieval Qdrant/L3 失败与 Matcher LLM 失败已具备本地降级路径，SBERT CUDA OOM 会重试 CPU
 - 本地 UAT 已覆盖 `/integrate`、`/discover`、`/match`；暂不对接课题组大系统
-- 最新验证：`ruff format adacascade/ tests/` 完成；`ruff check adacascade/ tests/ scripts/` 通过；`pytest tests/unit/ -v` 23/23 通过；`pytest tests/integration/ -v` 19/19 通过；`mypy --strict adacascade/` 通过
+- 最新验证（2026-05-15）：`mypy --strict adacascade/`、`ruff check adacascade/ tests/ scripts/`、`pytest tests/unit/ -q`（116 passed）、`pytest tests/integration/ -q`（36 passed）通过；L2 degraded 标记已补回归测试
 
 ### M4 当前完成摘要
 - 非 Docker demo/部署路径已固化：Qdrant binary + FastAPI single worker + Vite same-origin public proxy
@@ -403,7 +403,7 @@
 - DeepSeek API 模式 smoke 已覆盖 discover / match / integrate；API integrate 约 4 分 35 秒
 - local vLLM 模式 smoke 已覆盖 runtime 切换与 integrate 空 ranking 快速结束；Matcher 不再对空 ranking 回退全量候选
 - M4 维护脚本已补齐：`scripts/bulk_ingest.py`、`scripts/gc.py`、`scripts/rebuild_tfidf.py` 运维入口
-- 最新验证：`pytest tests/unit/ tests/integration/` 74/74 通过；`npm --prefix frontend run test -- --run` 58/58 通过；`ruff check adacascade/ tests/ scripts/` 通过；`mypy --strict adacascade/` 通过
+- 最新验证（2026-05-15）：后端 `mypy --strict adacascade/`、`ruff check adacascade/ tests/ scripts/`、`pytest tests/unit/ -q`（116 passed）、`pytest tests/integration/ -q`（36 passed）通过；前端 `npm --prefix frontend run lint`、`npm --prefix frontend run test -- --run`（73 passed）、`npm --prefix frontend run build` 通过
 
 ### 后续专项（M5）
 - 全量数据入湖：retrieval bench JOIN/UNION 进入 `benchmark` 租户并完成 Profiling / Qdrant / TF-IDF

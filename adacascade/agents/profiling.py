@@ -144,10 +144,11 @@ def encode_table_vector(table_name: str, columns: list[dict[str, Any]]) -> list[
         + (f" - {column['col_description']}" if column.get("col_description") else "")
         for column in columns
     )
-    return _encode_with_oom_fallback(
+    vector = _encode_with_oom_fallback(
         [f"Table: {table_name}. Columns: {col_parts}"],
         int(settings.profiling_cfg.get("sbert_batch_size", 256)),
     )[0].tolist()
+    return [float(value) for value in vector]
 
 
 # ── Statistical feature computation ──────────────────────────────────────────

@@ -31,6 +31,7 @@ class IntegrateRequest(BaseModel):
     query_table_id: str
     tenant_id: str = settings.DEFAULT_TENANT_ID
     options: dict[str, Any] = {}
+    user_hint: str | None = None
 
 
 class MatchRequest(BaseModel):
@@ -135,6 +136,13 @@ def _output_size(task_type: str, state: dict[str, Any]) -> int:
     key = "ranking" if task_type == "DISCOVER_ONLY" else "final_mappings"
     value = state.get(key, [])
     return len(value) if isinstance(value, list) else 0
+
+
+def _operation_options(options: dict[str, Any], user_hint: str | None) -> dict[str, Any]:
+    merged = dict(options)
+    if user_hint:
+        merged["user_hint"] = user_hint
+    return merged
 
 
 async def _emit_missing_stage_summary(
@@ -310,7 +318,7 @@ async def integrate(
         tenant_id=get_tenant_id(request),
         query_table_id=body.query_table_id,
         target_table_id=None,
-        options=body.options,
+        options=_operation_options(body.options, body.user_hint),
     )
 
 
@@ -326,7 +334,7 @@ async def discover(
         tenant_id=get_tenant_id(request),
         query_table_id=body.query_table_id,
         target_table_id=None,
-        options=body.options,
+        options=_operation_options(body.options, body.user_hint),
     )
 
 

@@ -12,13 +12,8 @@ const tenantOptions = ['default', 'benchmark'] as const
 import { AgentTracePanel } from './AgentTracePanel'
 import { getWorkspaceCopy } from './i18n'
 import { ResultWorkspace } from './ResultWorkspace'
-import {
-  PAPER_PARAMETER_DEFAULTS,
-  TaskControlPanel,
-  type AdvancedParameters,
-  type ExecutionProfile,
-  type TenantOption,
-} from './TaskControlPanel'
+import { TaskControlPanel, type TenantOption } from './TaskControlPanel'
+import { PAPER_PARAMETER_DEFAULTS, type AdvancedParameters, type ExecutionProfile } from './parameters'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
 import { readLanguage, readTheme, writeLanguage, writeTheme } from './uiPreferences'
 import type { Language, ThemeMode } from './uiPreferences'

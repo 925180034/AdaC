@@ -544,6 +544,37 @@ def test_search_and_build_c2_filters_qdrant_by_source_system(monkeypatch) -> Non
 
 
 
+def test_search_and_build_c2_marks_degraded_before_fallback(monkeypatch) -> None:
+    from adacascade.agents.retrieval.layer2 import search_and_build_c2
+
+    class FakeQdrant:
+        async def search_tables(self, **kwargs):
+            return [{"table_id": "A", "score": 0.9}]
+
+    monkeypatch.setattr(
+        "adacascade.indexing.registry.get_qdrant", lambda: FakeQdrant()
+    )
+
+    result, degraded = asyncio.run(
+        search_and_build_c2(
+            c1=[
+                {"table_id": "A", "s1": 0.8},
+                {"table_id": "B", "s1": 0.7},
+                {"table_id": "C", "s1": 0.6},
+                {"table_id": "D", "s1": 0.5},
+            ],
+            query_vector=[0.1, 0.2],
+            tenant_id="benchmark",
+            theta_2=0.55,
+            k_2=40,
+        )
+    )
+
+    assert len(result) == 3
+    assert degraded is True
+
+
+
 def test_qdrant_column_search_filters_source_system() -> None:
     from adacascade.indexing.qdrant_client import AdacQdrantClient
 

@@ -1,27 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { TaskMode, TableSummary } from '../tasks/taskTypes'
-
-export type ExecutionProfile = 'reproducible' | 'fast' | 'joinTuned'
+import type { AdvancedParameters, ExecutionProfile } from './parameters'
 
 export type TenantOption = {
   value: string
   label: string
-}
-
-export type AdvancedParameters = {
-  theta_1: number
-  theta_2: number
-  theta_3: number
-  theta_match: number
-  matcher_top_k: number
-}
-
-export const PAPER_PARAMETER_DEFAULTS: AdvancedParameters = {
-  theta_1: 0.2,
-  theta_2: 0.55,
-  theta_3: 0.5,
-  theta_match: 0.7,
-  matcher_top_k: 3,
 }
 
 import { StatusBadge } from '../../components/StatusBadge'

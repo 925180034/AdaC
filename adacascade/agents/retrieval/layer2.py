@@ -94,6 +94,11 @@ async def search_and_build_c2(
     qdrant_ids = {h["table_id"] for h in hits}
     qdrant_scores = {h["table_id"]: h["score"] for h in hits}
 
-    c2 = intersect_c2(c1, qdrant_ids, qdrant_scores, theta_2, fallback=True)
-    degraded = len(c2) < 3 and len(c1) > 0
+    c2_without_fallback = intersect_c2(c1, qdrant_ids, qdrant_scores, theta_2)
+    degraded = len(c2_without_fallback) < 3 and len(c1) > 0
+    c2 = (
+        intersect_c2(c1, qdrant_ids, qdrant_scores, theta_2, fallback=True)
+        if degraded
+        else c2_without_fallback
+    )
     return c2, degraded

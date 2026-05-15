@@ -15,7 +15,8 @@ tlcf:
 
   # Layer 3
   theta_3: 0.50      # L3 LLM 置信度阈值
-  l3_batch_size: 10  # 单次 LLM 调用包含候选数（防止 8K 上下文超限）
+  l3_batch_size: 10  # L3 并发调度批窗口
+  l3_candidates_per_call: 1  # local 4096 context 下每次 LLM 调用候选数；A100/长上下文可调高
 
   # 聚合权重（按 subtask 切换，论文公式 3-13）
   weights_join:

@@ -250,7 +250,7 @@ async def run(state: IntegrationState) -> IntegrationState:
     if query_vector:
         try:
             c2, l2_degraded = await search_and_build_c2(
-                c1=cast(list[dict[str, Any]], c1),
+                c1=[dict(entry) for entry in c1],
                 query_vector=cast(list[float], query_vector),
                 tenant_id=tenant_id,
                 theta_2=_plan_float(plan, "theta_2", float(cfg.get("theta_2", 0.55))),
@@ -266,7 +266,7 @@ async def run(state: IntegrationState) -> IntegrationState:
         l2_degraded = True
     if column_recall:
         add_k = _plan_int(plan, "column_recall_add_k", 10)
-        c2 = _merge_candidates(cast(list[dict[str, Any]], c2), column_recall[:add_k], k_1)
+        c2 = _merge_candidates(c2, column_recall[:add_k], k_1)
     if bool(plan.get("sample_recall_enabled", False)):
         add_k = _plan_int(plan, "sample_recall_add_k", 10)
         sample_recall = recall_tables_by_samples(
@@ -275,7 +275,7 @@ async def run(state: IntegrationState) -> IntegrationState:
             min_overlap=_plan_int(plan, "sample_recall_min_overlap", 1),
             limit=add_k,
         )
-        c2 = _merge_candidates(cast(list[dict[str, Any]], c2), sample_recall, k_1)
+        c2 = _merge_candidates(c2, sample_recall, k_1)
     stage_timings_ms["L2"] = (time.perf_counter() - started) * 1000
 
     if task_id:

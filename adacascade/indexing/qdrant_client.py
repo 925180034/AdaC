@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from qdrant_client import AsyncQdrantClient
@@ -75,7 +75,7 @@ class AdacQdrantClient:
         result = await self._q.query_points(
             collection_name=self._tbl,
             query=vector,
-            query_filter=Filter(must=must),
+            query_filter=Filter(must=cast(Any, must)),
             limit=top_k,
             with_payload=True,
         )
@@ -130,7 +130,7 @@ class AdacQdrantClient:
         result = await self._q.query_points(
             collection_name=self._col,
             query=vector,
-            query_filter=Filter(must=must),
+            query_filter=Filter(must=cast(Any, must)),
             limit=top_k,
             with_payload=True,
         )

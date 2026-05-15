@@ -197,12 +197,14 @@ def _verify_pair_entry(
     cache_key = _cache_key(src_col, tgt_col, scores, scenario)
     cache_source = "disabled"
     latency_ms = 0.0
+    decision: MatchResult
     if use_cache and cache_key in _cache:
         decision = _cache[cache_key]
         cache_source = "memory"
     elif use_cache:
-        decision = cache_store.get(cache_key)
-        if decision is not None:
+        cached_decision = cache_store.get(cache_key)
+        if cached_decision is not None:
+            decision = cached_decision
             _memory_put(cache_key, decision)
             cache_source = "sqlite"
         else:

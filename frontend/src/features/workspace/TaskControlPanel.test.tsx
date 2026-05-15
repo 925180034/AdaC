@@ -2,7 +2,8 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TaskMode, TableSummary } from '../tasks/taskTypes'
-import { PAPER_PARAMETER_DEFAULTS, TaskControlPanel } from './TaskControlPanel'
+import { TaskControlPanel } from './TaskControlPanel'
+import { PAPER_PARAMETER_DEFAULTS } from './parameters'
 
 const tables: TableSummary[] = [
   {

@@ -368,6 +368,22 @@ def test_l3_batches_one_candidate_per_call_for_local_context() -> None:
 
 
 
+def test_l3_batches_can_raise_candidate_limit(monkeypatch) -> None:
+    from adacascade.agents.retrieval import layer3
+
+    candidates = [{"table_id": str(index)} for index in range(5)]
+    monkeypatch.setattr(layer3.settings, "TLCF_L3_CANDIDATES_PER_CALL", 2)
+
+    batches = layer3._candidate_batches(candidates, batch_size=10)
+
+    assert batches == [
+        ([candidates[0], candidates[1]], 0),
+        ([candidates[2], candidates[3]], 2),
+        ([candidates[4]], 4),
+    ]
+
+
+
 def test_loaded_retrieval_profile_includes_table_vector(
     tmp_path: Path, monkeypatch
 ) -> None:

@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     TLCF_L1_THRESHOLD: float = Field(default=_yaml.get("tlcf", {}).get("theta_1", 0.20))
     TLCF_L2_TOPK: int = Field(default=_yaml.get("tlcf", {}).get("k_2", 40))
     TLCF_L3_TOPK: int = Field(default=_yaml.get("tlcf", {}).get("l3_batch_size", 10))
+    TLCF_L3_CANDIDATES_PER_CALL: int = Field(
+        default=_yaml.get("tlcf", {}).get("l3_candidates_per_call", 1)
+    )
 
     # ── Matcher ───────────────────────────────────────────────────────────
     MATCH_DECISION_THRESHOLD: float = Field(
