@@ -149,6 +149,7 @@ async def upload_dataset_tables(
         db=db,
     )
     dataset.updated_at = datetime.now(timezone.utc)
+    db.commit()
 
     accepted_ids = [str(item["table_id"]) for item in summary["accepted"]]
     if accepted_ids:

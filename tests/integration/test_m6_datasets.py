@@ -4,6 +4,7 @@ from collections.abc import Generator
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from adacascade.db.models import ColumnMetadata, DatasetRegistry, TableRegistry
@@ -173,3 +174,26 @@ def test_system_dataset_rejects_uploads() -> None:
             headers=TENANT_A_HEADERS,
         )
         assert response.status_code == 403
+
+
+def test_dataset_upload_commits_before_background_profiling(monkeypatch: pytest.MonkeyPatch) -> None:
+    profiled_statuses: list[str] = []
+
+    async def fake_run_profiling(*, table_id, db, qdrant, tenant_id):  # type: ignore[no-untyped-def]
+        profiled_statuses.append(db.query(TableRegistry).filter_by(table_id=table_id).one().status)
+        db.query(TableRegistry).filter_by(table_id=table_id).update({"status": "READY"})
+        db.commit()
+
+    monkeypatch.setattr("adacascade.agents.profiling.run_profiling", fake_run_profiling)
+
+    with next(client_fixture()) as client:
+        response = client.post(
+            "/datasets/dataset-a/tables",
+            files={"files": ("people_unique_for_background.csv", b"id,name\n42,Ada\n", "text/csv")},
+            headers=TENANT_A_HEADERS,
+        )
+        assert response.status_code == 202, response.text
+        accepted = response.json()["accepted"]
+        assert len(accepted) == 1
+
+    assert profiled_statuses == ["INGESTED"]
