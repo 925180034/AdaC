@@ -528,6 +528,19 @@ dd {
   letter-spacing: 0;
 }
 
+.dataset-panel__dropzone {
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  padding: 0.9rem;
+  background: rgba(var(--accent-rgb), 0.055);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
 .dataset-panel__summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

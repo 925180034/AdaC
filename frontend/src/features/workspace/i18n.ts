@@ -40,6 +40,9 @@ export type WorkspaceCopy = {
     create: string
     uploadTitle: string
     files: string
+    folder: string
+    dropZone: string
+    selectedFiles: (count: number) => string
     uploadedBy: string
     tableNamePrefix: string
     upload: string
@@ -175,6 +178,9 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       create: 'Create Dataset',
       uploadTitle: 'Upload tables',
       files: 'Files',
+      folder: 'Folder',
+      dropZone: 'Drop files or folders',
+      selectedFiles: (count) => `${count} selected`,
       uploadedBy: 'Uploaded by',
       tableNamePrefix: 'Table name prefix',
       upload: 'Upload to Dataset',
@@ -342,6 +348,9 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       create: '新建数据集',
       uploadTitle: '上传表',
       files: '文件',
+      folder: '文件夹',
+      dropZone: '拖放文件或文件夹',
+      selectedFiles: (count) => `已选择 ${count} 个`,
       uploadedBy: '上传者',
       tableNamePrefix: '表名前缀',
       upload: '上传到数据集',

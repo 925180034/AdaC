@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type DragEvent } from 'react'
 import type { DatasetSummary, UploadDatasetTablesResponse } from '../../api/datasets'
 import type { TableSummary } from '../tasks/taskTypes'
 import { getWorkspaceCopy } from './i18n'
@@ -23,8 +23,53 @@ function countInProgress(tables: TableSummary[]): number {
   return tables.filter((table) => table.status === 'INGESTED' || table.status === 'PROFILING').length
 }
 
+type DroppedFileEntry = {
+  isFile: true
+  file: (callback: (file: File) => void) => void
+}
+
+type DroppedDirectoryEntry = {
+  isFile: false
+  isDirectory: true
+  createReader: () => {
+    readEntries: (callback: (entries: DroppedEntry[]) => void) => void
+  }
+}
+
+type DroppedEntry = DroppedFileEntry | DroppedDirectoryEntry
+
+type DroppedItem = {
+  webkitGetAsEntry?: () => DroppedEntry | null
+}
+
 function datasetLabel(dataset: DatasetSummary): string {
   return `${dataset.dataset_name} · ${dataset.ready_count}/${dataset.table_count}`
+}
+
+function readFileEntry(entry: DroppedFileEntry): Promise<File> {
+  return new Promise((resolve) => entry.file(resolve))
+}
+
+function readDirectoryEntries(entry: DroppedDirectoryEntry): Promise<DroppedEntry[]> {
+  const reader = entry.createReader()
+  return new Promise((resolve) => reader.readEntries(resolve))
+}
+
+async function readDroppedEntry(entry: DroppedEntry): Promise<File[]> {
+  if (entry.isFile) return [await readFileEntry(entry)]
+
+  const entries = await readDirectoryEntries(entry)
+  const nestedFiles = await Promise.all(entries.map(readDroppedEntry))
+  return nestedFiles.flat()
+}
+
+async function readDroppedItems(items: DataTransferItemList): Promise<File[]> {
+  const entries = Array.from(items)
+    .map((item) => (item as DroppedItem).webkitGetAsEntry?.())
+    .filter((entry): entry is DroppedEntry => Boolean(entry))
+
+  const nestedFiles = await Promise.all(entries.map(readDroppedEntry))
+  return nestedFiles.flat()
 }
 
 export function DatasetPanel({
@@ -65,6 +110,17 @@ export function DatasetPanel({
       tableNamePrefix: tableNamePrefix.trim() || undefined,
     })
     setFiles([])
+  }
+
+  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    if (isMutating || !selectedDatasetId) return
+
+    const droppedFiles =
+      event.dataTransfer.items.length > 0
+        ? await readDroppedItems(event.dataTransfer.items)
+        : Array.from(event.dataTransfer.files)
+    setFiles(droppedFiles)
   }
 
   return (
@@ -162,6 +218,26 @@ export function DatasetPanel({
               disabled={isMutating || !selectedDatasetId}
             />
           </label>
+          <label className="field" htmlFor="dataset-folder">
+            <span>{copy.folder}</span>
+            <input
+              id="dataset-folder"
+              type="file"
+              multiple
+              // @ts-expect-error Chromium folder picker attribute
+              webkitdirectory=""
+              onChange={(event) => setFiles(Array.from(event.currentTarget.files ?? []))}
+              disabled={isMutating || !selectedDatasetId}
+            />
+          </label>
+          <div
+            className="dataset-panel__dropzone"
+            aria-label={copy.dropZone}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => void handleDrop(event)}
+          >
+            {files.length > 0 ? copy.selectedFiles(files.length) : copy.dropZone}
+          </div>
           <label className="field" htmlFor="uploaded-by">
             <span>{copy.uploadedBy}</span>
             <input

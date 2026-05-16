@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDataset, listDatasets, uploadDatasetTables } from '../../api/datasets'
 import type { DatasetSummary, ListDatasetsResponse } from '../../api/datasets'
@@ -261,6 +261,70 @@ describe('WorkspacePage', () => {
     const file = new File(['id,name\n1,Ada\n'], 'people.csv', { type: 'text/csv' })
     await user.upload(screen.getByLabelText('Files'), file)
     await user.type(screen.getByLabelText('Uploaded by'), 'tester')
+    await user.click(screen.getByRole('button', { name: 'Upload to Dataset' }))
+
+    expect(uploadDatasetTables).toHaveBeenCalledWith('default', 'dataset-default', [file], {
+      uploadedBy: 'tester',
+      tableNamePrefix: undefined,
+    })
+  })
+
+  it('allows selecting a folder of files for upload', async () => {
+    renderWorkspace()
+
+    await screen.findByText('Default Tenant Table · 10 × 3')
+
+    expect(screen.getByLabelText('Folder')).toHaveAttribute('webkitdirectory', '')
+  })
+
+  it('uploads dropped files into the selected Dataset', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('Default Tenant Table · 10 × 3')
+    const file = new File(['id,name\n1,Ada\n'], 'people.csv', { type: 'text/csv' })
+    await user.type(screen.getByLabelText('Uploaded by'), 'tester')
+    fireEvent.drop(screen.getByLabelText('Drop files or folders'), {
+      dataTransfer: {
+        files: [file],
+        items: [],
+      },
+    })
+    await user.click(screen.getByRole('button', { name: 'Upload to Dataset' }))
+
+    expect(uploadDatasetTables).toHaveBeenCalledWith('default', 'dataset-default', [file], {
+      uploadedBy: 'tester',
+      tableNamePrefix: undefined,
+    })
+  })
+
+  it('uploads files from a dropped folder into the selected Dataset', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('Default Tenant Table · 10 × 3')
+    const file = new File(['id,name\n1,Ada\n'], 'people.csv', { type: 'text/csv' })
+    const fileEntry = {
+      isFile: true,
+      isDirectory: false,
+      file: (callback: (droppedFile: File) => void) => callback(file),
+    }
+    const directoryEntry = {
+      isFile: false,
+      isDirectory: true,
+      createReader: () => ({
+        readEntries: (callback: (entries: typeof fileEntry[]) => void) => callback([fileEntry]),
+      }),
+    }
+
+    await user.type(screen.getByLabelText('Uploaded by'), 'tester')
+    fireEvent.drop(screen.getByLabelText('Drop files or folders'), {
+      dataTransfer: {
+        files: [],
+        items: [{ webkitGetAsEntry: () => directoryEntry }],
+      },
+    })
+    await screen.findByText('1 selected')
     await user.click(screen.getByRole('button', { name: 'Upload to Dataset' }))
 
     expect(uploadDatasetTables).toHaveBeenCalledWith('default', 'dataset-default', [file], {
