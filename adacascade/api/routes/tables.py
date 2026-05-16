@@ -47,6 +47,7 @@ def _table_to_dict(tr: TableRegistry) -> dict[str, Any]:
         "table_id": tr.table_id,
         "table_name": tr.table_name,
         "tenant_id": tr.tenant_id,
+        "dataset_id": tr.dataset_id,
         "status": tr.status,
         "row_count": tr.row_count,
         "col_count": tr.col_count,
@@ -140,14 +141,17 @@ async def list_tables(
     db: Session = Depends(get_db),
     tenant_id: str | None = None,
     status: str | None = None,
+    dataset_id: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """List tables with optional tenant/status filtering."""
+    """List tables with optional tenant/status/Dataset filtering."""
     q = db.query(TableRegistry)
     q = q.filter_by(tenant_id=tenant_id or get_tenant_id(request))
     if status:
         q = q.filter_by(status=status)
+    if dataset_id:
+        q = q.filter_by(dataset_id=dataset_id)
     total = q.count()
     rows = (
         q.order_by(TableRegistry.uploaded_at.desc()).offset(offset).limit(limit).all()

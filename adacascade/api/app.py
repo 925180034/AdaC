@@ -16,7 +16,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from qdrant_client import AsyncQdrantClient
 
-from adacascade.api.routes import operations, runtime, tables, tasks
+from adacascade.api.routes import datasets, operations, runtime, tables, tasks
 from adacascade.api.middleware import AuthAndTenantMiddleware
 from adacascade.config import settings
 from adacascade.db.models import TableRegistry
@@ -92,6 +92,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["Authorization", "X-Tenant-Id", "Content-Type"],
 )
+app.include_router(datasets.router)
 app.include_router(tables.router)
 app.include_router(operations.router)
 app.include_router(tasks.router)

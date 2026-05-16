@@ -56,3 +56,23 @@ export async function apiJson<T>(
 
   return (await response.json()) as T
 }
+
+export async function apiMultipart<T>(
+  path: string,
+  tenantId: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(joinUrl(apiBaseUrl, path), {
+    ...init,
+    headers: {
+      ...buildHeaders(tenantId),
+      ...(init.headers ?? {}),
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await errorText(response))
+  }
+
+  return (await response.json()) as T
+}

@@ -531,6 +531,7 @@ def load_candidate_profiles(
     db: Session,
     *,
     corpus: str | None = None,
+    dataset_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Load READY candidate profiles for a tenant, excluding the query table."""
     query = db.query(TableRegistry).filter(
@@ -538,6 +539,8 @@ def load_candidate_profiles(
         TableRegistry.status == "READY",
         TableRegistry.table_id != query_table_id,
     )
+    if dataset_id is not None:
+        query = query.filter(TableRegistry.dataset_id == dataset_id)
     if corpus and corpus != "all":
         query = query.filter(TableRegistry.source_system == f"retrieval|{corpus}")
     rows: list[TableRegistry] = query.order_by(TableRegistry.table_name).all()
@@ -560,6 +563,7 @@ async def run_pool(state: dict[str, Any]) -> dict[str, Any]:
             tenant_id,
             db,
             corpus=str(state.get("corpus", "all")),
+            dataset_id=state.get("dataset_id"),
         )
     return {
         **state,

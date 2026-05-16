@@ -23,6 +23,36 @@ export type WorkspaceCopy = {
     runtimeLoadError: string
     runtimeSwitchError: string
   }
+  dataset: {
+    kicker: string
+    title: string
+    refresh: string
+    selectDataset: string
+    noDatasets: string
+    countsLabel: string
+    tables: string
+    ready: string
+    inProgress: string
+    failed: string
+    createTitle: string
+    datasetName: string
+    description: string
+    create: string
+    uploadTitle: string
+    files: string
+    uploadedBy: string
+    tableNamePrefix: string
+    upload: string
+    uploading: string
+    uploadSummary: string
+    accepted: (count: number) => string
+    rejected: (count: number) => string
+    skipped: (count: number) => string
+    recentTables: string
+    noTables: string
+    loadError: string
+    mutationError: string
+  }
   control: {
     kicker: string
     title: string
@@ -127,6 +157,36 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       runtimeSwitching: 'Switching…',
       runtimeLoadError: 'Runtime status is unavailable. Switching is disabled until it can be loaded.',
       runtimeSwitchError: 'Runtime switch failed. The previous backend is still selected.',
+    },
+    dataset: {
+      kicker: 'Dataset scope',
+      title: 'Dataset Panel',
+      refresh: 'Refresh',
+      selectDataset: 'Dataset',
+      noDatasets: 'No Datasets',
+      countsLabel: 'Dataset table counts',
+      tables: 'Tables',
+      ready: 'Ready',
+      inProgress: 'In progress',
+      failed: 'Failed',
+      createTitle: 'Create Dataset',
+      datasetName: 'Dataset name',
+      description: 'Description',
+      create: 'Create Dataset',
+      uploadTitle: 'Upload tables',
+      files: 'Files',
+      uploadedBy: 'Uploaded by',
+      tableNamePrefix: 'Table name prefix',
+      upload: 'Upload to Dataset',
+      uploading: 'Uploading…',
+      uploadSummary: 'Upload summary',
+      accepted: (count) => `${count} accepted`,
+      rejected: (count) => `${count} rejected`,
+      skipped: (count) => `${count} skipped`,
+      recentTables: 'Recent tables',
+      noTables: 'No ready tables in this Dataset yet.',
+      loadError: 'Datasets could not be loaded.',
+      mutationError: 'Dataset operation failed.',
     },
     control: {
       kicker: 'Launch vector',
@@ -264,6 +324,36 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       runtimeSwitching: '切换中…',
       runtimeLoadError: '运行时状态不可用。加载成功前无法切换。',
       runtimeSwitchError: '运行时切换失败，仍保留之前的后端。',
+    },
+    dataset: {
+      kicker: '数据集范围',
+      title: '数据集面板',
+      refresh: '刷新',
+      selectDataset: '数据集',
+      noDatasets: '暂无数据集',
+      countsLabel: '数据集表统计',
+      tables: '表',
+      ready: '就绪',
+      inProgress: '处理中',
+      failed: '失败',
+      createTitle: '新建数据集',
+      datasetName: '数据集名称',
+      description: '描述',
+      create: '新建数据集',
+      uploadTitle: '上传表',
+      files: '文件',
+      uploadedBy: '上传者',
+      tableNamePrefix: '表名前缀',
+      upload: '上传到数据集',
+      uploading: '上传中…',
+      uploadSummary: '上传摘要',
+      accepted: (count) => `${count} 个接受`,
+      rejected: (count) => `${count} 个拒绝`,
+      skipped: (count) => `${count} 个跳过`,
+      recentTables: '最近表状态',
+      noTables: '此数据集暂无就绪表。',
+      loadError: '数据集加载失败。',
+      mutationError: '数据集操作失败。',
     },
     control: {
       kicker: '启动入口',

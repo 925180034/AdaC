@@ -30,6 +30,7 @@ class IntegrateRequest(BaseModel):
 
     query_table_id: str
     tenant_id: str = settings.DEFAULT_TENANT_ID
+    dataset_id: str | None = None
     options: dict[str, Any] = {}
     user_hint: str | None = None
 
@@ -40,6 +41,7 @@ class MatchRequest(BaseModel):
     source_table_id: str
     target_table_id: str
     tenant_id: str = settings.DEFAULT_TENANT_ID
+    dataset_id: str | None = None
     options: dict[str, Any] = {}
 
 
@@ -118,15 +120,16 @@ def _persist_failure(task: IntegrationTask, exc: Exception) -> None:
     task.error_message = str(exc)
 
 
-def _ensure_ready_table(db: Session, table_id: str | None, tenant_id: str) -> None:
-    """Require a READY table owned by the current tenant."""
+def _ensure_ready_table(
+    db: Session, table_id: str | None, tenant_id: str, dataset_id: str | None
+) -> None:
+    """Require a READY table owned by the current tenant and Dataset."""
     if table_id is None:
         return
-    table = (
-        db.query(TableRegistry)
-        .filter_by(table_id=table_id, tenant_id=tenant_id)
-        .first()
-    )
+    query = db.query(TableRegistry).filter_by(table_id=table_id, tenant_id=tenant_id)
+    if dataset_id is not None:
+        query = query.filter_by(dataset_id=dataset_id)
+    table = query.first()
     if table is None or table.status != "READY":
         raise HTTPException(status_code=404, detail="Table not found")
 
@@ -266,29 +269,34 @@ async def _submit_task(
     tenant_id: str,
     query_table_id: str,
     target_table_id: str | None,
+    dataset_id: str | None,
     options: dict[str, Any],
 ) -> dict[str, Any]:
     """Persist a running task and schedule graph execution."""
+    task_options = dict(options)
+    if dataset_id is not None:
+        task_options["dataset_id"] = dataset_id
     with get_session() as db:
-        _ensure_ready_table(db, query_table_id, tenant_id)
-        _ensure_ready_table(db, target_table_id, tenant_id)
+        _ensure_ready_table(db, query_table_id, tenant_id, dataset_id)
+        _ensure_ready_table(db, target_table_id, tenant_id, dataset_id)
         task = _create_task(
             db,
             task_type=task_type,
             tenant_id=tenant_id,
             query_table_id=query_table_id,
             target_table_id=target_table_id,
-            options=options,
+            options=task_options,
         )
         task_id = task.task_id
 
     initial_state = {
         "task_id": task_id,
         "tenant_id": tenant_id,
+        "dataset_id": dataset_id,
         "task_type": task_type,
         "query_table_id": query_table_id,
         "target_table_id": target_table_id,
-        "plan": options,
+        "plan": task_options,
         "status": "RUNNING",
         "degraded": False,
     }
@@ -318,6 +326,7 @@ async def integrate(
         tenant_id=get_tenant_id(request),
         query_table_id=body.query_table_id,
         target_table_id=None,
+        dataset_id=body.dataset_id,
         options=_operation_options(body.options, body.user_hint),
     )
 
@@ -334,6 +343,7 @@ async def discover(
         tenant_id=get_tenant_id(request),
         query_table_id=body.query_table_id,
         target_table_id=None,
+        dataset_id=body.dataset_id,
         options=_operation_options(body.options, body.user_hint),
     )
 
@@ -350,5 +360,6 @@ async def match(
         tenant_id=get_tenant_id(request),
         query_table_id=body.source_table_id,
         target_table_id=body.target_table_id,
+        dataset_id=body.dataset_id,
         options=body.options,
     )

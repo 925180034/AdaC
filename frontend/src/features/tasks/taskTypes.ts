@@ -9,6 +9,7 @@ export type MatchScenario = 'SMD' | 'SSD' | 'SLD'
 export type TableSummary = {
   table_id: string
   tenant_id: string
+  dataset_id?: string | null
   table_name: string
   row_count: number | null
   col_count: number | null

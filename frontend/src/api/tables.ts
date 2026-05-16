@@ -8,6 +8,8 @@ export type ListTablesResponse = {
   offset: number
 }
 
-export function listTables(tenantId: string): Promise<ListTablesResponse> {
-  return apiJson<ListTablesResponse>('/tables?status=READY&limit=200', tenantId)
+export function listTables(tenantId: string, datasetId?: string): Promise<ListTablesResponse> {
+  const params = new URLSearchParams({ status: 'READY', limit: '200' })
+  if (datasetId) params.set('dataset_id', datasetId)
+  return apiJson<ListTablesResponse>(`/tables?${params.toString()}`, tenantId)
 }

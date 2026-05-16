@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Float,
     ForeignKey,
@@ -21,6 +22,31 @@ class Base(DeclarativeBase):
     pass
 
 
+class DatasetRegistry(Base):
+    """One row per user-facing Dataset in a tenant."""
+
+    __tablename__ = "dataset_registry"
+    __table_args__ = (
+        CheckConstraint("status IN ('ACTIVE','ARCHIVED')", name="ck_ds_status"),
+        UniqueConstraint("tenant_id", "dataset_name", name="uq_ds_tenant_name"),
+        Index("ix_ds_tenant_status", "tenant_id", "status"),
+    )
+
+    dataset_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, default="default")
+    dataset_name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="ACTIVE")
+    is_system: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    tables: Mapped[list[TableRegistry]] = relationship(
+        "TableRegistry", back_populates="dataset"
+    )
+
+
 class TableRegistry(Base):
     """One row per table uploaded to the data lake."""
 
@@ -31,11 +57,15 @@ class TableRegistry(Base):
             name="ck_tr_status",
         ),
         Index("ix_tr_tenant_status", "tenant_id", "status"),
-        UniqueConstraint("tenant_id", "content_hash", name="ix_tr_content"),
+        Index("ix_tr_content", "tenant_id", "content_hash"),
+        Index("ix_tr_dataset_content", "tenant_id", "dataset_id", "content_hash"),
     )
 
     table_id: Mapped[str] = mapped_column(String, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, nullable=False, default="default")
+    dataset_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("dataset_registry.dataset_id"), nullable=True
+    )
     source_system: Mapped[str] = mapped_column(String, nullable=False)
     source_uri: Mapped[str] = mapped_column(String, nullable=False)
     table_name: Mapped[str] = mapped_column(String, nullable=False)
@@ -48,6 +78,9 @@ class TableRegistry(Base):
     updated_at: Mapped[datetime] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False, default="PENDING")
 
+    dataset: Mapped[DatasetRegistry | None] = relationship(
+        "DatasetRegistry", back_populates="tables"
+    )
     columns: Mapped[list[ColumnMetadata]] = relationship(
         "ColumnMetadata", back_populates="table", cascade="all, delete-orphan"
     )

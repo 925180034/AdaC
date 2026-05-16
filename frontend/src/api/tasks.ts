@@ -13,10 +13,11 @@ export function startDiscover(
   tenantId: string,
   queryTableId: string,
   options: TaskOptions = {},
+  datasetId?: string,
 ): Promise<StartTaskResponse> {
   return apiJson<StartTaskResponse>('/discover', tenantId, {
     method: 'POST',
-    body: JSON.stringify({ query_table_id: queryTableId, options }),
+    body: JSON.stringify({ query_table_id: queryTableId, dataset_id: datasetId, options }),
   })
 }
 
@@ -24,10 +25,11 @@ export function startIntegrate(
   tenantId: string,
   queryTableId: string,
   options: TaskOptions = {},
+  datasetId?: string,
 ): Promise<StartTaskResponse> {
   return apiJson<StartTaskResponse>('/integrate', tenantId, {
     method: 'POST',
-    body: JSON.stringify({ query_table_id: queryTableId, options }),
+    body: JSON.stringify({ query_table_id: queryTableId, dataset_id: datasetId, options }),
   })
 }
 
@@ -36,10 +38,11 @@ export function startMatch(
   sourceTableId: string,
   targetTableId: string,
   options: TaskOptions = {},
+  datasetId?: string,
 ): Promise<StartTaskResponse> {
   return apiJson<StartTaskResponse>('/match', tenantId, {
     method: 'POST',
-    body: JSON.stringify({ source_table_id: sourceTableId, target_table_id: targetTableId, options }),
+    body: JSON.stringify({ source_table_id: sourceTableId, target_table_id: targetTableId, dataset_id: datasetId, options }),
   })
 }
 

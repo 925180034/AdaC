@@ -18,6 +18,7 @@ class IntegrationState(TypedDict, total=False):
     # ── 任务元信息 ─────────────────────────────────────────────────────────
     task_id: str
     tenant_id: str
+    dataset_id: str
     task_type: Literal["INTEGRATE", "DISCOVER_ONLY", "MATCH_ONLY"]
     query_table_id: str
     target_table_id: Optional[str]

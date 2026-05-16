@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { createDataset, listDatasets, uploadDatasetTables } from '../../api/datasets'
+import type { UploadDatasetTablesResponse } from '../../api/datasets'
 import { subscribeTaskEvents } from '../../api/events'
 import { getLlmRuntime, updateLlmRuntime } from '../../api/runtime'
 import { listTables } from '../../api/tables'
@@ -10,6 +12,7 @@ import type { TaskMode } from '../tasks/taskTypes'
 const defaultTenantId = import.meta.env.VITE_DEFAULT_TENANT_ID ?? 'default'
 const tenantOptions = ['default', 'benchmark'] as const
 import { AgentTracePanel } from './AgentTracePanel'
+import { DatasetPanel } from './DatasetPanel'
 import { getWorkspaceCopy } from './i18n'
 import { ResultWorkspace } from './ResultWorkspace'
 import { TaskControlPanel, type TenantOption } from './TaskControlPanel'
@@ -50,6 +53,9 @@ export function WorkspacePage() {
   const resetLiveState = useTaskStore((state) => state.resetLiveState)
 
   const [tenantId, setTenantId] = useState(() => getSearchParam(params, 'tenant_id', defaultTenantId))
+  const [selectedDatasetId, setSelectedDatasetId] = useState(() => getSearchParam(params, 'dataset_id', ''))
+  const [uploadSummary, setUploadSummary] = useState<UploadDatasetTablesResponse | null>(null)
+  const [datasetMutationError, setDatasetMutationError] = useState<string | null>(null)
   const [executionProfile, setExecutionProfile] = useState<ExecutionProfile>('reproducible')
   const [parameters, setParameters] = useState<AdvancedParameters>(PAPER_PARAMETER_DEFAULTS)
   const [mode, setMode] = useState<TaskMode>(() => getInitialMode(params))
@@ -113,9 +119,21 @@ export function WorkspacePage() {
   const runtimeBackend = runtimeQuery.data?.backend ?? null
   const runtimeQueryError = runtimeQuery.isError ? copy.toolbar.runtimeLoadError : null
 
+  const datasetsQuery = useQuery({
+    queryKey: ['datasets', tenantId],
+    queryFn: () => listDatasets(tenantId),
+  })
+  const datasets = useMemo(() => datasetsQuery.data?.items ?? [], [datasetsQuery.data?.items])
+
+  useEffect(() => {
+    if (selectedDatasetId || datasets.length === 0) return
+    setSelectedDatasetId(datasets[0]?.dataset_id ?? '')
+  }, [datasets, selectedDatasetId])
+
   const tablesQuery = useQuery({
-    queryKey: ['tables', tenantId],
-    queryFn: () => listTables(tenantId),
+    queryKey: ['tables', tenantId, selectedDatasetId],
+    queryFn: () => listTables(tenantId, selectedDatasetId || undefined),
+    enabled: Boolean(selectedDatasetId),
   })
   const tables = useMemo(() => tablesQuery.data?.items ?? [], [tablesQuery.data?.items])
 
@@ -129,11 +147,37 @@ export function WorkspacePage() {
     if (!targetTableId) setTargetTableId(secondTableId)
   }, [queryTableId, sourceTableId, tables, targetTableId])
 
+  const createDatasetMutation = useMutation({
+    mutationFn: (payload: { dataset_name: string; description?: string }) => createDataset(tenantId, payload),
+    onSuccess: (dataset) => {
+      setDatasetMutationError(null)
+      void queryClient.invalidateQueries({ queryKey: ['datasets', tenantId] })
+      setSelectedDatasetId(dataset.dataset_id)
+    },
+    onError: () => {
+      setDatasetMutationError(copy.dataset.mutationError)
+    },
+  })
+
+  const uploadDatasetMutation = useMutation({
+    mutationFn: ({ files, options }: { files: File[]; options: { uploadedBy?: string; tableNamePrefix?: string } }) =>
+      uploadDatasetTables(tenantId, selectedDatasetId, files, options),
+    onSuccess: (summary) => {
+      setDatasetMutationError(null)
+      setUploadSummary(summary)
+      void queryClient.invalidateQueries({ queryKey: ['datasets', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['tables', tenantId, selectedDatasetId] })
+    },
+    onError: () => {
+      setDatasetMutationError(copy.dataset.mutationError)
+    },
+  })
+
   const startTaskMutation = useMutation({
     mutationFn: () => {
-      if (mode === 'discover') return startDiscover(tenantId, queryTableId, taskOptions)
-      if (mode === 'match') return startMatch(tenantId, sourceTableId, targetTableId, taskOptions)
-      return startIntegrate(tenantId, queryTableId, taskOptions)
+      if (mode === 'discover') return startDiscover(tenantId, queryTableId, taskOptions, selectedDatasetId || undefined)
+      if (mode === 'match') return startMatch(tenantId, sourceTableId, targetTableId, taskOptions, selectedDatasetId || undefined)
+      return startIntegrate(tenantId, queryTableId, taskOptions, selectedDatasetId || undefined)
     },
     onSuccess: (task) => {
       resetLiveState()
@@ -196,6 +240,7 @@ export function WorkspacePage() {
     taskQuery.data?.status === 'DEGRADED'
   const isRunning = startTaskMutation.isPending || (Boolean(currentTaskId) && !isTerminalTask)
   const canRun =
+    Boolean(selectedDatasetId) &&
     tables.length > 0 &&
     !isRunning &&
     (mode === 'match' ? Boolean(sourceTableId && targetTableId) : Boolean(queryTableId))
@@ -209,17 +254,34 @@ export function WorkspacePage() {
     cancelTaskMutation.mutate()
   }, [cancelTaskMutation, currentTaskId])
 
+  const resetTaskContext = useCallback(() => {
+    setQueryTableId('')
+    setSourceTableId('')
+    setTargetTableId('')
+    setStreamError(null)
+    setCurrentTaskId(null)
+    resetLiveState()
+  }, [resetLiveState, setCurrentTaskId])
+
   const handleTenantChange = useCallback(
     (nextTenantId: string) => {
       setTenantId(nextTenantId)
-      setQueryTableId('')
-      setSourceTableId('')
-      setTargetTableId('')
-      setStreamError(null)
-      setCurrentTaskId(null)
-      resetLiveState()
+      setSelectedDatasetId('')
+      setUploadSummary(null)
+      setDatasetMutationError(null)
+      resetTaskContext()
     },
-    [resetLiveState, setCurrentTaskId],
+    [resetTaskContext],
+  )
+
+  const handleDatasetChange = useCallback(
+    (nextDatasetId: string) => {
+      setSelectedDatasetId(nextDatasetId)
+      setUploadSummary(null)
+      setDatasetMutationError(null)
+      resetTaskContext()
+    },
+    [resetTaskContext],
   )
 
   useEffect(() => {
@@ -257,6 +319,21 @@ export function WorkspacePage() {
     [isRunning, runtimeBackend, runtimeMutation],
   )
 
+  const handleRefreshDatasets = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['datasets', tenantId] })
+    void queryClient.invalidateQueries({ queryKey: ['tables', tenantId, selectedDatasetId] })
+  }, [queryClient, selectedDatasetId, tenantId])
+
+  useEffect(() => {
+    const hasInProgressTables = tables.some((table) => table.status === 'INGESTED' || table.status === 'PROFILING')
+    if (!hasInProgressTables || !selectedDatasetId) return undefined
+    const interval = window.setInterval(() => {
+      void queryClient.invalidateQueries({ queryKey: ['datasets', tenantId] })
+      void queryClient.invalidateQueries({ queryKey: ['tables', tenantId, selectedDatasetId] })
+    }, 2000)
+    return () => window.clearInterval(interval)
+  }, [queryClient, selectedDatasetId, tables, tenantId])
+
   return (
     <div className="workspace-shell">
       <header className="workspace-topbar">
@@ -290,8 +367,23 @@ export function WorkspacePage() {
       )}
 
       <div className="workspace-grid">
-        <TaskControlPanel
-          tenantId={tenantId}
+        <div className="workspace-sidebar">
+          <DatasetPanel
+            datasets={datasets}
+            selectedDatasetId={selectedDatasetId}
+            tables={tables}
+            isLoading={datasetsQuery.isLoading || tablesQuery.isLoading}
+            isMutating={createDatasetMutation.isPending || uploadDatasetMutation.isPending}
+            uploadSummary={uploadSummary}
+            error={datasetsQuery.isError ? copy.dataset.loadError : datasetMutationError}
+            onDatasetChange={handleDatasetChange}
+            onCreateDataset={(payload) => createDatasetMutation.mutate(payload)}
+            onUploadTables={(files, options) => uploadDatasetMutation.mutate({ files, options })}
+            onRefresh={handleRefreshDatasets}
+            language={language}
+          />
+          <TaskControlPanel
+            tenantId={tenantId}
           tenantOptions={tenantSelectOptions}
           executionProfile={executionProfile}
           parameters={parameters}
@@ -310,9 +402,10 @@ export function WorkspacePage() {
           onSourceTableChange={setSourceTableId}
           onTargetTableChange={setTargetTableId}
           onRun={handleRun}
-          onCancel={handleCancel}
-          language={language}
-        />
+            onCancel={handleCancel}
+            language={language}
+          />
+        </div>
         <ResultWorkspace task={taskQuery.data ?? null} language={language} />
         <AgentTracePanel timeline={timeline} events={events} streamError={streamError} language={language} />
       </div>

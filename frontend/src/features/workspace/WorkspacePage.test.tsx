@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
 import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createDataset, listDatasets, uploadDatasetTables } from '../../api/datasets'
+import type { DatasetSummary, ListDatasetsResponse } from '../../api/datasets'
 import type { LlmRuntimeInfo } from '../../api/runtime'
 import { getLlmRuntime, updateLlmRuntime } from '../../api/runtime'
 import type { ListTablesResponse } from '../../api/tables'
@@ -10,6 +12,12 @@ import { cancelTask, getTask, startDiscover, startIntegrate } from '../../api/ta
 import { useTaskStore } from '../tasks/taskStore'
 import type { TaskDetail } from '../tasks/taskTypes'
 import { WorkspacePage } from './WorkspacePage'
+
+vi.mock('../../api/datasets', () => ({
+  createDataset: vi.fn(),
+  listDatasets: vi.fn(),
+  uploadDatasetTables: vi.fn(),
+}))
 
 vi.mock('../../api/runtime', () => ({
   getLlmRuntime: vi.fn(),
@@ -32,6 +40,33 @@ vi.mock('../../api/tasks', () => ({
   startMatch: vi.fn(),
 }))
 
+const defaultDataset: DatasetSummary = {
+  dataset_id: 'dataset-default',
+  dataset_name: 'Default Dataset',
+  description: null,
+  is_system: false,
+  table_count: 1,
+  ready_count: 1,
+  failed_count: 0,
+  created_at: '2026-05-16T00:00:00Z',
+  updated_at: '2026-05-16T00:00:00Z',
+}
+
+const benchmarkDataset: DatasetSummary = {
+  dataset_id: 'dataset-benchmark',
+  dataset_name: 'Benchmark Dataset',
+  description: null,
+  is_system: true,
+  table_count: 1,
+  ready_count: 1,
+  failed_count: 0,
+  created_at: '2026-05-16T00:00:00Z',
+  updated_at: '2026-05-16T00:00:00Z',
+}
+
+const datasetsResponse: ListDatasetsResponse = { items: [defaultDataset] }
+const benchmarkDatasetsResponse: ListDatasetsResponse = { items: [benchmarkDataset] }
+
 const tablesResponse: ListTablesResponse = {
   total: 1,
   offset: 0,
@@ -40,6 +75,7 @@ const tablesResponse: ListTablesResponse = {
     {
       table_id: 'default_table',
       tenant_id: 'default',
+      dataset_id: 'dataset-default',
       table_name: 'Default Tenant Table',
       row_count: 10,
       col_count: 3,
@@ -56,6 +92,7 @@ const benchmarkTablesResponse: ListTablesResponse = {
     {
       table_id: 'benchmark_table',
       tenant_id: 'benchmark',
+      dataset_id: 'dataset-benchmark',
       table_name: 'Benchmark Tenant Table',
       row_count: 1000,
       col_count: 12,
@@ -126,6 +163,11 @@ describe('WorkspacePage', () => {
     document.documentElement.removeAttribute('data-theme')
     vi.clearAllMocks()
     useTaskStore.setState({ currentTaskId: null, events: [] })
+    vi.mocked(listDatasets).mockImplementation((tenantId) =>
+      Promise.resolve(tenantId === 'benchmark' ? benchmarkDatasetsResponse : datasetsResponse),
+    )
+    vi.mocked(createDataset).mockResolvedValue({ ...defaultDataset, dataset_id: 'dataset-new', dataset_name: 'New Lake' })
+    vi.mocked(uploadDatasetTables).mockResolvedValue({ dataset_id: 'dataset-default', accepted: [], rejected: [], skipped: [] })
     vi.mocked(listTables).mockImplementation((tenantId) =>
       Promise.resolve(tenantId === 'benchmark' ? benchmarkTablesResponse : tablesResponse),
     )
@@ -140,7 +182,7 @@ describe('WorkspacePage', () => {
   it('loads tables for the default tenant when no tenant is in the URL', async () => {
     renderWorkspace()
 
-    await waitFor(() => expect(listTables).toHaveBeenCalledWith('default'))
+    await waitFor(() => expect(listTables).toHaveBeenCalledWith('default', 'dataset-default'))
     expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
   })
 
@@ -185,7 +227,7 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('button', { name: 'Local model', pressed: false })).toBeEnabled()
   })
 
-  it('switches tenant and reloads tenant-scoped tables and runtime info', async () => {
+  it('switches tenant and reloads tenant-scoped Datasets, tables, and runtime info', async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
@@ -193,9 +235,38 @@ describe('WorkspacePage', () => {
 
     await user.selectOptions(screen.getByLabelText('Tenant'), 'benchmark')
 
-    await waitFor(() => expect(listTables).toHaveBeenCalledWith('benchmark'))
+    await waitFor(() => expect(listDatasets).toHaveBeenCalledWith('benchmark'))
+    await waitFor(() => expect(listTables).toHaveBeenCalledWith('benchmark', 'dataset-benchmark'))
     await waitFor(() => expect(getLlmRuntime).toHaveBeenCalledWith('benchmark'))
     expect(await screen.findByText('Benchmark Tenant Table · 1,000 × 12')).toBeInTheDocument()
+  })
+
+  it('creates a Dataset from the Dataset panel', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByRole('heading', { name: 'Dataset Panel' })
+    await user.type(screen.getByLabelText('Dataset name'), 'New Lake')
+    await user.type(screen.getByLabelText('Description'), 'demo')
+    await user.click(screen.getByRole('button', { name: 'Create Dataset' }))
+
+    expect(createDataset).toHaveBeenCalledWith('default', { dataset_name: 'New Lake', description: 'demo' })
+  })
+
+  it('uploads files into the selected Dataset', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('Default Tenant Table · 10 × 3')
+    const file = new File(['id,name\n1,Ada\n'], 'people.csv', { type: 'text/csv' })
+    await user.upload(screen.getByLabelText('Files'), file)
+    await user.type(screen.getByLabelText('Uploaded by'), 'tester')
+    await user.click(screen.getByRole('button', { name: 'Upload to Dataset' }))
+
+    expect(uploadDatasetTables).toHaveBeenCalledWith('default', 'dataset-default', [file], {
+      uploadedBy: 'tester',
+      tableNamePrefix: undefined,
+    })
   })
 
   it('starts tasks with advanced parameter options', async () => {
@@ -209,13 +280,18 @@ describe('WorkspacePage', () => {
     await user.type(screen.getByLabelText('Matcher top-k'), '5')
     await user.click(screen.getByRole('button', { name: 'Run AdaCascade' }))
 
-    expect(startIntegrate).toHaveBeenCalledWith('default', 'default_table', {
-      theta_1: 0.2,
-      theta_2: 0.55,
-      theta_3: 0.3,
-      theta_match: 0.7,
-      matcher_top_k: 5,
-    })
+    expect(startIntegrate).toHaveBeenCalledWith(
+      'default',
+      'default_table',
+      {
+        theta_1: 0.2,
+        theta_2: 0.55,
+        theta_3: 0.3,
+        theta_match: 0.7,
+        matcher_top_k: 5,
+      },
+      'dataset-default',
+    )
   })
 
   it('starts tasks with fast execution options when demo fast profile is selected', async () => {
@@ -226,17 +302,22 @@ describe('WorkspacePage', () => {
     await user.selectOptions(screen.getByLabelText('Execution profile'), 'fast')
     await user.click(screen.getByRole('button', { name: 'Run AdaCascade' }))
 
-    expect(startIntegrate).toHaveBeenCalledWith('default', 'default_table', {
-      theta_1: 0.2,
-      theta_2: 0.55,
-      theta_3: 0.5,
-      theta_match: 0.7,
-      matcher_top_k: 3,
-      llm_cache_enabled: true,
-      llm_batch_size: 10,
-      llm_concurrency: 24,
-      matcher_llm_concurrency: 8,
-    })
+    expect(startIntegrate).toHaveBeenCalledWith(
+      'default',
+      'default_table',
+      {
+        theta_1: 0.2,
+        theta_2: 0.55,
+        theta_3: 0.5,
+        theta_match: 0.7,
+        matcher_top_k: 3,
+        llm_cache_enabled: true,
+        llm_batch_size: 10,
+        llm_concurrency: 24,
+        matcher_llm_concurrency: 8,
+      },
+      'dataset-default',
+    )
   })
 
   it('starts tasks with JOIN tuned recall options when that profile is selected', async () => {
@@ -247,17 +328,22 @@ describe('WorkspacePage', () => {
     await user.selectOptions(screen.getByLabelText('Execution profile'), 'joinTuned')
     await user.click(screen.getByRole('button', { name: 'Run AdaCascade' }))
 
-    expect(startIntegrate).toHaveBeenCalledWith('default', 'default_table', {
-      theta_1: 0.2,
-      theta_2: 0.55,
-      theta_3: 0.5,
-      theta_match: 0.7,
-      matcher_top_k: 3,
-      column_recall_enabled: true,
-      column_recall_top_k: 10,
-      column_recall_add_k: 10,
-      matcher_llm_concurrency: 8,
-    })
+    expect(startIntegrate).toHaveBeenCalledWith(
+      'default',
+      'default_table',
+      {
+        theta_1: 0.2,
+        theta_2: 0.55,
+        theta_3: 0.5,
+        theta_match: 0.7,
+        matcher_top_k: 3,
+        column_recall_enabled: true,
+        column_recall_top_k: 10,
+        column_recall_add_k: 10,
+        matcher_llm_concurrency: 8,
+      },
+      'dataset-default',
+    )
   })
 
   it('defaults to light theme and persists root theme changes from the toolbar', async () => {
