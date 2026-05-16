@@ -7,6 +7,7 @@ export default defineConfig({
     allowedHosts: ['u307207-94cd-0c29b003.nmb1.seetacloud.com'],
     proxy: {
       '/tables': 'http://localhost:6008',
+      '/datasets': 'http://localhost:6008',
       '/runtime': 'http://localhost:6008',
       '/tasks': 'http://localhost:6008',
       '/discover': 'http://localhost:6008',

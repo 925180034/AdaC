@@ -17,6 +17,7 @@ describe('vite dev server config', () => {
 
     expect(config).toContain('proxy:')
     expect(config).toContain('/tables')
+    expect(config).toContain('/datasets')
     expect(config).toContain('/runtime')
     expect(config).toContain('/tasks')
     expect(config).toContain('/discover')
