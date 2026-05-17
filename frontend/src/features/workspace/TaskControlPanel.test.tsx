@@ -104,9 +104,17 @@ describe('TaskControlPanel', () => {
     expect(baseProps.onExecutionProfileChange).toHaveBeenCalledWith('joinTuned')
   })
 
-  it('renders advanced parameter sliders and reset control', () => {
+  it('keeps advanced parameters collapsed until requested', async () => {
+    const user = userEvent.setup()
     render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)
 
+    expect(screen.getByRole('button', { name: 'Show advanced parameters' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('group', { name: 'Advanced parameters' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('L1 threshold')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Show advanced parameters' }))
+
+    expect(screen.getByRole('button', { name: 'Hide advanced parameters' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('group', { name: 'Advanced parameters' })).toBeInTheDocument()
     expect(screen.getByLabelText('L1 threshold')).toHaveValue('0.2')
     expect(screen.getByLabelText('L2 threshold')).toHaveValue('0.55')
@@ -120,6 +128,7 @@ describe('TaskControlPanel', () => {
     const user = userEvent.setup()
     render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)
 
+    await user.click(screen.getByRole('button', { name: 'Show advanced parameters' }))
     await user.clear(screen.getByLabelText('L3 LLM threshold'))
     await user.type(screen.getByLabelText('L3 LLM threshold'), '0.3')
     await user.clear(screen.getByLabelText('Matcher top-k'))

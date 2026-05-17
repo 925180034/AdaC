@@ -503,6 +503,28 @@ dd {
   margin: 0 0 1rem;
 }
 
+.dataset-panel__tools {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.dataset-panel__tools-toggle {
+  border: 1px solid rgba(var(--border-rgb), 0.18);
+  border-radius: 14px;
+  padding: 0.72rem 0.85rem;
+  background: rgba(var(--accent-rgb), 0.075);
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dataset-panel__tools-toggle:hover {
+  border-color: var(--border-strong);
+}
+
 .dataset-panel__section {
   display: grid;
   gap: 0.65rem;

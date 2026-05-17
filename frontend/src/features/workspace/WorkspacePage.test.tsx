@@ -241,11 +241,31 @@ describe('WorkspacePage', () => {
     expect(await screen.findByText('Benchmark Tenant Table · 1,000 × 12')).toBeInTheDocument()
   })
 
+  it('keeps Dataset upload controls collapsed until requested', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    await screen.findByText('Default Tenant Table · 10 × 3')
+
+    expect(screen.getByLabelText('Dataset')).toBeInTheDocument()
+    expect(screen.getByLabelText('Dataset table counts')).toHaveTextContent('Tables')
+    expect(screen.queryByLabelText('Dataset name')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Files')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show Dataset tools' })).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(screen.getByRole('button', { name: 'Show Dataset tools' }))
+
+    expect(screen.getByRole('button', { name: 'Hide Dataset tools' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByLabelText('Dataset name')).toBeInTheDocument()
+    expect(screen.getByLabelText('Files')).toBeInTheDocument()
+  })
+
   it('creates a Dataset from the Dataset panel', async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
     await screen.findByRole('heading', { name: 'Dataset Panel' })
+    await user.click(screen.getByRole('button', { name: 'Show Dataset tools' }))
     await user.type(screen.getByLabelText('Dataset name'), 'New Lake')
     await user.type(screen.getByLabelText('Description'), 'demo')
     await user.click(screen.getByRole('button', { name: 'Create Dataset' }))
@@ -258,6 +278,7 @@ describe('WorkspacePage', () => {
     renderWorkspace()
 
     await screen.findByText('Default Tenant Table · 10 × 3')
+    await user.click(screen.getByRole('button', { name: 'Show Dataset tools' }))
     const file = new File(['id,name\n1,Ada\n'], 'people.csv', { type: 'text/csv' })
     await user.upload(screen.getByLabelText('Files'), file)
     await user.type(screen.getByLabelText('Uploaded by'), 'tester')
@@ -270,9 +291,11 @@ describe('WorkspacePage', () => {
   })
 
   it('allows selecting a folder of files for upload', async () => {
+    const user = userEvent.setup()
     renderWorkspace()
 
     await screen.findByText('Default Tenant Table · 10 × 3')
+    await user.click(screen.getByRole('button', { name: 'Show Dataset tools' }))
 
     expect(screen.getByLabelText('Folder')).toHaveAttribute('webkitdirectory', '')
   })
@@ -282,6 +305,7 @@ describe('WorkspacePage', () => {
     renderWorkspace()
 
     await screen.findByText('Default Tenant Table · 10 × 3')
+    await user.click(screen.getByRole('button', { name: 'Show Dataset tools' }))
     const file = new File(['id,name\n1,Ada\n'], 'people.csv', { type: 'text/csv' })
     await user.type(screen.getByLabelText('Uploaded by'), 'tester')
     fireEvent.drop(screen.getByLabelText('Drop files or folders'), {
@@ -303,6 +327,7 @@ describe('WorkspacePage', () => {
     renderWorkspace()
 
     await screen.findByText('Default Tenant Table · 10 × 3')
+    await user.click(screen.getByRole('button', { name: 'Show Dataset tools' }))
     const file = new File(['id,name\n1,Ada\n'], 'people.csv', { type: 'text/csv' })
     const fileEntry = {
       isFile: true,
@@ -338,6 +363,7 @@ describe('WorkspacePage', () => {
     renderWorkspace()
 
     expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show advanced parameters' }))
     await user.clear(screen.getByLabelText('L3 LLM threshold'))
     await user.type(screen.getByLabelText('L3 LLM threshold'), '0.3')
     await user.clear(screen.getByLabelText('Matcher top-k'))

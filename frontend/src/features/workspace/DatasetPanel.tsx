@@ -92,6 +92,7 @@ export function DatasetPanel({
   const [uploadedBy, setUploadedBy] = useState('')
   const [tableNamePrefix, setTableNamePrefix] = useState('')
   const [files, setFiles] = useState<File[]>([])
+  const [isToolsOpen, setIsToolsOpen] = useState(false)
   const selectedDataset = datasets.find((dataset) => dataset.dataset_id === selectedDatasetId) ?? null
   const recentTables = tables.slice(0, 5)
 
@@ -178,122 +179,135 @@ export function DatasetPanel({
           </div>
         </dl>
 
-        <section className="dataset-panel__section" aria-labelledby="dataset-create-title">
-          <h3 id="dataset-create-title">{copy.createTitle}</h3>
-          <label className="field" htmlFor="dataset-name">
-            <span>{copy.datasetName}</span>
-            <input
-              id="dataset-name"
-              type="text"
-              value={datasetName}
-              onChange={(event) => setDatasetName(event.currentTarget.value)}
-              disabled={isMutating}
-            />
-          </label>
-          <label className="field" htmlFor="dataset-description">
-            <span>{copy.description}</span>
-            <input
-              id="dataset-description"
-              type="text"
-              value={description}
-              onChange={(event) => setDescription(event.currentTarget.value)}
-              disabled={isMutating}
-            />
-          </label>
-          <button className="parameter-reset" type="button" onClick={handleCreate} disabled={!datasetName.trim() || isMutating}>
-            {copy.create}
-          </button>
-        </section>
+        <button
+          className="dataset-panel__tools-toggle"
+          type="button"
+          aria-expanded={isToolsOpen}
+          onClick={() => setIsToolsOpen((current) => !current)}
+        >
+          {isToolsOpen ? copy.hideTools : copy.showTools}
+        </button>
 
-        <section className="dataset-panel__section" aria-labelledby="dataset-upload-title">
-          <h3 id="dataset-upload-title">{copy.uploadTitle}</h3>
-          <label className="field" htmlFor="dataset-files">
-            <span>{copy.files}</span>
-            <input
-              id="dataset-files"
-              type="file"
-              multiple
-              accept=".csv,.parquet,.xlsx,.zip"
-              onChange={(event) => setFiles(Array.from(event.currentTarget.files ?? []))}
-              disabled={isMutating || !selectedDatasetId}
-            />
-          </label>
-          <label className="field" htmlFor="dataset-folder">
-            <span>{copy.folder}</span>
-            <input
-              id="dataset-folder"
-              type="file"
-              multiple
-              // @ts-expect-error Chromium folder picker attribute
-              webkitdirectory=""
-              onChange={(event) => setFiles(Array.from(event.currentTarget.files ?? []))}
-              disabled={isMutating || !selectedDatasetId}
-            />
-          </label>
-          <div
-            className="dataset-panel__dropzone"
-            aria-label={copy.dropZone}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => void handleDrop(event)}
-          >
-            {files.length > 0 ? copy.selectedFiles(files.length) : copy.dropZone}
+        {isToolsOpen ? (
+          <div className="dataset-panel__tools">
+            <section className="dataset-panel__section" aria-labelledby="dataset-create-title">
+              <h3 id="dataset-create-title">{copy.createTitle}</h3>
+              <label className="field" htmlFor="dataset-name">
+                <span>{copy.datasetName}</span>
+                <input
+                  id="dataset-name"
+                  type="text"
+                  value={datasetName}
+                  onChange={(event) => setDatasetName(event.currentTarget.value)}
+                  disabled={isMutating}
+                />
+              </label>
+              <label className="field" htmlFor="dataset-description">
+                <span>{copy.description}</span>
+                <input
+                  id="dataset-description"
+                  type="text"
+                  value={description}
+                  onChange={(event) => setDescription(event.currentTarget.value)}
+                  disabled={isMutating}
+                />
+              </label>
+              <button className="parameter-reset" type="button" onClick={handleCreate} disabled={!datasetName.trim() || isMutating}>
+                {copy.create}
+              </button>
+            </section>
+
+            <section className="dataset-panel__section" aria-labelledby="dataset-upload-title">
+              <h3 id="dataset-upload-title">{copy.uploadTitle}</h3>
+              <label className="field" htmlFor="dataset-files">
+                <span>{copy.files}</span>
+                <input
+                  id="dataset-files"
+                  type="file"
+                  multiple
+                  accept=".csv,.parquet,.xlsx,.zip"
+                  onChange={(event) => setFiles(Array.from(event.currentTarget.files ?? []))}
+                  disabled={isMutating || !selectedDatasetId}
+                />
+              </label>
+              <label className="field" htmlFor="dataset-folder">
+                <span>{copy.folder}</span>
+                <input
+                  id="dataset-folder"
+                  type="file"
+                  multiple
+                  // @ts-expect-error Chromium folder picker attribute
+                  webkitdirectory=""
+                  onChange={(event) => setFiles(Array.from(event.currentTarget.files ?? []))}
+                  disabled={isMutating || !selectedDatasetId}
+                />
+              </label>
+              <div
+                className="dataset-panel__dropzone"
+                aria-label={copy.dropZone}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => void handleDrop(event)}
+              >
+                {files.length > 0 ? copy.selectedFiles(files.length) : copy.dropZone}
+              </div>
+              <label className="field" htmlFor="uploaded-by">
+                <span>{copy.uploadedBy}</span>
+                <input
+                  id="uploaded-by"
+                  type="text"
+                  value={uploadedBy}
+                  onChange={(event) => setUploadedBy(event.currentTarget.value)}
+                  disabled={isMutating || !selectedDatasetId}
+                />
+              </label>
+              <label className="field" htmlFor="table-name-prefix">
+                <span>{copy.tableNamePrefix}</span>
+                <input
+                  id="table-name-prefix"
+                  type="text"
+                  value={tableNamePrefix}
+                  onChange={(event) => setTableNamePrefix(event.currentTarget.value)}
+                  disabled={isMutating || !selectedDatasetId}
+                />
+              </label>
+              <button
+                className="run-button"
+                type="button"
+                onClick={handleUpload}
+                disabled={files.length === 0 || isMutating || !selectedDatasetId}
+              >
+                {isMutating ? copy.uploading : copy.upload}
+              </button>
+            </section>
+
+            {uploadSummary ? (
+              <section className="dataset-panel__section" aria-labelledby="dataset-upload-summary-title">
+                <h3 id="dataset-upload-summary-title">{copy.uploadSummary}</h3>
+                <div className="dataset-panel__summary-grid">
+                  <span>{copy.accepted(uploadSummary.accepted.length)}</span>
+                  <span>{copy.rejected(uploadSummary.rejected.length)}</span>
+                  <span>{copy.skipped(uploadSummary.skipped.length)}</span>
+                </div>
+                {[...uploadSummary.accepted, ...uploadSummary.rejected, ...uploadSummary.skipped].slice(0, 5).map((item) => (
+                  <p className="dataset-panel__summary-line" key={`${item.source}-${item.table_id ?? item.reason ?? 'ok'}`}>
+                    {item.source}: {item.table_name ?? item.reason ?? item.table_id}
+                  </p>
+                ))}
+              </section>
+            ) : null}
+
+            <section className="dataset-panel__section" aria-labelledby="dataset-recent-title">
+              <h3 id="dataset-recent-title">{copy.recentTables}</h3>
+              {recentTables.length === 0 ? <p className="control-panel__note">{copy.noTables}</p> : null}
+              {recentTables.map((table) => (
+                <p className="dataset-panel__table" key={table.table_id}>
+                  <span>{table.table_name}</span>
+                  <strong>{table.status}</strong>
+                </p>
+              ))}
+            </section>
           </div>
-          <label className="field" htmlFor="uploaded-by">
-            <span>{copy.uploadedBy}</span>
-            <input
-              id="uploaded-by"
-              type="text"
-              value={uploadedBy}
-              onChange={(event) => setUploadedBy(event.currentTarget.value)}
-              disabled={isMutating || !selectedDatasetId}
-            />
-          </label>
-          <label className="field" htmlFor="table-name-prefix">
-            <span>{copy.tableNamePrefix}</span>
-            <input
-              id="table-name-prefix"
-              type="text"
-              value={tableNamePrefix}
-              onChange={(event) => setTableNamePrefix(event.currentTarget.value)}
-              disabled={isMutating || !selectedDatasetId}
-            />
-          </label>
-          <button
-            className="run-button"
-            type="button"
-            onClick={handleUpload}
-            disabled={files.length === 0 || isMutating || !selectedDatasetId}
-          >
-            {isMutating ? copy.uploading : copy.upload}
-          </button>
-        </section>
-
-        {uploadSummary ? (
-          <section className="dataset-panel__section" aria-labelledby="dataset-upload-summary-title">
-            <h3 id="dataset-upload-summary-title">{copy.uploadSummary}</h3>
-            <div className="dataset-panel__summary-grid">
-              <span>{copy.accepted(uploadSummary.accepted.length)}</span>
-              <span>{copy.rejected(uploadSummary.rejected.length)}</span>
-              <span>{copy.skipped(uploadSummary.skipped.length)}</span>
-            </div>
-            {[...uploadSummary.accepted, ...uploadSummary.rejected, ...uploadSummary.skipped].slice(0, 5).map((item) => (
-              <p className="dataset-panel__summary-line" key={`${item.source}-${item.table_id ?? item.reason ?? 'ok'}`}>
-                {item.source}: {item.table_name ?? item.reason ?? item.table_id}
-              </p>
-            ))}
-          </section>
         ) : null}
-
-        <section className="dataset-panel__section" aria-labelledby="dataset-recent-title">
-          <h3 id="dataset-recent-title">{copy.recentTables}</h3>
-          {recentTables.length === 0 ? <p className="control-panel__note">{copy.noTables}</p> : null}
-          {recentTables.map((table) => (
-            <p className="dataset-panel__table" key={table.table_id}>
-              <span>{table.table_name}</span>
-              <strong>{table.status}</strong>
-            </p>
-          ))}
-        </section>
       </div>
     </aside>
   )

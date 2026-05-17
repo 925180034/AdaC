@@ -34,6 +34,8 @@ export type WorkspaceCopy = {
     ready: string
     inProgress: string
     failed: string
+    showTools: string
+    hideTools: string
     createTitle: string
     datasetName: string
     description: string
@@ -70,6 +72,8 @@ export type WorkspaceCopy = {
     executionProfile: string
     executionProfiles: Record<'reproducible' | 'fast' | 'joinTuned', string>
     advancedParameters: string
+    showAdvancedParameters: string
+    hideAdvancedParameters: string
     l1Threshold: string
     l2Threshold: string
     l3Threshold: string
@@ -172,6 +176,8 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       ready: 'Ready',
       inProgress: 'In progress',
       failed: 'Failed',
+      showTools: 'Show Dataset tools',
+      hideTools: 'Hide Dataset tools',
       createTitle: 'Create Dataset',
       datasetName: 'Dataset name',
       description: 'Description',
@@ -208,6 +214,8 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       executionProfile: 'Execution profile',
       executionProfiles: { reproducible: 'Reproducible', fast: 'Demo fast', joinTuned: 'JOIN tuned recall' },
       advancedParameters: 'Advanced parameters',
+      showAdvancedParameters: 'Show advanced parameters',
+      hideAdvancedParameters: 'Hide advanced parameters',
       l1Threshold: 'L1 threshold',
       l2Threshold: 'L2 threshold',
       l3Threshold: 'L3 LLM threshold',
@@ -342,6 +350,8 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       ready: '就绪',
       inProgress: '处理中',
       failed: '失败',
+      showTools: '展开数据集工具',
+      hideTools: '收起数据集工具',
       createTitle: '新建数据集',
       datasetName: '数据集名称',
       description: '描述',
@@ -378,6 +388,8 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       executionProfile: '执行配置',
       executionProfiles: { reproducible: '可复现', fast: '演示加速', joinTuned: 'JOIN 调优召回' },
       advancedParameters: '高级参数',
+      showAdvancedParameters: '展开高级参数',
+      hideAdvancedParameters: '收起高级参数',
       l1Threshold: 'L1 阈值',
       l2Threshold: 'L2 阈值',
       l3Threshold: 'L3 LLM 阈值',

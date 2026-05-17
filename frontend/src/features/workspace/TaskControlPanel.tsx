@@ -84,6 +84,7 @@ export function TaskControlPanel({
     matcher_top_k: parameterValue(parameters.matcher_top_k),
   })
   const [focusedParameter, setFocusedParameter] = useState<keyof AdvancedParameters | null>(null)
+  const [areAdvancedParametersOpen, setAreAdvancedParametersOpen] = useState(false)
   const tableOptions = tables.map((table) => (
     <option key={table.table_id} value={table.table_id}>
       {tableLabel(table)}
@@ -213,8 +214,18 @@ export function TaskControlPanel({
         )}
       </div>
 
-      <fieldset className="advanced-parameters">
-        <legend>{copy.advancedParameters}</legend>
+      <button
+        className="dataset-panel__tools-toggle"
+        type="button"
+        aria-expanded={areAdvancedParametersOpen}
+        onClick={() => setAreAdvancedParametersOpen((current) => !current)}
+      >
+        {areAdvancedParametersOpen ? copy.hideAdvancedParameters : copy.showAdvancedParameters}
+      </button>
+
+      {areAdvancedParametersOpen ? (
+        <fieldset className="advanced-parameters">
+          <legend>{copy.advancedParameters}</legend>
         <label className="parameter-field" htmlFor="theta-1">
           <span>{copy.l1Threshold}</span>
           <input
@@ -335,10 +346,11 @@ export function TaskControlPanel({
             disabled={isRunning}
           />
         </label>
-        <button className="parameter-reset" type="button" onClick={onResetParameters} disabled={isRunning}>
-          {copy.resetDefaults}
-        </button>
-      </fieldset>
+          <button className="parameter-reset" type="button" onClick={onResetParameters} disabled={isRunning}>
+            {copy.resetDefaults}
+          </button>
+        </fieldset>
+      ) : null}
 
       <div className="task-actions">
         <button className="run-button" type="button" onClick={onRun} disabled={isRunning}>
