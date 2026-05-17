@@ -4,6 +4,7 @@ tests/fixtures/retrieval_bench/
 tests/fixtures/matcher_bench/
 tests/fixtures/toy_lake/
 data/
+demo_data/
 *.db
 *.pkl
 __pycache__/
