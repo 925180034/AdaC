@@ -361,12 +361,24 @@
 - [x] 根据 smoke benchmark 形成下一轮优化方向：优先做 Retrieval 参数搜索，其次评估 JOIN 专用列级/样本值召回增强
 - [x] 前端端到端 demo 稳定性验证：Vite same-origin proxy + FastAPI 6008 + Qdrant + local vLLM 下，从 UI 选择 `JOIN tuned recall` 并启动真实 integrate 任务；任务 `527cc084-c051-4e38-934a-da07bca96448` 成功结束，输出 3 个 ranking candidates、33 个 mappings，SSE trace 展示到 Retrieval/Matcher 阶段，结果区 Graph/Ranking/Mappings tab 可见
 
+### M6.1 Dataset 上传入库与库内任务范围
+- [ ] 新增 Dataset 产品概念：tenant 下可 list/create Dataset，Dataset 作为用户可选择的“库/数据集”，第一版不作为权限边界
+- [ ] 为现有表补 Dataset 归属：按 `source_system` 迁移/回填 `toy_lake`、`benchmark_join`、`benchmark_union`、`legacy_upload` 等系统 Dataset
+- [ ] 扩展上传入库：支持 CSV、Parquet、Excel `.xlsx`（每个非空 sheet 一张表）与 ZIP 批量上传（展开支持格式，返回 accepted/rejected/skipped）
+- [ ] 明确上传格式校验：第一行表头、至少 1 行 1 列、列名非空、重复列名拒绝、同 Dataset 重复内容拒绝
+- [ ] 上传表默认既可作为 query/source/target，也进入当前 Dataset 候选池；READY 后自动出现在任务下拉框
+- [ ] discover/integrate/match 请求携带 `dataset_id`，后端校验所选表属于当前 Dataset，并将 Retrieval candidate pool 限制在当前 Dataset
+- [ ] 前端 Workspace 新增 Dataset 面板：选择/新建 Dataset、拖拽/选择文件上传、展示 profiling 状态和上传 summary
+- [ ] 上传后轮询表状态，直到 accepted 表进入 READY/FAILED/REJECTED；第一版不做 profiling SSE 和精确上传百分比
+- [ ] 覆盖后端单元/集成测试：Dataset CRUD、Excel/ZIP 解析、坏表局部失败、去重、tenant/Dataset 隔离、Dataset-scoped 任务
+- [ ] 覆盖前端测试：DatasetPanel、新建 Dataset、上传 summary、状态轮询、Dataset 切换清空表选择、任务请求带 `dataset_id`
+
 ---
 
 ## 当前状态
 
-**阶段**：✅ M1 完成 → ✅ M2 工程验收完成（Week1/2/3）→ ✅ M3 本地集成完成 → ✅ M3.5 前端演示工作台完成 → ✅ M4 非 Docker 上线/运维固化完成 → ✅ M5.8 4090-safe Retrieval 调优收口 → 当前进入 M5.9/M6 前端到端 demo 稳定性验证
-**最后更新**：2026-05-12
+**阶段**：✅ M1 完成 → ✅ M2 工程验收完成（Week1/2/3）→ ✅ M3 本地集成完成 → ✅ M3.5 前端演示工作台完成 → ✅ M4 非 Docker 上线/运维固化完成 → ✅ M5.8/M5.9 4090-safe benchmark 与 demo 验证收口 → 当前进入 M6.1 Dataset 上传入库与库内任务范围
+**最后更新**：2026-05-16
 
 ### M1 完成摘要
 - 所有骨架代码实现完毕（24 个 Python 源文件）

@@ -5,6 +5,8 @@ tests/fixtures/matcher_bench/
 tests/fixtures/toy_lake/
 data/
 demo_data/
+.claude/
+.playwright-mcp/
 *.db
 *.pkl
 __pycache__/
