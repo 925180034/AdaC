@@ -23,7 +23,7 @@ class L3CandidateScore(BaseModel):
 
     candidate_idx: int = Field(ge=1)
     score: float = Field(ge=0.0, le=1.0)
-    reason: str = Field(max_length=60)
+    reason: str = Field(max_length=160)
 
 
 class L3BatchResult(BaseModel):

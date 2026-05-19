@@ -681,6 +681,8 @@ def test_l3_prompt_includes_required_json_shape() -> None:
     assert '"score"' in prompt
     assert '"reason"' in prompt
     assert "candidate_idx must match the numbered candidate" in prompt
+    assert "reason must be under 160 characters" in prompt
+    assert "reason must be under 60 characters" not in prompt
 
 
 def test_l3_batch_invalid_schema_raises() -> None:
@@ -691,6 +693,16 @@ def test_l3_batch_invalid_schema_raises() -> None:
     bad_json = '{"scores": [{"candidate_idx": 1, "score": 1.5, "reason": "x"}]}'
     with pytest.raises(Exception):  # score > 1.0 violates Field(le=1.0)
         L3BatchResult.model_validate_json(bad_json)
+
+
+def test_l3_batch_accepts_concise_but_useful_reason() -> None:
+    from adacascade.llm_schemas import L3BatchResult
+
+    result = L3BatchResult.model_validate_json(
+        '{"scores":[{"candidate_idx":1,"score":0.95,"reason":"High overlap on herd_id, livestock_program, animal_care_plan, breed_name"}]}'
+    )
+
+    assert result.scores[0].score == 0.95
 
 
 def test_l3_batch_uses_opt_in_cache(monkeypatch) -> None:

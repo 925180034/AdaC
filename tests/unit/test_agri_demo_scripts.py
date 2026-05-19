@@ -65,6 +65,10 @@ def test_agri_demo_generator_creates_expected_lake(tmp_path: Path) -> None:
         "plot_area_acres",
         "experience_years",
     ]
+    assert farmers["farmer_id"].str.startswith("PERSON-").all()
+    assert farm_workers["worker_id"].str.startswith("PERSON-").all()
+    assert farmers["full_name"].tolist() == farm_workers["name"].head(len(farmers)).tolist()
+    assert farmers["contact_phone"].tolist() == farm_workers["phone_number"].head(len(farmers)).tolist()
 
     readme = (output_dir / "README.md").read_text(encoding="utf-8")
     assert "Scenario A - Discover" in readme
@@ -74,6 +78,82 @@ def test_agri_demo_generator_creates_expected_lake(tmp_path: Path) -> None:
     assert "farmer_id ↔ worker_id" in readme
     assert "Scenario C - Integrate" in readme
     assert "livestock_herds" in readme
+
+
+def test_agri_demo_scenario_tables_share_demo_semantic_anchors(tmp_path: Path) -> None:
+    generator = _load_module("generate_agri_demo.py")
+
+    output_dir = tmp_path / "agri_lake"
+    generator.generate_all(output_dir)
+
+    discover_tables = {
+        "research/research_projects.csv": {"research_project_id", "research_program", "trial_network", "funding_program"},
+        "research/field_trials.csv": {"research_project_id", "research_program", "trial_network", "field_experiment"},
+        "research/experiment_results.csv": {"research_project_id", "trial_id", "field_experiment", "research_outcome"},
+        "finance/subsidies.csv": {"research_project_id", "research_program", "funding_program", "trial_network"},
+        "finance/budgets.csv": {"research_project_id", "research_program", "funding_program", "trial_network"},
+        "farm_land/farms.csv": {"research_project_id", "research_program", "trial_network", "adaptive_irrigation_research_key"},
+    }
+    for relative_path, expected_columns in discover_tables.items():
+        frame = pd.read_csv(output_dir / relative_path)
+        assert expected_columns.issubset(frame.columns)
+        joined_values = " ".join(frame.astype(str).to_numpy().ravel()).lower()
+        assert "adaptive irrigation research" in joined_values
+
+    livestock_tables = {
+        "livestock/livestock_herds.csv": {"herd_id", "animal_id", "livestock_program", "animal_care_plan", "herd_management_goal"},
+        "livestock/animal_records.csv": {"animal_id", "herd_id", "livestock_program", "animal_care_plan", "herd_management_goal"},
+        "livestock/veterinary_visits.csv": {"animal_id", "herd_id", "livestock_program", "animal_care_plan", "herd_management_goal"},
+        "livestock/feed_inventory.csv": {"animal_id", "herd_id", "livestock_program", "feed_program", "animal_care_plan"},
+        "livestock/milk_production.csv": {"animal_id", "herd_id", "livestock_program", "milk_quality_program", "animal_care_plan"},
+    }
+    for relative_path, expected_columns in livestock_tables.items():
+        frame = pd.read_csv(output_dir / relative_path)
+        assert expected_columns.issubset(frame.columns)
+        joined_values = " ".join(frame.astype(str).to_numpy().ravel()).lower()
+        assert "dairy herd health" in joined_values
+
+
+def test_agri_demo_discover_tables_share_column_name_anchor(tmp_path: Path) -> None:
+    generator = _load_module("generate_agri_demo.py")
+
+    output_dir = tmp_path / "agri_lake"
+    generator.generate_all(output_dir)
+
+    for relative_path in [
+        "research/research_projects.csv",
+        "research/field_trials.csv",
+        "research/experiment_results.csv",
+        "finance/subsidies.csv",
+        "finance/budgets.csv",
+        "farm_land/farms.csv",
+    ]:
+        frame = pd.read_csv(output_dir / relative_path)
+        assert "adaptive_irrigation_research_key" in frame.columns
+        assert "research_project_registry" in frame.columns
+
+
+def test_agri_demo_match_tables_contain_synonym_anchors(tmp_path: Path) -> None:
+    generator = _load_module("generate_agri_demo.py")
+
+    output_dir = tmp_path / "agri_lake"
+    generator.generate_all(output_dir)
+
+    farmers = pd.read_csv(output_dir / "personnel" / "farmers.csv")
+    farm_workers = pd.read_csv(output_dir / "personnel" / "farm_workers.csv")
+    farmers_text = " ".join(farmers.astype(str).to_numpy().ravel()).lower()
+    workers_text = " ".join(farm_workers.astype(str).to_numpy().ravel()).lower()
+
+    for anchor in [
+        "person identity",
+        "person name",
+        "person phone",
+        "person region",
+        "person farm area",
+        "person work experience",
+    ]:
+        assert anchor in farmers_text
+        assert anchor in workers_text
 
 
 def test_agri_demo_uploader_builds_dataset_upload_request(tmp_path: Path) -> None:

@@ -113,7 +113,7 @@ def _build_batch_prompt(
         "Return exactly this JSON shape with one item per candidate:\n"
         '{"scores":[{"candidate_idx":1,"score":0.0,"reason":"short reason"}]}\n'
         "candidate_idx must match the numbered candidate. "
-        "score must be between 0 and 1. reason must be under 60 characters.\n"
+        "score must be between 0 and 1. reason must be under 160 characters.\n"
         "Output JSON only."
     )
     return [

@@ -157,6 +157,23 @@ def test_ingest_upload_bundle_expands_excel_sheets(db: Session, tmp_path: Path, 
     assert len(accepted_ids(summary)) == 2
 
 
+def test_ingest_upload_bundle_records_dataset_id_on_table_rows(db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.DATA_DIR", str(tmp_path))
+
+    summary = ingest_upload_bundle(
+        files=[("people.csv", b"id,name\n1,Ada\n")],
+        tenant_id="tenant-a",
+        dataset_id="dataset-a",
+        uploaded_by="tester",
+        table_name_prefix=None,
+        db=db,
+    )
+
+    table_id = accepted_ids(summary)[0]
+    table = db.query(TableRegistry).filter_by(table_id=table_id).one()
+    assert table.dataset_id == "dataset-a"
+
+
 def test_ingest_upload_bundle_expands_zip_and_reports_skips(db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("adacascade.ingest.pipeline.settings.DATA_DIR", str(tmp_path))
     archive = zip_bytes(

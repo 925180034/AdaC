@@ -76,7 +76,7 @@ DOMAINS: dict[str, list[str]] = {
 }
 
 COLUMNS: dict[str, list[str]] = {
-    "farms": ["farm_id", "farm_name", "owner_name", "region_code", "farm_size_ha", "primary_crop", "soil_zone", "irrigation_type"],
+    "farms": ["farm_id", "farm_name", "region_code", "farm_size_ha", "primary_crop", "research_project_id", "research_program", "trial_network", "adaptive_irrigation_research_key", "research_project_registry"],
     "fields": ["field_id", "farm_id", "field_name", "area_ha", "soil_type", "slope_grade", "current_crop", "last_survey_date"],
     "soil_samples": ["sample_id", "field_id", "sample_date", "ph_level", "organic_matter_pct", "nitrogen_ppm", "phosphorus_ppm", "potassium_ppm", "moisture_pct"],
     "land_leases": ["lease_id", "farm_id", "lessor_name", "start_date", "end_date", "leased_area_ha", "annual_rent_usd", "contract_status"],
@@ -92,12 +92,12 @@ COLUMNS: dict[str, list[str]] = {
     "crop_diseases": ["disease_id", "crop_id", "disease_name", "symptom_summary", "severity_level", "first_detected_date", "affected_area_ha", "control_method"],
     "pesticide_applications": ["application_id", "field_id", "crop_id", "chemical_name", "application_date", "dosage_l_per_ha", "target_pest", "safety_interval_days"],
     "growth_monitoring": ["monitoring_id", "field_id", "crop_id", "observation_date", "plant_height_cm", "leaf_color_score", "canopy_cover_pct", "growth_stage", "stress_notes"],
-    "livestock_herds": ["herd_id", "farm_id", "herd_type", "breed_name", "animal_count", "housing_unit", "grazing_area_ha", "feed_program", "health_risk_level"],
-    "animal_records": ["animal_id", "herd_id", "tag_number", "species", "breed_name", "birth_date", "sex", "current_weight_kg", "health_status"],
-    "veterinary_visits": ["visit_id", "animal_id", "herd_id", "visit_date", "veterinarian_name", "diagnosis", "treatment_plan", "medicine_cost_usd"],
-    "feed_inventory": ["feed_batch_id", "herd_id", "feed_type", "supplier_id", "quantity_kg", "protein_pct", "storage_location", "expiry_date"],
+    "livestock_herds": ["herd_id", "animal_id", "livestock_program", "animal_care_plan", "herd_management_goal", "herd_type", "breed_name", "animal_count", "housing_unit", "grazing_area_ha", "feed_program", "health_risk_level"],
+    "animal_records": ["animal_id", "herd_id", "livestock_program", "animal_care_plan", "herd_management_goal", "tag_number", "species", "breed_name", "birth_date", "sex", "health_status"],
+    "veterinary_visits": ["visit_id", "animal_id", "herd_id", "livestock_program", "animal_care_plan", "herd_management_goal", "visit_date", "veterinarian_name", "diagnosis", "treatment_plan"],
+    "feed_inventory": ["feed_batch_id", "animal_id", "herd_id", "livestock_program", "feed_program", "animal_care_plan", "feed_type", "supplier_id", "quantity_kg", "protein_pct", "expiry_date"],
     "breeding_records": ["breeding_id", "animal_id", "herd_id", "breeding_date", "sire_tag", "pregnancy_status", "expected_birth_date", "breeding_method"],
-    "milk_production": ["milk_record_id", "herd_id", "collection_date", "liters_collected", "fat_pct", "protein_pct", "quality_grade", "cooling_tank_id"],
+    "milk_production": ["milk_record_id", "animal_id", "herd_id", "livestock_program", "milk_quality_program", "animal_care_plan", "collection_date", "liters_collected", "fat_pct", "protein_pct", "quality_grade"],
     "animal_health_events": ["health_event_id", "animal_id", "herd_id", "event_date", "event_type", "severity_level", "recovery_status", "notes"],
     "suppliers": ["supplier_id", "supplier_name", "supplier_type", "contact_person", "phone_number", "region_code", "reliability_score", "payment_terms"],
     "purchase_orders": ["purchase_order_id", "supplier_id", "order_date", "item_category", "item_description", "quantity", "unit_price_usd", "delivery_status"],
@@ -113,16 +113,16 @@ COLUMNS: dict[str, list[str]] = {
     "training_records": ["training_id", "worker_id", "course_name", "training_date", "certification_status", "trainer_name", "score_pct", "expiry_date"],
     "safety_incidents": ["incident_id", "worker_id", "farm_id", "incident_date", "incident_type", "severity_level", "days_lost", "corrective_action"],
     "equipment_maintenance": ["maintenance_id", "equipment_id", "technician_name", "maintenance_date", "service_type", "parts_replaced", "cost_usd", "next_service_date"],
-    "budgets": ["budget_id", "farm_id", "season_year", "budget_category", "planned_amount_usd", "approved_amount_usd", "spent_amount_usd", "approval_status"],
+    "budgets": ["budget_id", "farm_id", "research_project_id", "research_program", "funding_program", "trial_network", "adaptive_irrigation_research_key", "research_project_registry", "planned_amount_usd", "approved_amount_usd", "spent_amount_usd", "approval_status"],
     "expense_records": ["expense_id", "farm_id", "expense_date", "expense_category", "vendor_name", "amount_usd", "payment_method", "receipt_status"],
     "sales_transactions": ["sale_id", "farm_id", "crop_id", "buyer_name", "sale_date", "quantity_tons", "unit_price_usd", "payment_status"],
-    "subsidies": ["subsidy_id", "farm_id", "research_project_id", "program_name", "application_date", "approved_amount_usd", "disbursement_status", "compliance_status"],
+    "subsidies": ["subsidy_id", "farm_id", "research_project_id", "research_program", "funding_program", "trial_network", "adaptive_irrigation_research_key", "research_project_registry", "approved_amount_usd", "disbursement_status", "compliance_status"],
     "insurance_policies": ["policy_id", "farm_id", "insurer_name", "coverage_type", "coverage_amount_usd", "premium_usd", "start_date", "end_date"],
     "loan_records": ["loan_id", "farm_id", "lender_name", "loan_purpose", "principal_usd", "interest_rate_pct", "start_date", "repayment_status"],
     "audit_logs": ["audit_id", "farm_id", "audit_date", "auditor_name", "audit_area", "risk_rating", "finding_count", "resolution_status"],
-    "research_projects": ["research_project_id", "project_title", "lead_farm_id", "principal_investigator", "research_topic", "start_date", "end_date", "budget_id", "subsidy_program", "trial_crop"],
-    "field_trials": ["trial_id", "research_project_id", "field_id", "trial_crop", "treatment_group", "planting_date", "measurement_plan", "trial_status"],
-    "experiment_results": ["result_id", "research_project_id", "trial_id", "measurement_date", "yield_change_pct", "soil_health_score", "water_saving_pct", "result_summary"],
+    "research_projects": ["research_project_id", "project_title", "lead_farm_id", "principal_investigator", "research_program", "trial_network", "funding_program", "adaptive_irrigation_research_key", "research_project_registry", "subsidy_program", "trial_crop"],
+    "field_trials": ["trial_id", "research_project_id", "field_id", "research_program", "trial_network", "field_experiment", "adaptive_irrigation_research_key", "research_project_registry", "treatment_group", "measurement_plan", "trial_status"],
+    "experiment_results": ["result_id", "research_project_id", "trial_id", "field_experiment", "research_outcome", "adaptive_irrigation_research_key", "research_project_registry", "yield_change_pct", "soil_health_score", "water_saving_pct"],
     "extension_agents": ["agent_id", "agent_name", "region_code", "specialty_area", "phone_number", "assigned_farms", "visit_frequency", "program_affiliation"],
     "weather_stations": ["station_id", "farm_id", "station_name", "latitude", "longitude", "install_date", "rainfall_mm", "temperature_c", "wind_speed_kmh"],
     "soil_nutrient_reports": ["report_id", "sample_id", "field_id", "report_date", "nitrogen_ppm", "phosphorus_ppm", "potassium_ppm", "recommendation", "lab_name"],
@@ -144,16 +144,20 @@ def _money(base: int, index: int) -> int:
 
 def _value(table: str, column: str, index: int) -> Any:
     row = index + 1
+    if column in {"farmer_id", "worker_id"}:
+        return f"PERSON-{row:03d} person identity"
     if column.endswith("_id"):
         prefix = "".join(part[0] for part in column.removesuffix("_id").split("_"))
         return f"{prefix.upper()}-{row:03d}"
-    if column in {"farmer_id", "worker_id"}:
-        return f"{column.split('_')[0].upper()}-{row:03d}"
-    if column in {"full_name", "name", "owner_name", "operator_name", "advisor_name", "veterinarian_name", "inspector_name", "driver_name", "technician_name", "auditor_name", "agent_name", "principal_investigator", "trainer_name", "supervisor_name", "assigned_operator", "manager_name", "contact_person"}:
+    if column in {"full_name", "name"}:
+        return f"{NAMES[index % len(NAMES)]} person name"
+    if column in {"owner_name", "operator_name", "advisor_name", "veterinarian_name", "inspector_name", "driver_name", "technician_name", "auditor_name", "agent_name", "principal_investigator", "trainer_name", "supervisor_name", "assigned_operator", "manager_name", "contact_person"}:
         return NAMES[index % len(NAMES)]
     if column in {"contact_phone", "phone_number"}:
-        return f"+1-555-{2300 + index:04d}"
-    if column in {"region_code", "district_code", "recommended_region", "route_code"}:
+        return f"+1-555-{2300 + index:04d} person phone"
+    if column in {"region_code", "district_code"}:
+        return f"{REGIONS[index % len(REGIONS)]} person region"
+    if column in {"recommended_region", "route_code"}:
         return REGIONS[index % len(REGIONS)]
     if column == "farm_name":
         return f"{FARMS[index % len(FARMS)]} Farm {row}"
@@ -183,13 +187,17 @@ def _value(table: str, column: str, index: int) -> Any:
         return 2022 + (index % 5)
     if column.endswith("_pct") or column in {"ph_level", "interest_rate_pct", "fat_pct", "protein_pct", "moisture_pct", "organic_matter_pct", "distinct_ratio", "defect_rate_pct", "canopy_cover_pct", "yield_variance_pct", "water_saving_pct", "yield_change_pct"}:
         return round(4.5 + (index * 1.7) % 72, 2)
-    if column.endswith("_ha") or column in {"farm_size_ha", "plot_area_acres", "area_ha", "leased_area_ha", "coverage_area_ha", "planted_area_ha", "harvested_area_ha", "affected_area_ha", "grazing_area_ha"}:
+    if column in {"farm_size_ha", "plot_area_acres"}:
+        return f"{round(3.5 + index * 2.4, 2)} person farm area"
+    if column.endswith("_ha") or column in {"area_ha", "leased_area_ha", "coverage_area_ha", "planted_area_ha", "harvested_area_ha", "affected_area_ha", "grazing_area_ha"}:
         return round(3.5 + index * 2.4, 2)
     if column.endswith("_usd") or column in {"planned_amount_usd", "approved_amount_usd", "spent_amount_usd", "amount_usd", "unit_price_usd", "coverage_amount_usd", "premium_usd", "principal_usd", "annual_rent_usd", "medicine_cost_usd", "cost_usd"}:
         return _money(1200, index)
     if column.endswith("_kg") or column.endswith("_tons") or column.endswith("_liters") or column.endswith("_lpm") or column.endswith("_mm") or column.endswith("_ppm") or column.endswith("_cm") or column.endswith("_kmh") or column.endswith("_c"):
         return round(10 + index * 3.25, 2)
-    if column in {"row_count", "animal_count", "quantity", "assigned_farms", "finding_count", "days_lost", "door_open_minutes", "safety_interval_days", "growth_duration_days", "maturity_days", "engine_hours", "hours_worked", "years_of_experience", "experience_years"}:
+    if column in {"years_of_experience", "experience_years"}:
+        return f"{1 + (index * 3) % 35} person work experience"
+    if column in {"row_count", "animal_count", "quantity", "assigned_farms", "finding_count", "days_lost", "door_open_minutes", "safety_interval_days", "growth_duration_days", "maturity_days", "engine_hours", "hours_worked"}:
         return 1 + (index * 3) % 35
     if column in {"status", "contract_status", "maintenance_status", "signal_status", "delivery_status", "shipment_status", "approval_status", "certification_status", "payment_status", "disbursement_status", "compliance_status", "repayment_status", "resolution_status", "health_status", "recovery_status", "trial_status", "alarm_status", "pregnancy_status", "receipt_status", "current_status", "arrival_status"}:
         return ["active", "pending", "complete", "review", "stable"][index % 5]
@@ -198,7 +206,11 @@ def _value(table: str, column: str, index: int) -> Any:
     if column in {"severity_level", "health_risk_level", "water_need_level", "risk_rating"}:
         return ["low", "medium", "high"][index % 3]
     if column == "project_title":
-        return ["Drought tolerant wheat trial", "Smart irrigation subsidy study", "Soil carbon field experiment", "Corn disease monitoring project", "Precision fertilizer response trial"][index % 5]
+        return ["Adaptive irrigation research trial", "Adaptive irrigation research subsidy", "Adaptive irrigation research soil study", "Adaptive irrigation research disease project", "Adaptive irrigation research fertilizer trial"][index % 5]
+    if column in {"research_program", "trial_network", "funding_program", "field_experiment", "research_outcome", "demo_farm_role", "adaptive_irrigation_research_key", "research_project_registry"}:
+        return f"adaptive irrigation research {column.replace('_', ' ')} {row}"
+    if column in {"livestock_program", "animal_care_plan", "herd_management_goal", "milk_quality_program"}:
+        return f"dairy herd health {column.replace('_', ' ')} {row}"
     if column in {"research_topic", "program_name", "subsidy_program", "specialty_area", "audit_area", "course_name", "task_type", "service_type", "coverage_type", "loan_purpose", "budget_category", "expense_category", "item_category", "supplier_type", "storage_type", "system_type", "sensor_type", "equipment_type", "event_type", "feed_type", "herd_type", "breed_name", "species", "breeding_method", "disease_name", "chemical_name", "target_pest", "growth_stage", "treatment_group", "measurement_plan", "recommendation", "rotation_reason", "control_method", "diagnosis", "treatment_plan", "symptom_summary", "stress_notes", "notes", "result_summary", "parts_replaced", "corrective_action", "item_description", "payment_terms", "market_category", "storage_method", "optimal_soil", "soil_type", "soil_zone", "water_source", "irrigation_type", "housing_unit", "feed_program", "cooling_tank_id", "vehicle_plate", "carrier_name", "buyer_name", "vendor_name", "insurer_name", "lender_name", "lab_name", "model_name"}:
         return f"{column.replace('_', ' ')} {row}"
     if column in {"latitude"}:
