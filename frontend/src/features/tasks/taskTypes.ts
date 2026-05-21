@@ -31,6 +31,8 @@ export type ColumnMapping = {
   mapping_id: string
   src_column_id: string
   tgt_column_id: string
+  src_column_name?: string | null
+  tgt_column_name?: string | null
   scenario: MatchScenario
   confidence: number
   is_matched: boolean

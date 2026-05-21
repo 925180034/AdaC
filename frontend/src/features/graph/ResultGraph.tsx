@@ -16,10 +16,10 @@ type ResultGraphProps = {
 
 type NodeTone = 'cyan' | 'green' | 'violet'
 
-const NODE_WIDTH = 172
-const NODE_HEIGHT = 64
-const COLUMN_GAP = 250
-const ROW_GAP = 104
+const NODE_WIDTH = 210
+const NODE_HEIGHT = 72
+const COLUMN_GAP = 290
+const ROW_GAP = 112
 
 function getNodeTone(kind: GraphNodeKind): NodeTone {
   if (kind === 'query_table' || kind === 'source_table') return 'cyan'
@@ -43,7 +43,8 @@ function getNodeColumn(kind: GraphNodeKind): number {
 }
 
 function getNodeSubtitle(node: GraphNode): string {
-  return node.kind.replace(/_/g, ' ')
+  const kind = node.kind.replace(/_/g, ' ')
+  return node.meta ? `${kind} · ${node.meta}` : kind
 }
 
 function toReactFlowNodes(nodes: GraphNode[]): Node[] {
@@ -67,8 +68,8 @@ function toReactFlowNodes(nodes: GraphNode[]): Node[] {
       data: {
         label: (
           <div className="graph-node__content">
-            <span className="graph-node__label">{graphNode.label}</span>
-            <span className="graph-node__meta">{getNodeSubtitle(graphNode)}</span>
+            <span className="graph-node__label" title={graphNode.label}>{graphNode.label}</span>
+            <span className="graph-node__meta" title={getNodeSubtitle(graphNode)}>{getNodeSubtitle(graphNode)}</span>
           </div>
         ),
       },
@@ -117,7 +118,31 @@ export function ResultGraph({ graph }: ResultGraphProps) {
           <p className="panel-kicker">Graph</p>
           <h3 id="result-graph-title">Result graph</h3>
         </div>
-        <span>{nodes.length} nodes · {edges.length} edges</span>
+        <div className="graph-canvas__header-meta">
+          <span>{nodes.length} nodes · {edges.length} edges</span>
+          <div className="graph-legend" aria-label="Graph legend">
+            <span className="graph-legend__item">
+              <i className="graph-legend__line graph-legend__line--discovery" aria-hidden="true" />
+              Table discovery
+            </span>
+            <span className="graph-legend__item">
+              <i className="graph-legend__line graph-legend__line--mapping" aria-hidden="true" />
+              Column mapping
+            </span>
+            <span className="graph-legend__item">
+              <i className="graph-legend__dot graph-legend__dot--query" aria-hidden="true" />
+              Query/source table
+            </span>
+            <span className="graph-legend__item">
+              <i className="graph-legend__dot graph-legend__dot--candidate" aria-hidden="true" />
+              Candidate/target table
+            </span>
+            <span className="graph-legend__item">
+              <i className="graph-legend__dot graph-legend__dot--column" aria-hidden="true" />
+              Column
+            </span>
+          </div>
+        </div>
       </div>
 
       {isEmpty ? (

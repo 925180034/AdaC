@@ -15,6 +15,7 @@ from adacascade.api.middleware import get_tenant_id
 from adacascade.db.models import (
     AgentStep,
     ColumnMapping,
+    ColumnMetadata,
     DiscoveryResult,
     IntegrationTask,
 )
@@ -92,6 +93,17 @@ async def get_task(
         .all()
     )
     mappings = db.query(ColumnMapping).filter_by(task_id=task_id).all()
+    column_ids = {
+        column_id
+        for mapping in mappings
+        for column_id in (mapping.src_column_id, mapping.tgt_column_id)
+    }
+    columns_by_id = {
+        column.column_id: column
+        for column in db.query(ColumnMetadata)
+        .filter(ColumnMetadata.column_id.in_(column_ids))
+        .all()
+    }
     return {
         "task_id": task.task_id,
         "tenant_id": task.tenant_id,
@@ -134,6 +146,12 @@ async def get_task(
                 "mapping_id": mapping.mapping_id,
                 "src_column_id": mapping.src_column_id,
                 "tgt_column_id": mapping.tgt_column_id,
+                "src_column_name": columns_by_id.get(mapping.src_column_id).col_name
+                if mapping.src_column_id in columns_by_id
+                else mapping.src_column_id,
+                "tgt_column_name": columns_by_id.get(mapping.tgt_column_id).col_name
+                if mapping.tgt_column_id in columns_by_id
+                else mapping.tgt_column_id,
                 "scenario": mapping.scenario,
                 "confidence": mapping.confidence,
                 "is_matched": bool(mapping.is_matched),

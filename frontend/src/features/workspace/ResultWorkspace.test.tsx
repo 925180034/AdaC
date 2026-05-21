@@ -1,8 +1,29 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import type { TaskDetail } from '../tasks/taskTypes'
+import type { TableSummary, TaskDetail } from '../tasks/taskTypes'
 import { ResultWorkspace } from './ResultWorkspace'
+
+const tables: TableSummary[] = [
+  {
+    table_id: 'query_customers',
+    tenant_id: 'demo',
+    dataset_id: 'dataset-demo',
+    table_name: 'research_projects',
+    row_count: 12,
+    col_count: 8,
+    status: 'READY',
+  },
+  {
+    table_id: 'candidate_orders',
+    tenant_id: 'demo',
+    dataset_id: 'dataset-demo',
+    table_name: 'subsidies',
+    row_count: 14,
+    col_count: 9,
+    status: 'READY',
+  },
+]
 
 const task: TaskDetail = {
   task_id: 'task-graph-1',
@@ -27,8 +48,10 @@ const task: TaskDetail = {
   mappings: [
     {
       mapping_id: 'mapping-1',
-      src_column_id: 'customer_name',
-      tgt_column_id: 'buyer_name',
+      src_column_id: 'col_4f8a2b',
+      tgt_column_id: 'col_9c1d7e',
+      src_column_name: 'customer_name',
+      tgt_column_name: 'buyer_name',
       scenario: 'SMD',
       confidence: 0.87,
       is_matched: true,
@@ -57,15 +80,17 @@ describe('ResultWorkspace', () => {
     expect(screen.getByRole('region', { name: 'Result dashboard placeholder' })).toHaveTextContent('No active task')
   })
 
-  it('renders task graph canvas from task result data', () => {
-    render(<ResultWorkspace task={task} />)
+  it('renders task graph canvas with readable table labels and legend', () => {
+    render(<ResultWorkspace task={task} tables={tables} />)
 
     const graph = screen.getByRole('region', { name: 'Result graph' })
 
     expect(graph).toBeInTheDocument()
     expect(graph).toHaveClass('graph-canvas--large')
-    expect(graph).toHaveTextContent('query_customers')
-    expect(graph).toHaveTextContent('candidate_orders')
+    expect(graph).toHaveTextContent('research_projects')
+    expect(graph).toHaveTextContent('subsidies')
+    expect(graph).toHaveTextContent('Table discovery')
+    expect(graph).toHaveTextContent('Column mapping')
     expect(screen.queryByText('React Flow canvas reserved')).not.toBeInTheDocument()
   })
 
@@ -97,6 +122,10 @@ describe('ResultWorkspace', () => {
     await user.click(screen.getByRole('tab', { name: 'Mappings' }))
 
     expect(screen.getByText('Scenario SMD')).toBeInTheDocument()
+    expect(screen.getByText('customer_name')).toBeInTheDocument()
+    expect(screen.getByText('buyer_name')).toBeInTheDocument()
+    expect(screen.queryByText('col_4f8a2b')).not.toBeInTheDocument()
+    expect(screen.queryByText('col_9c1d7e')).not.toBeInTheDocument()
     expect(screen.getByText('87%')).toBeInTheDocument()
   })
 
@@ -109,21 +138,54 @@ describe('ResultWorkspace', () => {
     expect(screen.getByText('Match mode compares the selected source and target tables directly, so no discovery ranking is produced.')).toBeInTheDocument()
   })
 
+  it('keeps long mapping labels inside cards and exposes full labels', async () => {
+    const user = userEvent.setup()
+    const longSource = 'farm_irrigation_sensor_calibration_measurement_timestamp'
+    const longTarget = 'worker_assignment_field_operation_observation_timestamp'
+    render(
+      <ResultWorkspace
+        task={{
+          ...task,
+          mappings: [
+            {
+              ...task.mappings[0],
+              src_column_name: longSource,
+              tgt_column_name: longTarget,
+            },
+          ],
+        }}
+        tables={tables}
+      />,
+    )
+
+    const graph = screen.getByRole('region', { name: 'Result graph' })
+    expect(within(graph).getByTitle(longSource)).toHaveClass('graph-node__label')
+    expect(within(graph).getByTitle(longTarget)).toHaveClass('graph-node__label')
+
+    await user.click(screen.getByRole('tab', { name: 'Mappings' }))
+    const mappings = screen.getByRole('tabpanel', { name: 'Mappings' })
+    expect(within(mappings).getByTitle(longSource)).toHaveClass('mapping-card__column')
+    expect(within(mappings).getByTitle(longTarget)).toHaveClass('mapping-card__column')
+  })
+
   it('switches between graph, ranking, mappings, and raw JSON result views', async () => {
     const user = userEvent.setup()
-    render(<ResultWorkspace task={task} />)
+    render(<ResultWorkspace task={task} tables={tables} />)
 
     expect(screen.getByRole('region', { name: 'Result graph' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Ranking results' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'Ranking' }))
     const ranking = screen.getByRole('tabpanel', { name: 'Ranking' })
-    expect(within(ranking).getByText('candidate_orders')).toBeInTheDocument()
+    expect(within(ranking).getByText('subsidies')).toBeInTheDocument()
+    expect(within(ranking).queryByText('candidate_orders')).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Result graph' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'Mappings' }))
     const mappings = screen.getByRole('tabpanel', { name: 'Mappings' })
     expect(within(mappings).getByText('customer_name')).toBeInTheDocument()
+    expect(within(mappings).getByText('buyer_name')).toBeInTheDocument()
+    expect(within(mappings).queryByText('col_4f8a2b')).not.toBeInTheDocument()
     expect(screen.queryByRole('tabpanel', { name: 'Ranking' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'Raw JSON' }))

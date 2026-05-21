@@ -136,3 +136,5 @@ def test_integrate_and_task_status(client: TestClient) -> None:
     assert isinstance(mappings, list)
     assert ranking[0]["candidate_table"] == "toy_target"
     assert mappings[0]["src_column_id"] == "src_name"
+    assert mappings[0]["src_column_name"] == "name"
+    assert mappings[0]["tgt_column_name"] == "name"

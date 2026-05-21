@@ -5,12 +5,13 @@ import { ScoreBar } from '../../components/ScoreBar'
 import { StatusBadge } from '../../components/StatusBadge'
 import { buildTaskGraph } from '../graph/graphModel'
 import { ResultGraph } from '../graph/ResultGraph'
-import type { TaskDetail } from '../tasks/taskTypes'
+import type { TableSummary, TaskDetail } from '../tasks/taskTypes'
 import { getWorkspaceCopy } from './i18n'
 import type { Language } from './uiPreferences'
 
 type ResultWorkspaceProps = {
   task: TaskDetail | null
+  tables?: TableSummary[]
   language?: Language
 }
 
@@ -43,6 +44,14 @@ function rankingEmptyMessage(task: TaskDetail, copy: ReturnType<typeof getWorksp
   return task.task_type === 'MATCH_ONLY' ? copy.matchNoRanking : copy.noRanking
 }
 
+function tableNameLookup(tables: TableSummary[]): Map<string, string> {
+  return new Map(tables.map((table) => [table.table_id, table.table_name]))
+}
+
+function columnLabel(columnName: string | null | undefined, columnId: string): string {
+  return columnName || columnId
+}
+
 function runtimeSeconds(task: TaskDetail): number | null {
   const submitted = Date.parse(task.submitted_at)
   const finished = task.finished_at ? Date.parse(task.finished_at) : Date.now()
@@ -50,9 +59,10 @@ function runtimeSeconds(task: TaskDetail): number | null {
   return Math.max(0, Math.round((finished - submitted) / 1000))
 }
 
-export function ResultWorkspace({ task, language = 'en' }: ResultWorkspaceProps) {
+export function ResultWorkspace({ task, tables = [], language = 'en' }: ResultWorkspaceProps) {
   const [activeView, setActiveView] = useState<ResultView>('graph')
   const copy = getWorkspaceCopy(language).results
+  const tableNames = tableNameLookup(tables)
 
   if (!task) {
     return (
@@ -73,7 +83,7 @@ export function ResultWorkspace({ task, language = 'en' }: ResultWorkspaceProps)
     )
   }
 
-  const graph = buildTaskGraph(task)
+  const graph = buildTaskGraph(task, tables)
 
   return (
     <main className="panel result-workspace" aria-labelledby="results-title">
@@ -152,7 +162,7 @@ export function ResultWorkspace({ task, language = 'en' }: ResultWorkspaceProps)
               <article className="ranking-row" key={`${row.rank}-${row.candidate_table}`}>
                 <div className="ranking-row__rank">#{row.rank}</div>
                 <div className="ranking-row__body">
-                  <h4>{row.candidate_table}</h4>
+                  <h4>{tableNames.get(row.candidate_table) ?? row.candidate_table}</h4>
                   <p>{formatLayerScores(row.layer_scores, copy.noLayerScores)}</p>
                 </div>
                 <ScoreBar value={row.score} label={copy.candidateScore(row.rank)} tone="green" />
@@ -172,9 +182,13 @@ export function ResultWorkspace({ task, language = 'en' }: ResultWorkspaceProps)
             {task.mappings.map((mapping) => (
               <article className="mapping-card" key={mapping.mapping_id}>
                 <div className="mapping-card__pair">
-                  <span>{mapping.src_column_id}</span>
-                  <span aria-hidden="true">→</span>
-                  <span>{mapping.tgt_column_id}</span>
+                  <span className="mapping-card__column" title={columnLabel(mapping.src_column_name, mapping.src_column_id)}>
+                    {columnLabel(mapping.src_column_name, mapping.src_column_id)}
+                  </span>
+                  <span className="mapping-card__arrow" aria-hidden="true">→</span>
+                  <span className="mapping-card__column" title={columnLabel(mapping.tgt_column_name, mapping.tgt_column_id)}>
+                    {columnLabel(mapping.tgt_column_name, mapping.tgt_column_id)}
+                  </span>
                 </div>
                 <div className="mapping-card__meta">
                   <StatusBadge status={mapping.is_matched ? 'success' : 'failed'} label={mapping.is_matched ? copy.matched : copy.rejected} size="sm" />

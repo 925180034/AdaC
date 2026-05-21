@@ -16,6 +16,7 @@ export type GraphNode = {
   id: string
   kind: GraphNodeKind
   label: string
+  meta?: string
   table_id?: string
   column_id?: string
   status?: GraphNodeStatus

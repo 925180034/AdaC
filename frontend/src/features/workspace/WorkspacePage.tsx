@@ -406,7 +406,7 @@ export function WorkspacePage() {
             language={language}
           />
         </div>
-        <ResultWorkspace task={taskQuery.data ?? null} language={language} />
+        <ResultWorkspace task={taskQuery.data ?? null} tables={tables} language={language} />
         <AgentTracePanel timeline={timeline} events={events} streamError={streamError} language={language} />
       </div>
     </div>
