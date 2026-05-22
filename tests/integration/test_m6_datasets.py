@@ -134,6 +134,14 @@ def test_create_and_list_datasets() -> None:
         assert items["dataset-a"]["failed_count"] == 1
 
 
+def test_dataset_listing_prioritizes_ready_datasets() -> None:
+    with next(client_fixture()) as client:
+        listed = client.get("/datasets", headers=TENANT_A_HEADERS)
+        assert listed.status_code == 200
+        dataset_ids = [item["dataset_id"] for item in listed.json()["items"]]
+        assert dataset_ids.index("dataset-a") < dataset_ids.index("system-a")
+
+
 def test_tables_can_be_filtered_by_dataset() -> None:
     with next(client_fixture()) as client:
         scoped = client.get("/tables?dataset_id=dataset-a", headers=TENANT_A_HEADERS)

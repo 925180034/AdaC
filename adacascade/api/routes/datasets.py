@@ -86,7 +86,15 @@ async def list_datasets(request: Request, db: Session = Depends(get_db)) -> dict
         .all()
     )
     counts = _table_counts(db, tenant_id)
-    return {"items": [_dataset_to_dict(dataset, counts) for dataset in datasets]}
+    items = [_dataset_to_dict(dataset, counts) for dataset in datasets]
+    items.sort(
+        key=lambda item: (
+            item["ready_count"] <= 0,
+            -item["ready_count"],
+            item["dataset_name"].lower(),
+        )
+    )
+    return {"items": items}
 
 
 @router.post("", status_code=201)

@@ -48,8 +48,7 @@ def _target_tables(
     )
     if source_system:
         query = query.filter(TableRegistry.source_system == source_system)
-    if refresh_ready:
-        query = query.filter(TableRegistry.source_uri.like("%.parquet"))
+    query = query.filter(TableRegistry.source_uri.like("%.parquet"))
     query = query.order_by(TableRegistry.table_name)
     if limit is not None:
         query = query.limit(limit)

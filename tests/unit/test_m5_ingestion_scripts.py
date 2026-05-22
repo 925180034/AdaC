@@ -189,13 +189,17 @@ def test_profile_ingested_refresh_ready_skips_schema_only_tables(
 
 
 
-def test_profile_ingested_retry_failed_resets_failed_tables(
+def test_profile_ingested_retry_failed_resets_failed_parquet_tables(
     monkeypatch, tmp_path: Path
 ) -> None:
     from scripts import profile_ingested
 
     db = _session(tmp_path)
     db.add(_table("failed-table", status="FAILED"))
+    db.add(_table("failed-schema-table", status="FAILED", source_system="mimic_omop"))
+    db.query(TableRegistry).filter_by(table_id="failed-schema-table").update(
+        {"source_uri": str(tmp_path / "schema.json")}
+    )
     db.commit()
     processed: list[str] = []
 
@@ -222,6 +226,10 @@ def test_profile_ingested_retry_failed_resets_failed_tables(
     assert (
         db.query(TableRegistry).filter_by(table_id="failed-table").one().status
         == "READY"
+    )
+    assert (
+        db.query(TableRegistry).filter_by(table_id="failed-schema-table").one().status
+        == "FAILED"
     )
 
 
