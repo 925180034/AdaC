@@ -434,6 +434,81 @@ async def test_matcher_run_aggregates_llm_verification_metrics_across_targets(
 
 
 @pytest.mark.anyio
+async def test_matcher_emits_one_ordered_lifecycle_for_multiple_targets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from adacascade.agents import matcher
+    from adacascade.llm_schemas import MatchResult
+
+    events: list[dict[str, object]] = []
+
+    async def fake_emit_task_event(_task_id: str, payload: dict[str, object]) -> None:
+        events.append(payload)
+
+    async def fake_verify_pairs_async(
+        pairs: list[dict[str, object]], *_args: object, **_kwargs: object
+    ) -> list[dict[str, object]]:
+        return [
+            {
+                **pair,
+                "llm_result": MatchResult(reasoning="same", score=0.9, is_equivalent=True),
+            }
+            for pair in pairs
+        ]
+
+    def fake_filter_cpi(_source_cols, _target_cols, _scenario, theta_cand=None):
+        return [
+            {"src_idx": 0, "tgt_idx": 0, "src_col_id": "src", "tgt_col_id": "tgt", "m_score": 0.9}
+        ]
+
+    monkeypatch.setattr(matcher, "emit_task_event", fake_emit_task_event)
+    monkeypatch.setattr(matcher, "filter_cpi", fake_filter_cpi)
+    monkeypatch.setattr(matcher, "truncate_per_source", lambda pairs: pairs)
+    monkeypatch.setattr(matcher.llm_verify, "verify_pairs_async", fake_verify_pairs_async)
+    monkeypatch.setattr(matcher, "save_pkl", lambda *_args: "/tmp/sim.pkl")
+
+    await matcher.run(
+        {
+            "task_id": "task-multi-target",
+            "tenant_id": "default",
+            "task_type": "INTEGRATE",
+            "query_profile": {
+                "table_id": "source",
+                "columns": [_numeric_col("name", "src")],
+            },
+            "candidate_profiles": {
+                "target_1": {
+                    "table_id": "target_1",
+                    "columns": [_numeric_col("name", "tgt")],
+                },
+                "target_2": {
+                    "table_id": "target_2",
+                    "columns": [_numeric_col("name", "tgt")],
+                },
+            },
+            "ranking": [{"table_id": "target_1"}, {"table_id": "target_2"}],
+            "plan": {},
+            "status": "RUNNING",
+            "degraded": False,
+        }
+    )
+
+    lifecycle = [
+        (event["layer"], event["type"])
+        for event in events
+        if event.get("agent") == "Matcher"
+    ]
+    assert lifecycle == [
+        ("filtering", "agent_started"),
+        ("filtering", "agent_completed"),
+        ("LLM", "agent_started"),
+        ("LLM", "agent_completed"),
+        ("decision", "agent_started"),
+        ("decision", "agent_completed"),
+    ]
+
+
+@pytest.mark.anyio
 async def test_matcher_zero_processed_targets_llm_completion_includes_metrics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

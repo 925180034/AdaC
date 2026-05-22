@@ -141,6 +141,9 @@ export function translateTimeline(state: TimelineState, language: Language): Tim
   )
 }
 
+const terminalStatuses = new Set<TimelineStatus>(['success', 'degraded', 'failed'])
+const agentOrder = new Map<AgentId, number>(agentDefinitions.map((agent, index) => [agent.id, index]))
+
 function getEventAgentId(event: TaskEvent): AgentId | null {
   if (!event.agent || !isKnownAgentId(event.agent)) return null
   return event.agent
@@ -151,8 +154,20 @@ function getEventStepId(node: TimelineNode, event: TaskEvent): string | null {
   return node.steps.some((step) => step.id === stepId) ? stepId : null
 }
 
+function eventTime(event: TaskEvent): number {
+  const time = Date.parse(event.timestamp)
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time
+}
+
+function stepTime(step: TimelineStep, key: 'started_at' | 'finished_at'): number {
+  const timestamp = step[key]
+  if (!timestamp) return Number.NEGATIVE_INFINITY
+  const time = Date.parse(timestamp)
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time
+}
+
 function getTimelineStatus(event: TaskEvent, currentStatus: TimelineStatus): TimelineStatus {
-  if (event.type === 'agent_started') return 'running'
+  if (event.type === 'agent_started') return terminalStatuses.has(currentStatus) ? currentStatus : 'running'
   if (event.type === 'agent_degraded') return 'degraded'
   if (event.type === 'agent_failed') return 'failed'
   if (event.type === 'agent_completed') return 'success'
@@ -160,20 +175,25 @@ function getTimelineStatus(event: TaskEvent, currentStatus: TimelineStatus): Tim
 }
 
 function getStepStartedAt(event: TaskEvent, step: TimelineStep): string | undefined {
-  return event.type === 'agent_started' ? event.timestamp : step.started_at
+  if (event.type !== 'agent_started') return step.started_at
+  if (step.finished_at && eventTime(event) <= stepTime(step, 'finished_at')) return step.started_at
+  if (step.started_at && eventTime(event) < stepTime(step, 'started_at')) return step.started_at
+  return event.timestamp
 }
 
 function getStepFinishedAt(event: TaskEvent, step: TimelineStep): string | undefined {
-  return event.type === 'agent_completed' || event.type === 'agent_degraded' || event.type === 'agent_failed'
-    ? event.timestamp
-    : step.finished_at
+  const isTerminalEvent = event.type === 'agent_completed' || event.type === 'agent_degraded' || event.type === 'agent_failed'
+  if (!isTerminalEvent) return step.finished_at
+  if (step.finished_at && eventTime(event) < stepTime(step, 'finished_at')) return step.finished_at
+  return event.timestamp
 }
 
 function deriveAgentStatus(steps: TimelineStep[]): TimelineStatus {
   if (steps.some((step) => step.status === 'failed')) return 'failed'
   if (steps.some((step) => step.status === 'degraded')) return 'degraded'
   if (steps.some((step) => step.status === 'running')) return 'running'
-  if (steps.some((step) => step.status === 'success')) return 'success'
+  if (terminalStatuses.has(steps.at(-1)?.status ?? 'pending')) return 'success'
+  if (steps.some((step) => step.status === 'success')) return 'running'
   return 'pending'
 }
 
@@ -182,9 +202,82 @@ function getCurrentStepId(steps: TimelineStep[], fallbackStepId: string): string
   if (running) return running.id
 
   const latestTerminal = [...steps]
-    .reverse()
+    .sort((left, right) => stepTime(right, 'finished_at') - stepTime(left, 'finished_at'))
     .find((step) => step.status === 'success' || step.status === 'degraded' || step.status === 'failed')
   return latestTerminal?.id ?? fallbackStepId
+}
+
+function shouldIgnoreOutOfOrderEvent(state: TimelineState, event: TaskEvent, agentId: AgentId): boolean {
+  if (event.type !== 'agent_started') return false
+
+  const currentAgentOrder = agentOrder.get(agentId) ?? Number.MAX_SAFE_INTEGER
+  const laterTerminalStepExists = state[agentId].steps.some(
+    (timelineStep) => terminalStatuses.has(timelineStep.status) && stepTime(timelineStep, 'finished_at') >= eventTime(event),
+  )
+  if (laterTerminalStepExists) return true
+
+  return agentDefinitions.some((definition) => {
+    const definitionOrder = agentOrder.get(definition.id) ?? Number.MAX_SAFE_INTEGER
+    if (definitionOrder >= currentAgentOrder) return false
+    return state[definition.id].steps.some(
+      (timelineStep) => timelineStep.status === 'running' && stepTime(timelineStep, 'started_at') >= eventTime(event),
+    )
+  })
+}
+
+const eventTypeOrder = new Map<TaskEvent['type'], number>([
+  ['task_created', 0],
+  ['agent_started', 1],
+  ['agent_degraded', 2],
+  ['agent_failed', 2],
+  ['agent_completed', 3],
+  ['task_completed', 4],
+  ['heartbeat', 5],
+])
+const stepOrder = new Map<string, number>([
+  ['overview', 0],
+  ['L1', 0],
+  ['filtering', 0],
+  ['L2', 1],
+  ['LLM', 1],
+  ['L3', 2],
+  ['decision', 2],
+])
+
+function eventOrder(event: TaskEvent): number {
+  return eventTypeOrder.get(event.type) ?? Number.MAX_SAFE_INTEGER
+}
+
+function eventAgentOrder(event: TaskEvent): number {
+  if (!event.agent || !isKnownAgentId(event.agent)) return event.type === 'task_created' ? -1 : Number.MAX_SAFE_INTEGER
+  return agentOrder.get(event.agent) ?? Number.MAX_SAFE_INTEGER
+}
+
+function eventStepOrder(event: TaskEvent): number {
+  if (!event.layer && (event.agent === 'Retrieval' || event.agent === 'Matcher')) return Number.MAX_SAFE_INTEGER - 1
+  return stepOrder.get(event.layer ?? 'overview') ?? Number.MAX_SAFE_INTEGER
+}
+
+export function sortTaskEvents(events: TaskEvent[]): TaskEvent[] {
+  return [...events].sort((left, right) => {
+    const byTime = eventTime(left) - eventTime(right)
+    if (byTime !== 0 && Math.abs(byTime) > 1000) return byTime
+
+    const byAgent = eventAgentOrder(left) - eventAgentOrder(right)
+    if (byAgent !== 0) return byAgent
+
+    const byStep = eventStepOrder(left) - eventStepOrder(right)
+    if (byStep !== 0) return byStep
+
+    const byType = eventOrder(left) - eventOrder(right)
+    if (byType !== 0) return byType
+
+    return byTime
+  })
+}
+
+export function buildTimelineFromEvents(events: TaskEvent[], initialState: TimelineState = INITIAL_TIMELINE): TimelineState {
+  return sortTaskEvents(events).reduce(applyTaskEvent, initialState)
 }
 
 export function applyTaskEvent(state: TimelineState, event: TaskEvent): TimelineState {
@@ -196,6 +289,9 @@ export function applyTaskEvent(state: TimelineState, event: TaskEvent): Timeline
 
   const stepId = getEventStepId(current, event)
   if (!stepId) return state
+
+  const currentStep = current.steps.find((step) => step.id === stepId)
+  if (currentStep && shouldIgnoreOutOfOrderEvent(state, event, agentId)) return state
 
   const steps = current.steps.map((step) => {
     if (step.id !== stepId) return step

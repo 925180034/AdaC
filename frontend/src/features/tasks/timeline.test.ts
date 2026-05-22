@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { INITIAL_TIMELINE, applyTaskEvent } from './timeline'
+import { INITIAL_TIMELINE, applyTaskEvent, sortTaskEvents } from './timeline'
 import type { TaskEvent } from './taskTypes'
 
 describe('applyTaskEvent', () => {
@@ -120,5 +120,127 @@ describe('applyTaskEvent', () => {
       latency_ms: 150,
       llm_tokens: 42,
     })
+  })
+
+  it('does not reopen an earlier matcher step when a stale start event arrives after completion', () => {
+    const afterCompletedDecision = applyTaskEvent(INITIAL_TIMELINE, {
+      task_id: 'task-1',
+      type: 'agent_completed',
+      agent: 'Matcher',
+      layer: 'decision',
+      output_size: 3,
+      timestamp: '2026-04-27T00:00:03Z',
+    })
+
+    const withStaleLlmStart = applyTaskEvent(afterCompletedDecision, {
+      task_id: 'task-1',
+      type: 'agent_started',
+      agent: 'Matcher',
+      layer: 'LLM',
+      input_size: 12,
+      timestamp: '2026-04-27T00:00:02Z',
+    })
+
+    expect(withStaleLlmStart.Matcher.status).toBe('success')
+    expect(withStaleLlmStart.Matcher.currentStepId).toBe('decision')
+    const llmStep = withStaleLlmStart.Matcher.steps.find((step) => step.id === 'LLM')
+    expect(llmStep).toMatchObject({ status: 'pending' })
+    expect(llmStep).not.toHaveProperty('started_at')
+    expect(withStaleLlmStart.Matcher.steps.find((step) => step.id === 'decision')).toMatchObject({
+      status: 'success',
+      finished_at: '2026-04-27T00:00:03Z',
+    })
+  })
+
+  it('keeps a later agent pending when an out-of-order start event predates the current running agent', () => {
+    const plannerRunning = applyTaskEvent(INITIAL_TIMELINE, {
+      task_id: 'task-1',
+      type: 'agent_started',
+      agent: 'Planner',
+      timestamp: '2026-04-27T00:00:05Z',
+    })
+
+    const withStaleRetrievalStart = applyTaskEvent(plannerRunning, {
+      task_id: 'task-1',
+      type: 'agent_started',
+      agent: 'Retrieval',
+      layer: 'L1',
+      timestamp: '2026-04-27T00:00:04Z',
+    })
+
+    expect(withStaleRetrievalStart.Planner.status).toBe('running')
+    expect(withStaleRetrievalStart.Retrieval.status).toBe('pending')
+    expect(withStaleRetrievalStart.Retrieval.currentStepId).toBeUndefined()
+  })
+
+  it('sorts same-second lifecycle events by pipeline stage before raw timestamp', () => {
+    const sorted = sortTaskEvents([
+      {
+        task_id: 'task-1',
+        type: 'agent_started',
+        agent: 'Retrieval',
+        layer: 'L2',
+        timestamp: '2026-04-27T00:00:00.050Z',
+      },
+      {
+        task_id: 'task-1',
+        type: 'agent_completed',
+        agent: 'Retrieval',
+        layer: 'L1',
+        timestamp: '2026-04-27T00:00:00.100Z',
+      },
+      {
+        task_id: 'task-1',
+        type: 'agent_started',
+        agent: 'Retrieval',
+        layer: 'L1',
+        timestamp: '2026-04-27T00:00:00.000Z',
+      },
+      {
+        task_id: 'task-1',
+        type: 'agent_completed',
+        agent: 'Retrieval',
+        layer: 'L2',
+        timestamp: '2026-04-27T00:00:00.150Z',
+      },
+    ])
+
+    expect(sorted.map((event) => `${event.layer}:${event.type}`)).toEqual([
+      'L1:agent_started',
+      'L1:agent_completed',
+      'L2:agent_started',
+      'L2:agent_completed',
+    ])
+  })
+
+  it('places aggregate matcher completion after all matcher layer events in the same second', () => {
+    const sorted = sortTaskEvents([
+      {
+        task_id: 'task-1',
+        type: 'agent_completed',
+        agent: 'Matcher',
+        timestamp: '2026-04-27T00:00:00.000Z',
+      },
+      {
+        task_id: 'task-1',
+        type: 'agent_started',
+        agent: 'Matcher',
+        layer: 'LLM',
+        timestamp: '2026-04-27T00:00:00.000Z',
+      },
+      {
+        task_id: 'task-1',
+        type: 'agent_completed',
+        agent: 'Matcher',
+        layer: 'decision',
+        timestamp: '2026-04-27T00:00:00.000Z',
+      },
+    ])
+
+    expect(sorted.map((event) => `${event.layer ?? 'agent'}:${event.type}`)).toEqual([
+      'LLM:agent_started',
+      'decision:agent_completed',
+      'agent:agent_completed',
+    ])
   })
 })

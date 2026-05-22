@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { INITIAL_TIMELINE, applyTaskEvent, type TimelineState } from './timeline'
+import { INITIAL_TIMELINE, buildTimelineFromEvents, sortTaskEvents, type TimelineState } from './timeline'
 import type { TaskEvent } from './taskTypes'
 
 type TaskStore = {
@@ -22,9 +22,11 @@ export const useTaskStore = create<TaskStore>((set) => ({
         return state
       }
 
+      const events = sortTaskEvents([...state.events, event])
+
       return {
-        events: [...state.events, event],
-        timeline: applyTaskEvent(state.timeline, event),
+        events,
+        timeline: buildTimelineFromEvents(events),
       }
     }),
   resetLiveState: () => set({ events: [], timeline: INITIAL_TIMELINE }),

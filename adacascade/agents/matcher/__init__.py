@@ -182,44 +182,52 @@ async def run(state: IntegrationState) -> IntegrationState:
         src_col["table_id"] = source_profile.get("table_id")
         src_col["table_name"] = source_profile.get("table_name")
 
-    processed_targets = 0
+    filtered_targets: list[
+        tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]
+    ] = []
     for target_profile in targets:
         target_cols = cast(list[dict[str, Any]], target_profile.get("columns", []))
         if not source_cols or not target_cols:
             continue
-        processed_targets += 1
         started = time.perf_counter()
         c_pi = filter_cpi(source_cols, target_cols, scenario, theta_cand=plan.get("theta_cand"))
-        truncated = truncate_per_source(c_pi)
+        truncated_pairs = cast(list[dict[str, Any]], truncate_per_source(c_pi))
         stage_timings_ms["candidate_filtering"] += (
             time.perf_counter() - started
         ) * 1000
-        all_pairs.extend(cast(list[dict[str, Any]], truncated))
-        if task_id:
-            await emit_task_event(
-                task_id,
-                {
-                    "type": "agent_completed",
-                    "agent": "Matcher",
-                    "layer": "filtering",
-                    "status": "SUCCESS",
-                    "output_size": len(all_pairs),
-                    "timing_ms": stage_timings_ms["candidate_filtering"],
-                },
-            )
-            await emit_task_event(
-                task_id,
-                {
-                    "type": "agent_started",
-                    "agent": "Matcher",
-                    "layer": "LLM",
-                    "status": "RUNNING",
-                    "input_size": len(truncated),
-                },
-            )
+        all_pairs.extend(truncated_pairs)
+        filtered_targets.append((target_profile, target_cols, truncated_pairs))
+
+    if task_id:
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_completed",
+                "agent": "Matcher",
+                "layer": "filtering",
+                "status": "SUCCESS",
+                "output_size": len(all_pairs),
+                "timing_ms": stage_timings_ms["candidate_filtering"],
+            },
+        )
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_started",
+                "agent": "Matcher",
+                "layer": "LLM",
+                "status": "RUNNING",
+                "input_size": len(all_pairs),
+            },
+        )
+
+    verified_targets: list[
+        tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]
+    ] = []
+    for target_profile, target_cols, truncated in filtered_targets:
         started = time.perf_counter()
         verified = await llm_verify.verify_pairs_async(
-            cast(list[dict[str, Any]], truncated),
+            truncated,
             source_cols,
             target_cols,
             scenario,
@@ -234,29 +242,34 @@ async def run(state: IntegrationState) -> IntegrationState:
         stage_timings_ms["llm_verification"] += (time.perf_counter() - started) * 1000
         _add_verified_metrics(matcher_metrics, verified, aggregate_llm_latencies)
         matcher_metrics["matcher_verify_ms"] = stage_timings_ms["llm_verification"]
-        if task_id:
-            await emit_task_event(
-                task_id,
-                {
-                    "type": "agent_completed",
-                    "agent": "Matcher",
-                    "layer": "LLM",
-                    "status": "SUCCESS",
-                    "output_size": len(verified),
-                    "timing_ms": stage_timings_ms["llm_verification"],
-                    "metrics": matcher_metrics,
-                },
-            )
-            await emit_task_event(
-                task_id,
-                {
-                    "type": "agent_started",
-                    "agent": "Matcher",
-                    "layer": "decision",
-                    "status": "RUNNING",
-                    "input_size": len(verified),
-                },
-            )
+        verified_targets.append((target_profile, target_cols, verified))
+
+    verified_count = sum(len(verified) for _, _, verified in verified_targets)
+    if task_id:
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_completed",
+                "agent": "Matcher",
+                "layer": "LLM",
+                "status": "SUCCESS",
+                "output_size": verified_count,
+                "timing_ms": stage_timings_ms["llm_verification"],
+                "metrics": matcher_metrics,
+            },
+        )
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_started",
+                "agent": "Matcher",
+                "layer": "decision",
+                "status": "RUNNING",
+                "input_size": verified_count,
+            },
+        )
+
+    for target_profile, target_cols, verified in verified_targets:
         started = time.perf_counter()
         accepted = [
             item
@@ -279,51 +292,19 @@ async def run(state: IntegrationState) -> IntegrationState:
             for item in accepted
         )
         stage_timings_ms["decision"] += (time.perf_counter() - started) * 1000
-        if task_id:
-            await emit_task_event(
-                task_id,
-                {
-                    "type": "agent_completed",
-                    "agent": "Matcher",
-                    "layer": "decision",
-                    "status": "SUCCESS",
-                    "output_size": len(final_mappings),
-                    "timing_ms": stage_timings_ms["decision"],
-                },
-            )
 
-    if task_id and processed_targets == 0:
+    if task_id:
         await emit_task_event(
             task_id,
             {
                 "type": "agent_completed",
                 "agent": "Matcher",
-                "layer": "filtering",
+                "layer": "decision",
                 "status": "SUCCESS",
-                "output_size": 0,
+                "output_size": len(final_mappings),
+                "timing_ms": stage_timings_ms["decision"],
             },
         )
-        for layer in ["LLM", "decision"]:
-            await emit_task_event(
-                task_id,
-                {
-                    "type": "agent_started",
-                    "agent": "Matcher",
-                    "layer": layer,
-                    "status": "RUNNING",
-                    "input_size": 0,
-                },
-            )
-            payload: dict[str, Any] = {
-                "type": "agent_completed",
-                "agent": "Matcher",
-                "layer": layer,
-                "status": "SUCCESS",
-                "output_size": 0,
-            }
-            if layer == "LLM":
-                payload["metrics"] = matcher_metrics
-            await emit_task_event(task_id, payload)
 
     sim_path = save_pkl(task_id, "sim", all_pairs) if task_id else None
     bound_log.info("matcher.done", pairs=len(all_pairs), mappings=len(final_mappings))

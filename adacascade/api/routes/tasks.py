@@ -146,10 +146,10 @@ async def get_task(
                 "mapping_id": mapping.mapping_id,
                 "src_column_id": mapping.src_column_id,
                 "tgt_column_id": mapping.tgt_column_id,
-                "src_column_name": columns_by_id.get(mapping.src_column_id).col_name
+                "src_column_name": columns_by_id[mapping.src_column_id].col_name
                 if mapping.src_column_id in columns_by_id
                 else mapping.src_column_id,
-                "tgt_column_name": columns_by_id.get(mapping.tgt_column_id).col_name
+                "tgt_column_name": columns_by_id[mapping.tgt_column_id].col_name
                 if mapping.tgt_column_id in columns_by_id
                 else mapping.tgt_column_id,
                 "scenario": mapping.scenario,

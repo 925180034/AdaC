@@ -32,6 +32,30 @@ class FakeGraph:
         return {**state, "ranking": [], "final_mappings": []}
 
 
+class FakeLifecycleGraph:
+    """Graph test double that emits Planner and Profiling lifecycle events in execution order."""
+
+    async def ainvoke(
+        self, state: dict[str, Any], config: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Return successful graph output after emitting coarse lifecycle events."""
+        _ = config
+        task_id = str(state["task_id"])
+        await emit_task_event(
+            task_id, {"type": "agent_started", "agent": "Planner", "status": "RUNNING"}
+        )
+        await emit_task_event(
+            task_id, {"type": "agent_completed", "agent": "Planner", "status": "SUCCESS"}
+        )
+        await emit_task_event(
+            task_id, {"type": "agent_started", "agent": "Profiling", "status": "RUNNING"}
+        )
+        await emit_task_event(
+            task_id, {"type": "agent_completed", "agent": "Profiling", "status": "SUCCESS"}
+        )
+        return {**state, "ranking": [], "final_mappings": []}
+
+
 class FakePopulatedGraph:
     """Graph test double that returns ranking and mapping outputs."""
 
@@ -80,6 +104,39 @@ class FakeEmptyColumnGraph:
             },
         )
         return {**state, "ranking": [], "final_mappings": []}
+
+
+class FakeFailingRetrievalGraph:
+    """Graph test double that fails after Planner and Profiling complete."""
+
+    async def ainvoke(
+        self, state: dict[str, Any], config: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Emit early lifecycle events, then fail in a downstream stage."""
+        _ = config
+        task_id = str(state["task_id"])
+        await emit_task_event(
+            task_id, {"type": "agent_started", "agent": "Planner", "status": "RUNNING"}
+        )
+        await emit_task_event(
+            task_id, {"type": "agent_completed", "agent": "Planner", "status": "SUCCESS"}
+        )
+        await emit_task_event(
+            task_id, {"type": "agent_started", "agent": "Profiling", "status": "RUNNING"}
+        )
+        await emit_task_event(
+            task_id, {"type": "agent_completed", "agent": "Profiling", "status": "SUCCESS"}
+        )
+        await emit_task_event(
+            task_id,
+            {
+                "type": "agent_started",
+                "agent": "Retrieval",
+                "layer": "L1",
+                "status": "RUNNING",
+            },
+        )
+        raise RuntimeError("retrieval exploded")
 
 
 class FakeDegradedRetrievalGraph:
@@ -257,7 +314,7 @@ def test_discover_rejects_cross_tenant_query_table(client: TestClient) -> None:
 def test_discover_route_emits_lifecycle_event_history(client: TestClient) -> None:
     app_state = cast(Any, client.app).state
     previous_graph = app_state.graph
-    app_state.graph = FakeGraph()
+    app_state.graph = FakeLifecycleGraph()
     try:
         create_response = client.post(
             "/discover",
@@ -282,12 +339,47 @@ def test_discover_route_emits_lifecycle_event_history(client: TestClient) -> Non
         body = response.read().decode()
 
     assert "event: task_created" in body
-    assert '"agent":"Planner","status":"RUNNING"' in body
-    assert '"agent":"Planner","status":"SUCCESS"' in body
-    assert '"agent":"Profiling","status":"RUNNING"' in body
-    assert '"agent":"Profiling","status":"SUCCESS"' in body
+    expected_sequence = [
+        '"agent":"Planner","status":"RUNNING"',
+        '"agent":"Planner","status":"SUCCESS"',
+        '"agent":"Profiling","status":"RUNNING"',
+        '"agent":"Profiling","status":"SUCCESS"',
+    ]
+    positions = [body.index(event) for event in expected_sequence]
+    assert positions == sorted(positions)
     assert "event: agent_completed" in body
     assert "event: task_completed" in body
+
+
+def test_downstream_failure_does_not_mark_planner_failed(client: TestClient) -> None:
+    app_state = cast(Any, client.app).state
+    previous_graph = app_state.graph
+    app_state.graph = FakeFailingRetrievalGraph()
+    try:
+        create_response = client.post(
+            "/discover",
+            json={"query_table_id": "sse-query-running"},
+            headers=TENANT_A_HEADERS,
+        )
+    finally:
+        app_state.graph = previous_graph
+
+    assert create_response.status_code == 200
+    task_id = str(create_response.json()["task_id"])
+    task = _poll_task(client, task_id)
+    assert task["status"] == "FAILED"
+
+    with client.stream(
+        "GET", f"/tasks/{task_id}/events", headers=TENANT_A_HEADERS
+    ) as response:
+        assert response.status_code == 200
+        body = response.read().decode()
+
+    assert '"agent":"Planner","status":"FAILED"' not in body
+    assert '"agent":"Planner","status":"SUCCESS"' in body
+    assert '"agent":"Retrieval","layer":"L1","status":"RUNNING"' in body
+    assert '"status":"FAILED"' in body
+    assert "retrieval exploded" in body
 
 
 def test_discover_route_returns_running_before_final_status(client: TestClient) -> None:

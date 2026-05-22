@@ -22,7 +22,7 @@ describe('useTaskStore', () => {
     expect(useTaskStore.getState().currentTaskId).toBe('task-123')
   })
 
-  it('appends task events in arrival order', () => {
+  it('appends task events in chronological order', () => {
     const first: TaskEvent = {
       task_id: 'task-123',
       type: 'task_created',
@@ -35,8 +35,8 @@ describe('useTaskStore', () => {
       timestamp: '2026-04-28T00:00:01Z',
     }
 
-    useTaskStore.getState().appendEvent(first)
     useTaskStore.getState().appendEvent(second)
+    useTaskStore.getState().appendEvent(first)
 
     expect(useTaskStore.getState().events).toEqual([first, second])
   })

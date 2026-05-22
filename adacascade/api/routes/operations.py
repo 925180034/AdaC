@@ -217,14 +217,6 @@ async def _execute_task_background(
 ) -> None:
     """Run graph execution in the background and persist terminal task state."""
     try:
-        await emit_task_event(
-            task_id,
-            {"type": "agent_started", "agent": "Planner", "status": "RUNNING"},
-        )
-        await emit_task_event(
-            task_id,
-            {"type": "agent_started", "agent": "Profiling", "status": "RUNNING"},
-        )
         state = await graph.ainvoke(
             initial_state,
             config={"configurable": {"thread_id": task_id}},
@@ -251,14 +243,12 @@ async def _execute_task_background(
         await emit_task_event(
             task_id,
             {
-                "type": "agent_failed",
-                "agent": "Planner",
+                "type": "task_completed",
                 "status": "FAILED",
                 "message": str(exc),
                 "error": str(exc),
             },
         )
-        await emit_task_event(task_id, {"type": "task_completed", "status": "FAILED"})
 
 
 async def _submit_task(

@@ -166,8 +166,8 @@ export function AgentTracePanel({ timeline, events, streamError = null, language
           </p>
         ) : null}
         <div className="event-stream__lines" role="log" aria-live="polite">
-          {events.map((event) => (
-            <p key={`${event.timestamp}-${event.task_id}-${event.type}-${event.agent ?? 'task'}`}>
+          {events.map((event, index) => (
+            <p key={`${event.timestamp}-${event.task_id}-${event.type}-${event.agent ?? 'task'}-${event.layer ?? 'agent'}-${index}`}>
               {eventLine(event, copy.defaultActor)}
             </p>
           ))}
