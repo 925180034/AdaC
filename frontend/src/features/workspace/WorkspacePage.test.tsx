@@ -52,6 +52,18 @@ const defaultDataset: DatasetSummary = {
   updated_at: '2026-05-16T00:00:00Z',
 }
 
+const secondDataset: DatasetSummary = {
+  dataset_id: 'dataset-second',
+  dataset_name: 'Second Dataset',
+  description: null,
+  is_system: false,
+  table_count: 1,
+  ready_count: 1,
+  failed_count: 0,
+  created_at: '2026-05-16T00:00:00Z',
+  updated_at: '2026-05-16T00:00:00Z',
+}
+
 const benchmarkDataset: DatasetSummary = {
   dataset_id: 'dataset-benchmark',
   dataset_name: 'Benchmark Dataset',
@@ -79,6 +91,40 @@ const tablesResponse: ListTablesResponse = {
       table_name: 'Default Tenant Table',
       row_count: 10,
       col_count: 3,
+      status: 'READY',
+    },
+  ],
+}
+
+const secondTablesResponse: ListTablesResponse = {
+  total: 1,
+  offset: 0,
+  limit: 200,
+  items: [
+    {
+      table_id: 'second_table',
+      tenant_id: 'default',
+      dataset_id: 'dataset-second',
+      table_name: 'Second Dataset Table',
+      row_count: 20,
+      col_count: 4,
+      status: 'READY',
+    },
+  ],
+}
+
+const secondTablesChangedResponse: ListTablesResponse = {
+  total: 1,
+  offset: 0,
+  limit: 200,
+  items: [
+    {
+      table_id: 'second_table_refetched',
+      tenant_id: 'default',
+      dataset_id: 'dataset-second',
+      table_name: 'Second Dataset Refetched Table',
+      row_count: 30,
+      col_count: 5,
       status: 'READY',
     },
   ],
@@ -320,6 +366,51 @@ describe('WorkspacePage', () => {
       uploadedBy: 'tester',
       tableNamePrefix: undefined,
     })
+  })
+
+  it('disables Run while switched Dataset cached tables are refetching', async () => {
+    const user = userEvent.setup()
+    const secondTablesRefetch = deferred<ListTablesResponse>()
+    let secondDatasetCalls = 0
+    vi.mocked(listDatasets).mockResolvedValue({ items: [defaultDataset, secondDataset] })
+    vi.mocked(listTables).mockImplementation((_tenantId, datasetId) => {
+      if (datasetId === 'dataset-second') {
+        secondDatasetCalls += 1
+        return secondDatasetCalls === 1 ? Promise.resolve(secondTablesResponse) : secondTablesRefetch.promise
+      }
+      return Promise.resolve(tablesResponse)
+    })
+    renderWorkspace()
+
+    expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Dataset'), 'dataset-second')
+    expect(await screen.findByText('Second Dataset Table · 20 × 4')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Run AdaCascade' })).toBeEnabled()
+
+    await user.selectOptions(screen.getByLabelText('Dataset'), 'dataset-default')
+    expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Dataset'), 'dataset-second')
+
+    expect(screen.getByText('Second Dataset Table · 20 × 4')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Run AdaCascade' })).toBeDisabled()
+
+    secondTablesRefetch.resolve(secondTablesChangedResponse)
+    expect(await screen.findByText('Second Dataset Refetched Table · 30 × 5')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run AdaCascade' })).toBeEnabled())
+
+    await user.click(screen.getByRole('button', { name: 'Run AdaCascade' }))
+    expect(startIntegrate).toHaveBeenCalledWith(
+      'default',
+      'second_table_refetched',
+      {
+        theta_1: 0.2,
+        theta_2: 0.55,
+        theta_3: 0.5,
+        theta_match: 0.7,
+        matcher_top_k: 3,
+      },
+      'dataset-second',
+    )
   })
 
   it('uploads files from a dropped folder into the selected Dataset', async () => {

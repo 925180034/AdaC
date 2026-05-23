@@ -22,6 +22,7 @@ export type TaskControlPanelProps = {
   sourceTableId: string
   targetTableId: string
   isRunning: boolean
+  canRun: boolean
   onTenantChange: (tenantId: string) => void
   onExecutionProfileChange: (profile: ExecutionProfile) => void
   onParameterChange: (key: keyof AdvancedParameters, value: number) => void
@@ -63,6 +64,7 @@ export function TaskControlPanel({
   sourceTableId,
   targetTableId,
   isRunning,
+  canRun,
   onTenantChange,
   onExecutionProfileChange,
   onParameterChange,
@@ -353,7 +355,7 @@ export function TaskControlPanel({
       ) : null}
 
       <div className="task-actions">
-        <button className="run-button" type="button" onClick={onRun} disabled={isRunning}>
+        <button className="run-button" type="button" onClick={onRun} disabled={!canRun}>
           {isRunning ? copy.running : copy.run}
         </button>
         {isRunning ? (

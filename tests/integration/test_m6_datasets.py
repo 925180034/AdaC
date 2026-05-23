@@ -184,6 +184,49 @@ def test_system_dataset_rejects_uploads() -> None:
         assert response.status_code == 403
 
 
+def test_dataset_upload_rejects_too_many_files(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("adacascade.api.routes.datasets.settings.MAX_UPLOAD_FILE_COUNT", 1)
+
+    with next(client_fixture()) as client:
+        response = client.post(
+            "/datasets/dataset-a/tables",
+            files=[
+                ("files", ("people.csv", b"id,name\n1,Ada\n", "text/csv")),
+                ("files", ("places.csv", b"id,place\n1,London\n", "text/csv")),
+            ],
+            headers=TENANT_A_HEADERS,
+        )
+        assert response.status_code == 413
+        assert response.json()["detail"] == "Too many files; maximum is 1"
+
+
+def test_dataset_upload_rejects_oversized_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("adacascade.api.routes.datasets.settings.MAX_UPLOAD_FILE_BYTES", 4)
+
+    with next(client_fixture()) as client:
+        response = client.post(
+            "/datasets/dataset-a/tables",
+            files={"files": ("people.csv", b"id,name\n1,Ada\n", "text/csv")},
+            headers=TENANT_A_HEADERS,
+        )
+        assert response.status_code == 413
+        assert response.json()["detail"] == "people.csv exceeds maximum upload size"
+
+
+def test_legacy_table_upload_rejects_oversized_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("adacascade.api.routes.tables.settings.MAX_UPLOAD_FILE_BYTES", 4)
+
+    with next(client_fixture()) as client:
+        response = client.post(
+            "/tables",
+            files={"file": ("people.csv", b"id,name\n1,Ada\n", "text/csv")},
+            data={"table_name": "people"},
+            headers=TENANT_A_HEADERS,
+        )
+        assert response.status_code == 413
+        assert response.json()["detail"] == "upload exceeds maximum file size"
+
+
 def test_dataset_upload_commits_before_background_profiling(monkeypatch: pytest.MonkeyPatch) -> None:
     profiled_statuses: list[str] = []
 

@@ -87,6 +87,8 @@ async def upload_table(
             )
 
     raw = await file.read()
+    if len(raw) > settings.MAX_UPLOAD_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="upload exceeds maximum file size")
 
     active_tenant_id = get_tenant_id(request) or tenant_id
     table_id, status = ingest_table(

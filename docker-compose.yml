@@ -1,0 +1,47 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.17.1
+    restart: unless-stopped
+    volumes:
+      - ${ADACASCADE_RUNTIME_DIR:-/data/xiaoyunhao/adacascade/runtime}/qdrant:/qdrant/storage
+    networks:
+      - adacascade
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      DATA_DIR: /app/data
+      DATABASE_URL: sqlite:////app/data/metadata.db
+      CKPT_PATH: /app/data/ckpt.db
+      ARTIFACTS_DIR: /app/data/artifacts
+    volumes:
+      - ${ADACASCADE_RUNTIME_DIR:-/data/xiaoyunhao/adacascade/runtime}:/app/data
+    depends_on:
+      - qdrant
+    networks:
+      - adacascade
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+        VITE_API_KEY: ${API_KEY:-change-me}
+    restart: unless-stopped
+    ports:
+      - "${ADACASCADE_FRONTEND_PORT:-13000}:80"
+    depends_on:
+      - backend
+    networks:
+      - adacascade
+
+networks:
+  adacascade:
+    driver: bridge

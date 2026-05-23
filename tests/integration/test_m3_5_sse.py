@@ -161,6 +161,22 @@ class FakeDegradedRetrievalGraph:
         return {**state, "ranking": [], "final_mappings": []}
 
 
+class FakeExternallyFinishedGraph:
+    """Graph test double that marks a task terminal before returning."""
+
+    async def ainvoke(
+        self, state: dict[str, Any], config: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Simulate cancellation winning the race against background completion."""
+        _ = config
+        with get_session() as db:
+            task = db.query(IntegrationTask).filter_by(task_id=str(state["task_id"])).one()
+            task.status = "FAILED"
+            task.finished_at = datetime.now(timezone.utc)
+            task.error_message = "Task cancelled by user"
+        return {**state, "ranking": [], "final_mappings": []}
+
+
 @pytest.fixture(scope="module")
 def client() -> Generator[TestClient, None, None]:
     """Create a TestClient with external startup dependencies mocked."""
@@ -301,6 +317,38 @@ def test_pre_emitted_task_events_stream_from_history(client: TestClient) -> None
     assert "event: task_completed" in body
 
 
+def test_terminal_task_events_recover_from_persisted_status(client: TestClient) -> None:
+    now = datetime.now(timezone.utc)
+    with get_session() as db:
+        if db.query(IntegrationTask).filter_by(task_id="sse-terminal-db-only").first() is None:
+            db.add(
+                IntegrationTask(
+                    task_id="sse-terminal-db-only",
+                    tenant_id="tenant-a",
+                    task_type="DISCOVER_ONLY",
+                    query_table_id=None,
+                    target_table_id=None,
+                    plan_config="{}",
+                    status="SUCCESS",
+                    submitted_at=now,
+                    finished_at=now,
+                    error_message=None,
+                    artifacts_dir=None,
+                )
+            )
+
+    with client.stream(
+        "GET", "/tasks/sse-terminal-db-only/events", headers=TENANT_A_HEADERS
+    ) as response:
+        assert response.status_code == 200
+        body = response.read().decode()
+
+    assert "event: task_completed" in body
+    assert '"task_id":"sse-terminal-db-only"' in body
+    assert '"status":"SUCCESS"' in body
+    assert "Task already completed" in body
+
+
 def test_discover_rejects_cross_tenant_query_table(client: TestClient) -> None:
     response = client.post(
         "/discover",
@@ -403,6 +451,25 @@ def test_discover_route_returns_running_before_final_status(client: TestClient) 
 
     task = _poll_task(client, str(create_body["task_id"]))
     assert task["status"] == "SUCCESS"
+
+
+def test_background_completion_does_not_overwrite_terminal_task(client: TestClient) -> None:
+    app_state = cast(Any, client.app).state
+    previous_graph = app_state.graph
+    app_state.graph = FakeExternallyFinishedGraph()
+    try:
+        create_response = client.post(
+            "/discover",
+            json={"query_table_id": "sse-query-running"},
+            headers=TENANT_A_HEADERS,
+        )
+    finally:
+        app_state.graph = previous_graph
+
+    assert create_response.status_code == 200
+    task = _poll_task(client, str(create_response.json()["task_id"]))
+    assert task["status"] == "FAILED"
+    assert task["error_message"] == "Task cancelled by user"
 
 
 def test_integrate_route_emits_retrieval_and_matcher_stage_events(

@@ -73,18 +73,25 @@ async def has_task_event(
         )
 
 
-async def stream_task_events(task_id: str) -> AsyncIterator[str]:
+async def stream_task_events(
+    task_id: str, terminal_event: TaskEvent | None = None
+) -> AsyncIterator[str]:
     """Yield task events as Server-Sent Events from history, then live updates."""
     queue: asyncio.Queue[TaskEvent] = asyncio.Queue(maxsize=_QUEUE_LIMIT)
     async with _lock:
         history = tuple(_history.get(task_id, ()))
         terminal_history = bool(history and history[-1].get("type") == "task_completed")
+        if not history and terminal_event is not None:
+            terminal_history = True
         if not terminal_history:
             _subscribers[task_id].add(queue)
 
     try:
-        for event in history:
-            yield _sse_frame(event)
+        if history:
+            for event in history:
+                yield _sse_frame(event)
+        elif terminal_event is not None:
+            yield _sse_frame({**terminal_event, "task_id": task_id, "timestamp": _timestamp()})
         if terminal_history:
             return
 

@@ -82,13 +82,16 @@ app = FastAPI(
     description="Adaptive cascaded filtering for data lake table discovery and schema matching.",
     version="2.2.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.DOCS_ENABLED else None,
+    redoc_url="/redoc" if settings.DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if settings.DOCS_ENABLED else None,
 )
 
 # ── Middleware and routers ────────────────────────────────────────────────────
 app.add_middleware(AuthAndTenantMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://u307207-94cd-0c29b003.nmb1.seetacloud.com:8443"],
+    allow_origins=settings.cors_allow_origins,
     allow_methods=["*"],
     allow_headers=["Authorization", "X-Tenant-Id", "Content-Type"],
 )

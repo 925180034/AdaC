@@ -132,20 +132,42 @@ export function WorkspacePage() {
 
   const tablesQuery = useQuery({
     queryKey: ['tables', tenantId, selectedDatasetId],
-    queryFn: () => listTables(tenantId, selectedDatasetId || undefined),
+    queryFn: async () => ({
+      datasetId: selectedDatasetId,
+      response: await listTables(tenantId, selectedDatasetId || undefined),
+    }),
     enabled: Boolean(selectedDatasetId),
   })
-  const tables = useMemo(() => tablesQuery.data?.items ?? [], [tablesQuery.data?.items])
+  const tables = useMemo(() => tablesQuery.data?.response.items ?? [], [tablesQuery.data?.response.items])
+  const tablesDatasetId = tablesQuery.data?.datasetId ?? ''
+  const tablesAreCurrentDataset = Boolean(selectedDatasetId) && tablesDatasetId === selectedDatasetId && !tablesQuery.isFetching
 
   useEffect(() => {
-    if (tables.length === 0) return
+    if (!tablesAreCurrentDataset) return
+    if (tables.length === 0) {
+      if (queryTableId) setQueryTableId('')
+      if (sourceTableId) setSourceTableId('')
+      if (targetTableId) setTargetTableId('')
+      return
+    }
+
+    const tableIds = new Set(tables.map((table) => table.table_id))
     const firstTableId = tables[0]?.table_id ?? ''
     const secondTableId = tables[1]?.table_id ?? firstTableId
 
-    if (!queryTableId) setQueryTableId(firstTableId)
-    if (!sourceTableId) setSourceTableId(firstTableId)
-    if (!targetTableId) setTargetTableId(secondTableId)
-  }, [queryTableId, sourceTableId, tables, targetTableId])
+    if (!queryTableId || !tableIds.has(queryTableId)) setQueryTableId(firstTableId)
+    if (!sourceTableId || !tableIds.has(sourceTableId)) setSourceTableId(firstTableId)
+    if (!targetTableId || !tableIds.has(targetTableId)) setTargetTableId(secondTableId)
+  }, [queryTableId, sourceTableId, tables, tablesAreCurrentDataset, targetTableId])
+
+  const resetTaskContext = useCallback(() => {
+    setQueryTableId('')
+    setSourceTableId('')
+    setTargetTableId('')
+    setStreamError(null)
+    setCurrentTaskId(null)
+    resetLiveState()
+  }, [resetLiveState, setCurrentTaskId])
 
   const createDatasetMutation = useMutation({
     mutationFn: (payload: { dataset_name: string; description?: string }) => createDataset(tenantId, payload),
@@ -153,6 +175,7 @@ export function WorkspacePage() {
       setDatasetMutationError(null)
       void queryClient.invalidateQueries({ queryKey: ['datasets', tenantId] })
       setSelectedDatasetId(dataset.dataset_id)
+      resetTaskContext()
     },
     onError: () => {
       setDatasetMutationError(copy.dataset.mutationError)
@@ -239,11 +262,19 @@ export function WorkspacePage() {
     taskQuery.data?.status === 'FAILED' ||
     taskQuery.data?.status === 'DEGRADED'
   const isRunning = startTaskMutation.isPending || (Boolean(currentTaskId) && !isTerminalTask)
+  const currentTableIds = useMemo(() => new Set(tables.map((table) => table.table_id)), [tables])
+  const hasCurrentQueryTable = Boolean(queryTableId) && currentTableIds.has(queryTableId)
+  const hasCurrentMatchTables =
+    Boolean(sourceTableId) &&
+    Boolean(targetTableId) &&
+    currentTableIds.has(sourceTableId) &&
+    currentTableIds.has(targetTableId)
   const canRun =
     Boolean(selectedDatasetId) &&
+    tablesAreCurrentDataset &&
     tables.length > 0 &&
     !isRunning &&
-    (mode === 'match' ? Boolean(sourceTableId && targetTableId) : Boolean(queryTableId))
+    (mode === 'match' ? hasCurrentMatchTables : hasCurrentQueryTable)
   const handleRun = useCallback(() => {
     if (!canRun) return
     startTaskMutation.mutate()
@@ -253,15 +284,6 @@ export function WorkspacePage() {
     if (!currentTaskId || cancelTaskMutation.isPending) return
     cancelTaskMutation.mutate()
   }, [cancelTaskMutation, currentTaskId])
-
-  const resetTaskContext = useCallback(() => {
-    setQueryTableId('')
-    setSourceTableId('')
-    setTargetTableId('')
-    setStreamError(null)
-    setCurrentTaskId(null)
-    resetLiveState()
-  }, [resetLiveState, setCurrentTaskId])
 
   const handleTenantChange = useCallback(
     (nextTenantId: string) => {
@@ -393,6 +415,7 @@ export function WorkspacePage() {
           sourceTableId={sourceTableId}
           targetTableId={targetTableId}
           isRunning={isRunning}
+          canRun={canRun}
           onTenantChange={handleTenantChange}
           onExecutionProfileChange={setExecutionProfile}
           onParameterChange={handleParameterChange}

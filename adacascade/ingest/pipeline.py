@@ -379,9 +379,22 @@ def ingest_upload_bundle(
     for filename, payload in files:
         if Path(filename).suffix.lower() == ".zip":
             with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-                for info in archive.infolist():
-                    if info.is_dir():
-                        continue
+                members = [info for info in archive.infolist() if not info.is_dir()]
+                if len(members) > settings.MAX_ZIP_MEMBER_COUNT:
+                    summary["rejected"].append(
+                        {
+                            "source": filename,
+                            "reason": f"zip contains more than {settings.MAX_ZIP_MEMBER_COUNT} files",
+                        }
+                    )
+                    continue
+                uncompressed = sum(info.file_size for info in members)
+                if uncompressed > settings.MAX_ZIP_UNCOMPRESSED_BYTES:
+                    summary["rejected"].append(
+                        {"source": filename, "reason": "zip uncompressed size exceeds limit"}
+                    )
+                    continue
+                for info in members:
                     reason = _skip_reason(info.filename)
                     if reason is not None:
                         summary["skipped"].append(
@@ -437,6 +450,14 @@ def _ingest_bundle_member(
             sheets = pd.read_excel(io.BytesIO(payload), sheet_name=None)
         except ImportError as exc:
             raise ValueError("Excel ingestion requires openpyxl") from exc
+        if len(sheets) > settings.MAX_EXCEL_SHEETS:
+            summary["rejected"].append(
+                {
+                    "source": source,
+                    "reason": f"excel workbook contains more than {settings.MAX_EXCEL_SHEETS} sheets",
+                }
+            )
+            return
         for sheet_name, frame in sheets.items():
             try:
                 normalized = _validate_and_normalize_schema(frame)

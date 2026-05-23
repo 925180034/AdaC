@@ -79,8 +79,21 @@ class Settings(BaseSettings):
     API_KEY: str = "dev-local-token"
     AUTH_ENABLED: bool = True
     METRICS_ENABLED: bool = True
+    CORS_ALLOW_ORIGINS: str = "https://u307207-94cd-0c29b003.nmb1.seetacloud.com:8443"
+    DOCS_ENABLED: bool = True
+
+    # ── 上传资源限制 ──────────────────────────────────────────────────────
+    MAX_UPLOAD_FILE_BYTES: int = 100 * 1024 * 1024
+    MAX_UPLOAD_FILE_COUNT: int = 50
+    MAX_ZIP_MEMBER_COUNT: int = 200
+    MAX_ZIP_UNCOMPRESSED_BYTES: int = 500 * 1024 * 1024
+    MAX_EXCEL_SHEETS: int = 50
 
     # ── 算法超参（直接从 YAML 读，供各 Agent 访问） ───────────────────────
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.CORS_ALLOW_ORIGINS.split(",") if origin.strip()]
+
     @property
     def tlcf_cfg(self) -> dict[str, Any]:
         """TLCF 全量配置（来自 configs/default.yaml）。"""

@@ -222,3 +222,85 @@ def test_ingest_upload_bundle_rejects_one_bad_file_without_failing_batch(
     assert [item["table_name"] for item in summary["accepted"]] == ["good"]
     assert summary["rejected"] == [{"source": "bad.csv", "reason": "duplicate column name: id"}]
     assert summary["skipped"] == []
+
+
+def test_ingest_upload_bundle_rejects_zip_with_too_many_members(
+    db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.MAX_ZIP_MEMBER_COUNT", 1)
+    archive = zip_bytes(
+        {
+            "people.csv": b"id,name\n1,Ada\n",
+            "places.csv": b"id,place\n1,London\n",
+        }
+    )
+
+    summary = ingest_upload_bundle(
+        files=[("bundle.zip", archive.getvalue())],
+        tenant_id="tenant-a",
+        dataset_id="dataset-a",
+        uploaded_by=None,
+        table_name_prefix=None,
+        db=db,
+    )
+
+    assert summary["accepted"] == []
+    assert summary["rejected"] == [
+        {"source": "bundle.zip", "reason": "zip contains more than 1 files"}
+    ]
+    assert summary["skipped"] == []
+
+
+def test_ingest_upload_bundle_rejects_zip_with_too_much_uncompressed_data(
+    db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.MAX_ZIP_UNCOMPRESSED_BYTES", 4)
+    archive = zip_bytes({"people.csv": b"id,name\n1,Ada\n"})
+
+    summary = ingest_upload_bundle(
+        files=[("bundle.zip", archive.getvalue())],
+        tenant_id="tenant-a",
+        dataset_id="dataset-a",
+        uploaded_by=None,
+        table_name_prefix=None,
+        db=db,
+    )
+
+    assert summary["accepted"] == []
+    assert summary["rejected"] == [
+        {"source": "bundle.zip", "reason": "zip uncompressed size exceeds limit"}
+    ]
+    assert summary["skipped"] == []
+
+
+def test_ingest_upload_bundle_rejects_excel_with_too_many_sheets(
+    db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.MAX_EXCEL_SHEETS", 1)
+    workbook = xlsx_bytes(
+        {
+            "People": pd.DataFrame({"id": [1], "name": ["Ada"]}),
+            "Cities": pd.DataFrame({"city": ["London"]}),
+        }
+    )
+
+    summary = ingest_upload_bundle(
+        files=[("demo.xlsx", workbook.getvalue())],
+        tenant_id="tenant-a",
+        dataset_id="dataset-a",
+        uploaded_by="tester",
+        table_name_prefix=None,
+        db=db,
+    )
+
+    assert summary["accepted"] == []
+    assert summary["rejected"] == [
+        {
+            "source": "demo.xlsx",
+            "reason": "excel workbook contains more than 1 sheets",
+        }
+    ]
+    assert summary["skipped"] == []

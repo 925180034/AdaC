@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from adacascade.api.middleware import get_tenant_id
+from adacascade.config import settings
 from adacascade.db.models import DatasetRegistry, TableRegistry
 from adacascade.db.session import get_session
 from adacascade.ingest.pipeline import ingest_upload_bundle
@@ -51,6 +52,19 @@ def _dataset_to_dict(dataset: DatasetRegistry, counts: dict[str, dict[str, int]]
         "created_at": dataset.created_at.isoformat(),
         "updated_at": dataset.updated_at.isoformat(),
     }
+
+
+def _validate_upload_files(files: list[UploadFile]) -> None:
+    if len(files) > settings.MAX_UPLOAD_FILE_COUNT:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Too many files; maximum is {settings.MAX_UPLOAD_FILE_COUNT}",
+        )
+
+
+def _validate_payload_size(filename: str, payload: bytes) -> None:
+    if len(payload) > settings.MAX_UPLOAD_FILE_BYTES:
+        raise HTTPException(status_code=413, detail=f"{filename} exceeds maximum upload size")
 
 
 def _table_counts(db: Session, tenant_id: str) -> dict[str, dict[str, int]]:
@@ -147,7 +161,13 @@ async def upload_dataset_tables(
     if dataset.is_system:
         raise HTTPException(status_code=403, detail="System datasets do not accept uploads")
 
-    payloads = [(upload.filename or "upload", await upload.read()) for upload in files]
+    _validate_upload_files(files)
+    payloads = []
+    for upload in files:
+        filename = upload.filename or "upload"
+        payload = await upload.read()
+        _validate_payload_size(filename, payload)
+        payloads.append((filename, payload))
     summary = ingest_upload_bundle(
         files=payloads,
         tenant_id=tenant_id,

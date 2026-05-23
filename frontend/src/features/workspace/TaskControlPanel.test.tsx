@@ -37,6 +37,7 @@ const baseProps = {
   sourceTableId: 'table_customers',
   targetTableId: 'table_orders',
   isRunning: false,
+  canRun: true,
   onTenantChange: vi.fn(),
   onExecutionProfileChange: vi.fn(),
   onParameterChange: vi.fn(),
@@ -161,7 +162,7 @@ describe('TaskControlPanel', () => {
   })
 
   it('disables tenant, profile, and Run AdaCascade while running', () => {
-    render(<TaskControlPanel {...baseProps} mode={'integrate' satisfies TaskMode} isRunning />)
+    render(<TaskControlPanel {...baseProps} mode={'integrate' satisfies TaskMode} isRunning canRun={false} />)
 
     expect(screen.getByLabelText('Tenant')).toBeDisabled()
     expect(screen.getByLabelText('Execution profile')).toBeDisabled()
@@ -171,7 +172,7 @@ describe('TaskControlPanel', () => {
 
   it('calls onCancel from a visible cancel button while running', async () => {
     const user = userEvent.setup()
-    render(<TaskControlPanel {...baseProps} mode={'integrate' satisfies TaskMode} isRunning />)
+    render(<TaskControlPanel {...baseProps} mode={'integrate' satisfies TaskMode} isRunning canRun={false} />)
 
     await user.click(screen.getByRole('button', { name: 'Cancel task' }))
 

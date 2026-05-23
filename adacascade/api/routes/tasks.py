@@ -166,12 +166,20 @@ async def get_task(
 @router.get("/{task_id}/events")
 async def get_task_events(task_id: str, request: Request) -> StreamingResponse:
     """Stream task progress events for the current tenant as SSE."""
+    terminal_event = None
     with get_session() as db:
         task = db.query(IntegrationTask).filter_by(task_id=task_id).first()
         if task is None or task.tenant_id != get_tenant_id(request):
             raise HTTPException(status_code=404, detail="Task not found")
+        if task.status in {"SUCCESS", "FAILED", "DEGRADED"}:
+            terminal_event = {
+                "type": "task_completed",
+                "task_id": task.task_id,
+                "status": task.status,
+                "message": task.error_message or "Task already completed",
+            }
     return StreamingResponse(
-        stream_task_events(task_id),
+        stream_task_events(task_id, terminal_event),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

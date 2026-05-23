@@ -84,8 +84,6 @@ def _create_task(
 
 def _persist_success(db: Session, task: IntegrationTask, state: dict[str, Any]) -> None:
     """Persist successful task completion and result artifacts."""
-    task.status = "SUCCESS"
-    task.finished_at = datetime.now(timezone.utc)
     ranking = state.get("ranking", [])
     for idx, item in enumerate(ranking, start=1):
         db.add(
@@ -113,11 +111,31 @@ def _persist_success(db: Session, task: IntegrationTask, state: dict[str, Any]) 
         )
 
 
-def _persist_failure(task: IntegrationTask, exc: Exception) -> None:
-    """Persist failed task completion details."""
-    task.status = "FAILED"
-    task.finished_at = datetime.now(timezone.utc)
-    task.error_message = str(exc)
+def _claim_terminal_write(
+    db: Session,
+    *,
+    task_id: str,
+    status: str,
+    error_message: str | None = None,
+) -> IntegrationTask | None:
+    values: dict[str, Any] = {
+        "status": status,
+        "finished_at": datetime.now(timezone.utc),
+    }
+    if error_message is not None:
+        values["error_message"] = error_message
+    updated = (
+        db.query(IntegrationTask)
+        .filter(
+            IntegrationTask.task_id == task_id,
+            IntegrationTask.status == "RUNNING",
+            IntegrationTask.finished_at.is_(None),
+        )
+        .update(values, synchronize_session=False)
+    )
+    if updated != 1:
+        return None
+    return db.query(IntegrationTask).filter_by(task_id=task_id).one()
 
 
 def _ensure_ready_table(
@@ -222,7 +240,9 @@ async def _execute_task_background(
             config={"configurable": {"thread_id": task_id}},
         )
         with get_session() as db:
-            task = db.query(IntegrationTask).filter_by(task_id=task_id).one()
+            task = _claim_terminal_write(db, task_id=task_id, status="SUCCESS")
+            if task is None:
+                return
             _persist_success(db, task, state)
         await _emit_missing_stage_summary(task_id, task_type=task_type, state=state)
         final_agent = "Retrieval" if task_type == "DISCOVER_ONLY" else "Matcher"
@@ -238,8 +258,13 @@ async def _execute_task_background(
         await emit_task_event(task_id, {"type": "task_completed", "status": "SUCCESS"})
     except Exception as exc:
         with get_session() as db:
-            task = db.query(IntegrationTask).filter_by(task_id=task_id).one()
-            _persist_failure(task, exc)
+            if _claim_terminal_write(
+                db,
+                task_id=task_id,
+                status="FAILED",
+                error_message=str(exc),
+            ) is None:
+                return
         await emit_task_event(
             task_id,
             {
