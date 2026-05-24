@@ -20,6 +20,10 @@ services:
       DATABASE_URL: sqlite:////app/data/metadata.db
       CKPT_PATH: /app/data/ckpt.db
       ARTIFACTS_DIR: /app/data/artifacts
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-0}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    gpus: all
     volumes:
       - ${ADACASCADE_RUNTIME_DIR:-/data/xiaoyunhao/adacascade/runtime}:/app/data
     depends_on:
