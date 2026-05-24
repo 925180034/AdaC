@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     API_KEY: str = "dev-local-token"
     AUTH_ENABLED: bool = True
     METRICS_ENABLED: bool = True
-    CORS_ALLOW_ORIGINS: str = "https://u307207-94cd-0c29b003.nmb1.seetacloud.com:8443"
+    CORS_ALLOW_ORIGINS: str = "http://localhost:13000,http://localhost:5173"
     DOCS_ENABLED: bool = True
 
     # ── 上传资源限制 ──────────────────────────────────────────────────────
