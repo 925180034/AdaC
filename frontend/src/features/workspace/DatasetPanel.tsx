@@ -16,6 +16,7 @@ export type DatasetPanelProps = {
   onCreateDataset: (payload: { dataset_name: string; description?: string }) => void
   onUploadTables: (files: File[], options: { uploadedBy?: string; tableNamePrefix?: string }) => void
   onRefresh: () => void
+  onPreviewTable?: (tableId: string) => void
   language?: Language
 }
 
@@ -84,6 +85,7 @@ export function DatasetPanel({
   onCreateDataset,
   onUploadTables,
   onRefresh,
+  onPreviewTable,
   language = 'en',
 }: DatasetPanelProps) {
   const copy = getWorkspaceCopy(language).dataset
@@ -301,7 +303,14 @@ export function DatasetPanel({
               {recentTables.length === 0 ? <p className="control-panel__note">{copy.noTables}</p> : null}
               {recentTables.map((table) => (
                 <p className="dataset-panel__table" key={table.table_id}>
-                  <span>{table.table_name}</span>
+                  <button
+                    className="table-preview-trigger"
+                    type="button"
+                    onClick={() => onPreviewTable?.(table.table_id)}
+                    disabled={!onPreviewTable}
+                  >
+                    {table.table_name}
+                  </button>
                   <strong>{table.status}</strong>
                 </p>
               ))}

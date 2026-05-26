@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -53,6 +55,35 @@ def _table(table_id: str, tenant_id: str, dataset_id: str, *, status: str = "REA
         updated_at=now,
         status=status,
     )
+
+
+def _write_preview_table(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        [
+            {
+                "farm_id": 1,
+                "crop_name": "wheat",
+                "soil_ph": 6.5,
+                "measurements": [1, 2],
+                "observed_at": pd.NaT,
+            },
+            {
+                "farm_id": 2,
+                "crop_name": None,
+                "soil_ph": 7.1,
+                "measurements": None,
+                "observed_at": pd.Timestamp("2026-05-25T09:30:00"),
+            },
+        ]
+    ).to_parquet(path, index=False)
+
+
+def _set_table_source_uri(table_id: str, source_uri: Path) -> None:
+    with get_session() as db:
+        table = db.query(TableRegistry).filter_by(table_id=table_id).one()
+        table.source_uri = str(source_uri)
+        db.commit()
 
 
 def _seed() -> None:
@@ -149,6 +180,93 @@ def test_tables_can_be_filtered_by_dataset() -> None:
         table_ids = {item["table_id"] for item in scoped.json()["items"]}
         assert table_ids == {"table-a", "table-a-2"}
         assert all(item["dataset_id"] == "dataset-a" for item in scoped.json()["items"])
+
+
+def test_table_preview_returns_metadata_columns_and_sample_rows(tmp_path: Path) -> None:
+    preview_path = tmp_path / "table-a.parquet"
+    _write_preview_table(preview_path)
+
+    with next(client_fixture()) as client:
+        _set_table_source_uri("table-a", preview_path)
+        response = client.get(
+            "/tables/table-a/preview?dataset_id=dataset-a&limit=1",
+            headers=TENANT_A_HEADERS,
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["table"]["table_id"] == "table-a"
+    assert body["table"]["dataset_id"] == "dataset-a"
+    assert body["columns"] == ["farm_id", "crop_name", "soil_ph", "measurements", "observed_at"]
+    assert body["sample_rows"] == [
+        {
+            "farm_id": 1,
+            "crop_name": "wheat",
+            "soil_ph": 6.5,
+            "measurements": [1, 2],
+            "observed_at": None,
+        }
+    ]
+    assert body["sample_limit"] == 1
+
+
+def test_table_preview_rejects_dataset_mismatch(tmp_path: Path) -> None:
+    preview_path = tmp_path / "table-a.parquet"
+    _write_preview_table(preview_path)
+
+    with next(client_fixture()) as client:
+        _set_table_source_uri("table-a", preview_path)
+        response = client.get(
+            "/tables/table-a/preview?dataset_id=system-a",
+            headers=TENANT_A_HEADERS,
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Table not found"
+
+
+def test_table_preview_rejects_other_tenant_table(tmp_path: Path) -> None:
+    preview_path = tmp_path / "table-b.parquet"
+    _write_preview_table(preview_path)
+
+    with next(client_fixture()) as client:
+        _set_table_source_uri("table-b", preview_path)
+        response = client.get("/tables/table-b/preview", headers=TENANT_A_HEADERS)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Table not found"
+
+
+def test_table_preview_reports_missing_data_file(tmp_path: Path) -> None:
+    missing_path = tmp_path / "missing-table-a.parquet"
+
+    with next(client_fixture()) as client:
+        _set_table_source_uri("table-a", missing_path)
+        response = client.get("/tables/table-a/preview", headers=TENANT_A_HEADERS)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Table data file not found"
+
+
+def test_table_preview_resolves_relative_source_uri_from_data_dir_parent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_root = tmp_path / "runtime-root"
+    preview_path = runtime_root / "data" / "tables" / "tenant-a" / "table-a" / "data.parquet"
+    _write_preview_table(preview_path)
+
+    monkeypatch.setattr("adacascade.api.routes.tables.settings.DATA_DIR", str(runtime_root / "data"))
+
+    with next(client_fixture()) as client:
+        _set_table_source_uri("table-a", Path("data/tables/tenant-a/table-a/data.parquet"))
+        response = client.get(
+            "/tables/table-a/preview?dataset_id=dataset-a&limit=1",
+            headers=TENANT_A_HEADERS,
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["sample_rows"][0]["crop_name"] == "wheat"
 
 
 def test_task_initial_state_and_plan_include_dataset_id() -> None:

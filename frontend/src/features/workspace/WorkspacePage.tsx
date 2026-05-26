@@ -4,7 +4,7 @@ import { createDataset, listDatasets, uploadDatasetTables } from '../../api/data
 import type { UploadDatasetTablesResponse } from '../../api/datasets'
 import { subscribeTaskEvents } from '../../api/events'
 import { getLlmRuntime, updateLlmRuntime } from '../../api/runtime'
-import { listTables } from '../../api/tables'
+import { getTablePreview, listTables } from '../../api/tables'
 import { cancelTask, getTask, startDiscover, startIntegrate, startMatch } from '../../api/tasks'
 import { useTaskStore } from '../tasks/taskStore'
 import type { TaskMode } from '../tasks/taskTypes'
@@ -15,6 +15,7 @@ import { AgentTracePanel } from './AgentTracePanel'
 import { DatasetPanel } from './DatasetPanel'
 import { getWorkspaceCopy } from './i18n'
 import { ResultWorkspace } from './ResultWorkspace'
+import { TablePreviewModal } from './TablePreviewModal'
 import { TaskControlPanel, type TenantOption } from './TaskControlPanel'
 import { PAPER_PARAMETER_DEFAULTS, type AdvancedParameters, type ExecutionProfile } from './parameters'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
@@ -63,6 +64,7 @@ export function WorkspacePage() {
   const [sourceTableId, setSourceTableId] = useState(() => getSearchParam(params, 'source_table_id', ''))
   const [targetTableId, setTargetTableId] = useState(() => getSearchParam(params, 'target_table_id', ''))
   const [streamError, setStreamError] = useState<string | null>(null)
+  const [previewTableId, setPreviewTableId] = useState<string | null>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
   const [pendingRuntimeBackend, setPendingRuntimeBackend] = useState<RuntimeBackend | null>(null)
   const [language, setLanguage] = useState(readLanguage)
@@ -139,6 +141,11 @@ export function WorkspacePage() {
     enabled: Boolean(selectedDatasetId),
   })
   const tables = useMemo(() => tablesQuery.data?.response.items ?? [], [tablesQuery.data?.response.items])
+  const tablePreviewQuery = useQuery({
+    queryKey: ['table-preview', tenantId, selectedDatasetId, previewTableId],
+    queryFn: () => getTablePreview(tenantId, previewTableId ?? '', selectedDatasetId || undefined),
+    enabled: Boolean(previewTableId),
+  })
   const tablesDatasetId = tablesQuery.data?.datasetId ?? ''
   const tablesAreCurrentDataset = Boolean(selectedDatasetId) && tablesDatasetId === selectedDatasetId && !tablesQuery.isFetching
 
@@ -164,6 +171,7 @@ export function WorkspacePage() {
     setQueryTableId('')
     setSourceTableId('')
     setTargetTableId('')
+    setPreviewTableId(null)
     setStreamError(null)
     setCurrentTaskId(null)
     resetLiveState()
@@ -341,6 +349,14 @@ export function WorkspacePage() {
     [isRunning, runtimeBackend, runtimeMutation],
   )
 
+  const handlePreviewTable = useCallback((tableId: string) => {
+    setPreviewTableId(tableId)
+  }, [])
+
+  const handleClosePreview = useCallback(() => {
+    setPreviewTableId(null)
+  }, [])
+
   const handleRefreshDatasets = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['datasets', tenantId] })
     void queryClient.invalidateQueries({ queryKey: ['tables', tenantId, selectedDatasetId] })
@@ -402,6 +418,7 @@ export function WorkspacePage() {
             onCreateDataset={(payload) => createDatasetMutation.mutate(payload)}
             onUploadTables={(files, options) => uploadDatasetMutation.mutate({ files, options })}
             onRefresh={handleRefreshDatasets}
+            onPreviewTable={handlePreviewTable}
             language={language}
           />
           <TaskControlPanel
@@ -426,12 +443,22 @@ export function WorkspacePage() {
           onTargetTableChange={setTargetTableId}
           onRun={handleRun}
             onCancel={handleCancel}
+            onPreviewTable={handlePreviewTable}
             language={language}
           />
         </div>
-        <ResultWorkspace task={taskQuery.data ?? null} tables={tables} language={language} />
+        <ResultWorkspace task={taskQuery.data ?? null} tables={tables} onPreviewTable={handlePreviewTable} language={language} />
         <AgentTracePanel timeline={timeline} events={events} streamError={streamError} language={language} />
       </div>
+      {previewTableId ? (
+        <TablePreviewModal
+          preview={tablePreviewQuery.data ?? null}
+          isLoading={tablePreviewQuery.isLoading}
+          error={tablePreviewQuery.isError ? copy.tablePreview.loadError : null}
+          onClose={handleClosePreview}
+          language={language}
+        />
+      ) : null}
     </div>
   )
 }

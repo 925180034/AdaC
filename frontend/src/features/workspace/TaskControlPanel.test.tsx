@@ -207,4 +207,48 @@ describe('TaskControlPanel', () => {
 
     expect(baseProps.onRun).toHaveBeenCalledTimes(1)
   })
+
+  it('previews the query table for discover and integrate modes', async () => {
+    const user = userEvent.setup()
+    const onPreviewTable = vi.fn()
+    const { rerender } = render(
+      <TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} onPreviewTable={onPreviewTable} />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Preview query table' }))
+    expect(onPreviewTable).toHaveBeenCalledWith('table_customers')
+
+    rerender(<TaskControlPanel {...baseProps} mode={'integrate' satisfies TaskMode} onPreviewTable={onPreviewTable} />)
+    await user.click(screen.getByRole('button', { name: 'Preview query table' }))
+    expect(onPreviewTable).toHaveBeenCalledWith('table_customers')
+  })
+
+  it('previews source and target tables for match mode', async () => {
+    const user = userEvent.setup()
+    const onPreviewTable = vi.fn()
+    render(<TaskControlPanel {...baseProps} mode={'match' satisfies TaskMode} onPreviewTable={onPreviewTable} />)
+
+    await user.click(screen.getByRole('button', { name: 'Preview source table' }))
+    await user.click(screen.getByRole('button', { name: 'Preview target table' }))
+
+    expect(onPreviewTable).toHaveBeenCalledWith('table_customers')
+    expect(onPreviewTable).toHaveBeenCalledWith('table_orders')
+  })
+
+  it('disables preview controls without a handler or current table id', () => {
+    const { rerender } = render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)
+
+    expect(screen.getByRole('button', { name: 'Preview query table' })).toBeDisabled()
+
+    rerender(
+      <TaskControlPanel
+        {...baseProps}
+        mode={'discover' satisfies TaskMode}
+        queryTableId="missing_table"
+        onPreviewTable={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Preview query table' })).toBeDisabled()
+  })
 })

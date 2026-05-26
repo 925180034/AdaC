@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import io
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any, Generator
 
+import numpy as np
+import pandas as pd
 import structlog
 from fastapi import (
     APIRouter,
@@ -56,6 +59,39 @@ def _table_to_dict(tr: TableRegistry) -> dict[str, Any]:
         "uploaded_at": tr.uploaded_at.isoformat() if tr.uploaded_at else None,
         "updated_at": tr.updated_at.isoformat() if tr.updated_at else None,
     }
+
+
+def _bound_preview_limit(limit: int) -> int:
+    """Clamp table preview row limits to the supported range."""
+    return max(1, min(50, limit))
+
+
+def _json_safe_value(value: Any) -> Any:
+    """Convert pandas values to JSON-serializable preview values."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_value(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return [_json_safe_value(item) for item in value.tolist()]
+    if isinstance(value, np.generic):
+        return _json_safe_value(value.item())
+    if pd.api.types.is_scalar(value) and pd.isna(value):
+        return None
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+def _resolve_table_source_path(source_uri: str | None) -> Path | None:
+    if not source_uri:
+        return None
+
+    source_path = Path(source_uri)
+    if source_path.is_file() or source_path.is_absolute():
+        return source_path
+
+    return Path(settings.DATA_DIR).resolve().parent / source_path
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -122,6 +158,41 @@ async def upload_table(
         log.info("tables.dedup", table_id=table_id, status=status)
 
     return {"table_id": table_id, "status": status}
+
+
+@router.get("/{table_id}/preview")
+async def preview_table(
+    table_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    dataset_id: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Return table metadata and a bounded Parquet row preview."""
+    bounded_limit = _bound_preview_limit(limit)
+    tr = (
+        db.query(TableRegistry)
+        .filter_by(table_id=table_id, tenant_id=get_tenant_id(request))
+        .first()
+    )
+    if tr is None or (dataset_id is not None and tr.dataset_id != dataset_id):
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    source_path = _resolve_table_source_path(tr.source_uri)
+    if source_path is None or not source_path.is_file():
+        raise HTTPException(status_code=404, detail="Table data file not found")
+
+    frame = pd.read_parquet(source_path).head(bounded_limit)
+    rows = [
+        {str(column): _json_safe_value(value) for column, value in row.items()}
+        for row in frame.to_dict(orient="records")
+    ]
+    return {
+        "table": _table_to_dict(tr),
+        "columns": [str(column) for column in frame.columns],
+        "sample_rows": rows,
+        "sample_limit": bounded_limit,
+    }
 
 
 @router.get("/{table_id}")

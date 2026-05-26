@@ -33,6 +33,7 @@ export type TaskControlPanelProps = {
   onTargetTableChange: (tableId: string) => void
   onRun: () => void
   onCancel: () => void
+  onPreviewTable?: (tableId: string) => void
   language?: Language
 }
 
@@ -75,6 +76,7 @@ export function TaskControlPanel({
   onTargetTableChange,
   onRun,
   onCancel,
+  onPreviewTable,
   language = 'en',
 }: TaskControlPanelProps) {
   const copy = getWorkspaceCopy(language).control
@@ -92,6 +94,8 @@ export function TaskControlPanel({
       {tableLabel(table)}
     </option>
   ))
+  const currentTableIds = new Set(tables.map((table) => table.table_id))
+  const canPreview = (tableId: string) => Boolean(onPreviewTable) && currentTableIds.has(tableId)
 
   useEffect(() => {
     setParameterDrafts((current) => ({
@@ -188,6 +192,14 @@ export function TaskControlPanel({
               >
                 {tableOptions}
               </select>
+              <button
+                className="table-preview-trigger"
+                type="button"
+                onClick={() => onPreviewTable?.(sourceTableId)}
+                disabled={!canPreview(sourceTableId)}
+              >
+                {copy.previewSourceTable}
+              </button>
             </label>
             <label className="field" htmlFor="target-table">
               <span>{copy.targetTable}</span>
@@ -199,6 +211,14 @@ export function TaskControlPanel({
               >
                 {tableOptions}
               </select>
+              <button
+                className="table-preview-trigger"
+                type="button"
+                onClick={() => onPreviewTable?.(targetTableId)}
+                disabled={!canPreview(targetTableId)}
+              >
+                {copy.previewTargetTable}
+              </button>
             </label>
           </>
         ) : (
@@ -212,6 +232,14 @@ export function TaskControlPanel({
             >
               {tableOptions}
             </select>
+            <button
+              className="table-preview-trigger"
+              type="button"
+              onClick={() => onPreviewTable?.(queryTableId)}
+              disabled={!canPreview(queryTableId)}
+            >
+              {copy.previewQueryTable}
+            </button>
           </label>
         )}
       </div>

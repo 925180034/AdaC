@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { TableSummary, TaskDetail } from '../tasks/taskTypes'
 import { ResultWorkspace } from './ResultWorkspace'
 
@@ -194,5 +194,36 @@ describe('ResultWorkspace', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Graph' }))
     expect(screen.getByRole('region', { name: 'Result graph' })).toBeInTheDocument()
+  })
+
+  it('previews a ranking candidate table', async () => {
+    const user = userEvent.setup()
+    const onPreviewTable = vi.fn()
+    render(<ResultWorkspace task={task} tables={tables} onPreviewTable={onPreviewTable} />)
+
+    await user.click(screen.getByRole('tab', { name: 'Ranking' }))
+    await user.click(screen.getByRole('button', { name: 'Preview subsidies' }))
+
+    expect(onPreviewTable).toHaveBeenCalledTimes(1)
+    expect(onPreviewTable).toHaveBeenCalledWith('candidate_orders')
+  })
+
+  it('previews mapping query and target tables', async () => {
+    const user = userEvent.setup()
+    const onPreviewTable = vi.fn()
+    render(
+      <ResultWorkspace
+        task={{ ...task, target_table_id: 'candidate_orders' }}
+        tables={tables}
+        onPreviewTable={onPreviewTable}
+      />,
+    )
+
+    await user.click(screen.getByRole('tab', { name: 'Mappings' }))
+    await user.click(screen.getByRole('button', { name: 'Preview query table' }))
+    await user.click(screen.getByRole('button', { name: 'Preview target table' }))
+
+    expect(onPreviewTable).toHaveBeenCalledWith('query_customers')
+    expect(onPreviewTable).toHaveBeenCalledWith('candidate_orders')
   })
 })

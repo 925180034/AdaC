@@ -12,6 +12,7 @@ import type { Language } from './uiPreferences'
 type ResultWorkspaceProps = {
   task: TaskDetail | null
   tables?: TableSummary[]
+  onPreviewTable?: (tableId: string) => void
   language?: Language
 }
 
@@ -59,7 +60,7 @@ function runtimeSeconds(task: TaskDetail): number | null {
   return Math.max(0, Math.round((finished - submitted) / 1000))
 }
 
-export function ResultWorkspace({ task, tables = [], language = 'en' }: ResultWorkspaceProps) {
+export function ResultWorkspace({ task, tables = [], onPreviewTable, language = 'en' }: ResultWorkspaceProps) {
   const [activeView, setActiveView] = useState<ResultView>('graph')
   const copy = getWorkspaceCopy(language).results
   const tableNames = tableNameLookup(tables)
@@ -162,7 +163,17 @@ export function ResultWorkspace({ task, tables = [], language = 'en' }: ResultWo
               <article className="ranking-row" key={`${row.rank}-${row.candidate_table}`}>
                 <div className="ranking-row__rank">#{row.rank}</div>
                 <div className="ranking-row__body">
-                  <h4>{tableNames.get(row.candidate_table) ?? row.candidate_table}</h4>
+                  <h4>
+                    <button
+                      className="table-preview-trigger"
+                      type="button"
+                      aria-label={`Preview ${tableNames.get(row.candidate_table) ?? row.candidate_table}`}
+                      onClick={() => onPreviewTable?.(row.candidate_table)}
+                      disabled={!onPreviewTable}
+                    >
+                      {tableNames.get(row.candidate_table) ?? row.candidate_table}
+                    </button>
+                  </h4>
                   <p>{formatLayerScores(row.layer_scores, copy.noLayerScores)}</p>
                 </div>
                 <ScoreBar value={row.score} label={copy.candidateScore(row.rank)} tone="green" />
@@ -177,6 +188,32 @@ export function ResultWorkspace({ task, tables = [], language = 'en' }: ResultWo
           <div className="section-title-row">
             <h3 id="mappings-title">{copy.mappingsTitle}</h3>
             <span>{copy.alignments(task.mappings.length)}</span>
+          </div>
+          <div className="mapping-preview-actions">
+            {task.query_table_id ? (
+              <button
+                className="table-preview-trigger table-preview-trigger--compact"
+                type="button"
+                onClick={() => {
+                  if (task.query_table_id) onPreviewTable?.(task.query_table_id)
+                }}
+                disabled={!onPreviewTable}
+              >
+                {copy.previewQueryTable}
+              </button>
+            ) : null}
+            {task.target_table_id ? (
+              <button
+                className="table-preview-trigger table-preview-trigger--compact"
+                type="button"
+                onClick={() => {
+                  if (task.target_table_id) onPreviewTable?.(task.target_table_id)
+                }}
+                disabled={!onPreviewTable}
+              >
+                {copy.previewTargetTable}
+              </button>
+            ) : null}
           </div>
           <div className="mapping-grid">
             {task.mappings.map((mapping) => (

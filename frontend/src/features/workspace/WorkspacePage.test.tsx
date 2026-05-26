@@ -6,8 +6,8 @@ import { createDataset, listDatasets, uploadDatasetTables } from '../../api/data
 import type { DatasetSummary, ListDatasetsResponse } from '../../api/datasets'
 import type { LlmRuntimeInfo } from '../../api/runtime'
 import { getLlmRuntime, updateLlmRuntime } from '../../api/runtime'
-import type { ListTablesResponse } from '../../api/tables'
-import { listTables } from '../../api/tables'
+import type { ListTablesResponse, TablePreviewResponse } from '../../api/tables'
+import { getTablePreview, listTables } from '../../api/tables'
 import { cancelTask, getTask, startDiscover, startIntegrate } from '../../api/tasks'
 import { useTaskStore } from '../tasks/taskStore'
 import type { TaskDetail } from '../tasks/taskTypes'
@@ -25,6 +25,7 @@ vi.mock('../../api/runtime', () => ({
 }))
 
 vi.mock('../../api/tables', () => ({
+  getTablePreview: vi.fn(),
   listTables: vi.fn(),
 }))
 
@@ -79,21 +80,28 @@ const benchmarkDataset: DatasetSummary = {
 const datasetsResponse: ListDatasetsResponse = { items: [defaultDataset] }
 const benchmarkDatasetsResponse: ListDatasetsResponse = { items: [benchmarkDataset] }
 
+const defaultTable = {
+  table_id: 'default_table',
+  tenant_id: 'default',
+  dataset_id: 'dataset-default',
+  table_name: 'Default Tenant Table',
+  row_count: 10,
+  col_count: 3,
+  status: 'READY' as const,
+}
+
 const tablesResponse: ListTablesResponse = {
   total: 1,
   offset: 0,
   limit: 200,
-  items: [
-    {
-      table_id: 'default_table',
-      tenant_id: 'default',
-      dataset_id: 'dataset-default',
-      table_name: 'Default Tenant Table',
-      row_count: 10,
-      col_count: 3,
-      status: 'READY',
-    },
-  ],
+  items: [defaultTable],
+}
+
+const defaultTablePreview: TablePreviewResponse = {
+  table: defaultTable,
+  columns: ['id', 'name', 'score'],
+  sample_rows: [{ id: 1, name: 'Ada', score: 0.98 }],
+  sample_limit: 20,
 }
 
 const secondTablesResponse: ListTablesResponse = {
@@ -217,6 +225,7 @@ describe('WorkspacePage', () => {
     vi.mocked(listTables).mockImplementation((tenantId) =>
       Promise.resolve(tenantId === 'benchmark' ? benchmarkTablesResponse : tablesResponse),
     )
+    vi.mocked(getTablePreview).mockResolvedValue(defaultTablePreview)
     vi.mocked(getLlmRuntime).mockResolvedValue(localRuntime)
     vi.mocked(updateLlmRuntime).mockResolvedValue(apiRuntime)
     vi.mocked(getTask).mockResolvedValue(runningTask)
@@ -411,6 +420,36 @@ describe('WorkspacePage', () => {
       },
       'dataset-second',
     )
+  })
+
+  it('opens a table preview from task control and loads modal content', async () => {
+    const user = userEvent.setup()
+    renderWorkspace()
+
+    expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Preview query table' }))
+
+    expect(await screen.findByRole('dialog', { name: 'Table preview' })).toHaveTextContent('Default Tenant Table')
+    expect(screen.getByRole('table', { name: 'Sample rows' })).toHaveTextContent('Ada')
+    expect(getTablePreview).toHaveBeenCalledWith('default', 'default_table', 'dataset-default')
+  })
+
+  it('closes an open table preview when switching Datasets', async () => {
+    const user = userEvent.setup()
+    vi.mocked(listDatasets).mockResolvedValue({ items: [defaultDataset, secondDataset] })
+    vi.mocked(listTables).mockImplementation((_tenantId, datasetId) => {
+      if (datasetId === 'dataset-second') return Promise.resolve(secondTablesResponse)
+      return Promise.resolve(tablesResponse)
+    })
+    renderWorkspace()
+
+    expect(await screen.findByText('Default Tenant Table · 10 × 3')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Preview query table' }))
+    expect(await screen.findByRole('dialog', { name: 'Table preview' })).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText('Dataset'), 'dataset-second')
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Table preview' })).not.toBeInTheDocument())
   })
 
   it('uploads files from a dropped folder into the selected Dataset', async () => {

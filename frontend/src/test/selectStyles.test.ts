@@ -34,4 +34,14 @@ describe('theme contrast styling', () => {
     expect(css).toMatch(/\.run-button\s*{[^}]*background:\s*var\(--run-button-bg\);/s)
     expect(css).toMatch(/\.run-button\s*{[^}]*color:\s*var\(--run-button-fg\);/s)
   })
+
+  it('keeps table preview triggers as warm pill controls', () => {
+    const css = readFileSync(resolve(__dirname, '../styles/globals.css'), 'utf8')
+
+    expect(css).toMatch(/\.table-preview-trigger\s*{[^}]*align-self:\s*flex-start;/s)
+    expect(css).toMatch(/\.table-preview-trigger\s*{[^}]*border-radius:\s*999px;/s)
+    expect(css).toMatch(/\.table-preview-trigger\s*{[^}]*box-shadow:\s*0 8px 18px rgba\(var\(--accent-rgb\), 0\.14\)/s)
+    expect(css).toMatch(/\.table-preview-trigger::after\s*{[^}]*content:\s*'↗';/s)
+    expect(css).not.toMatch(/table-preview-modal__scroll-hint/)
+  })
 })

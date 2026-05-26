@@ -83,6 +83,9 @@ export type WorkspaceCopy = {
     queryTable: string
     sourceTable: string
     targetTable: string
+    previewQueryTable: string
+    previewSourceTable: string
+    previewTargetTable: string
     run: string
     running: string
     cancel: string
@@ -112,6 +115,8 @@ export type WorkspaceCopy = {
     candidateScore: (rank: number) => string
     mappingsAria: string
     mappingsTitle: string
+    previewQueryTable: string
+    previewTargetTable: string
     alignments: (count: number) => string
     matched: string
     rejected: string
@@ -120,6 +125,19 @@ export type WorkspaceCopy = {
     mappingConfidence: string
     noReasoning: string
     rawTitle: string
+  }
+  tablePreview: {
+    title: string
+    close: string
+    loading: string
+    loadError: string
+    rows: (count: number | null | undefined) => string
+    columns: (count: number | null | undefined) => string
+    dataset: string
+    status: string
+    sampleRows: string
+    noRows: string
+    nullValue: string
   }
   trace: {
     kicker: string
@@ -225,6 +243,9 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       queryTable: 'Query table',
       sourceTable: 'Source table',
       targetTable: 'Target table',
+      previewQueryTable: 'Preview query table',
+      previewSourceTable: 'Preview source table',
+      previewTargetTable: 'Preview target table',
       run: 'Run AdaCascade',
       running: 'Running AdaCascade…',
       cancel: 'Cancel task',
@@ -255,6 +276,8 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       candidateScore: (rank) => `Candidate ${rank} score`,
       mappingsAria: 'Column mapping results',
       mappingsTitle: 'Mappings',
+      previewQueryTable: 'Preview query table',
+      previewTargetTable: 'Preview target table',
       alignments: (count) => `${count} alignments`,
       matched: 'Matched',
       rejected: 'Rejected',
@@ -263,6 +286,19 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       mappingConfidence: 'Mapping confidence',
       noReasoning: 'No reasoning supplied.',
       rawTitle: 'Raw JSON',
+    },
+    tablePreview: {
+      title: 'Table preview',
+      close: 'Close preview',
+      loading: 'Loading table preview…',
+      loadError: 'Unable to load table preview.',
+      rows: (count) => `${count ?? '—'} rows`,
+      columns: (count) => `${count ?? '—'} columns`,
+      dataset: 'Dataset',
+      status: 'Status',
+      sampleRows: 'Sample rows',
+      noRows: 'No sample rows available.',
+      nullValue: '—',
     },
     trace: {
       kicker: 'Agent pipeline',
@@ -399,6 +435,9 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       queryTable: '查询表',
       sourceTable: '源表',
       targetTable: '目标表',
+      previewQueryTable: '预览查询表',
+      previewSourceTable: '预览源表',
+      previewTargetTable: '预览目标表',
       run: '运行 AdaCascade',
       running: 'AdaCascade 运行中…',
       cancel: '取消任务',
@@ -428,6 +467,8 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       candidateScore: (rank) => `候选 ${rank} 分数`,
       mappingsAria: '列映射结果',
       mappingsTitle: '映射',
+      previewQueryTable: '预览查询表',
+      previewTargetTable: '预览目标表',
       alignments: (count) => `${count} 个对齐`,
       matched: '已匹配',
       rejected: '已拒绝',
@@ -436,6 +477,19 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       mappingConfidence: '映射置信度',
       noReasoning: '未提供理由。',
       rawTitle: '原始 JSON',
+    },
+    tablePreview: {
+      title: '表格预览',
+      close: '关闭预览',
+      loading: '正在加载表格预览…',
+      loadError: '无法加载表格预览。',
+      rows: (count) => `${count ?? '—'} 行`,
+      columns: (count) => `${count ?? '—'} 列`,
+      dataset: '数据集',
+      status: '状态',
+      sampleRows: '样例数据',
+      noRows: '暂无样例数据。',
+      nullValue: '—',
     },
     trace: {
       kicker: '智能体流水线',
