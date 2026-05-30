@@ -199,6 +199,12 @@ class LocalLlmRuntimeManager:
             await self._stop_managed_locked()
             return True
 
+    async def idle_monitor_loop(self) -> None:
+        """Periodically stop managed vLLM after the configured idle timeout."""
+        while True:
+            await self._sleep(min(30.0, max(1.0, self.health_poll_seconds)))
+            await self.stop_if_idle()
+
     @contextmanager
     def track_request(self, backend: str) -> Iterator[None]:
         """Track local LLM request activity for idle shutdown safety."""

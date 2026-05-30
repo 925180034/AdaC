@@ -15,6 +15,8 @@ class FakeLocalRuntimeManager:
     def __init__(self) -> None:
         self.ensure_ready_calls = 0
         self.stop_managed_calls = 0
+        self.idle_monitor_started = False
+        self.idle_monitor_cancelled = False
         self.raise_on_ensure: Exception | None = None
         self.snapshot_payload: dict[str, object] = {
             "local_status": "stopped",
@@ -50,6 +52,14 @@ class FakeLocalRuntimeManager:
         }
         return self.snapshot()
 
+    async def idle_monitor_loop(self) -> None:
+        self.idle_monitor_started = True
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.idle_monitor_cancelled = True
+            raise
+
 
 @pytest.fixture()
 def client() -> TestClient:
@@ -57,7 +67,7 @@ def client() -> TestClient:
     raw_qdrant_mock = AsyncMock()
     fake_manager = FakeLocalRuntimeManager()
     with (
-        patch("qdrant_client.AsyncQdrantClient", return_value=raw_qdrant_mock),
+        patch("adacascade.api.app.AsyncQdrantClient", return_value=raw_qdrant_mock),
         patch("adacascade.api.app.AdacQdrantClient", return_value=mock_qdrant),
         patch(
             "adacascade.api.app.reconcile_orphan_ingests", new=AsyncMock(return_value=0)
@@ -80,6 +90,69 @@ def test_runtime_llm_requires_auth(client: TestClient) -> None:
     resp = client.get("/runtime/llm")
 
     assert resp.status_code == 401
+
+
+def test_runtime_lifespan_starts_idle_monitor(client: TestClient) -> None:
+    manager = client.app.state.fake_local_runtime_manager
+
+    assert manager.idle_monitor_started is True
+
+
+def test_runtime_lifespan_cancels_idle_monitor_and_stops_manager() -> None:
+    mock_qdrant = MagicMock()
+    raw_qdrant_mock = AsyncMock()
+    fake_manager = FakeLocalRuntimeManager()
+    with (
+        patch("adacascade.api.app.AsyncQdrantClient", return_value=raw_qdrant_mock),
+        patch("adacascade.api.app.AdacQdrantClient", return_value=mock_qdrant),
+        patch(
+            "adacascade.api.app.reconcile_orphan_ingests", new=AsyncMock(return_value=0)
+        ),
+        patch("adacascade.local_llm_runtime.get_manager", return_value=fake_manager),
+    ):
+        from adacascade import llm_runtime
+        from adacascade.api.app import app
+
+        llm_runtime.set_active_backend("local")
+        try:
+            with TestClient(app, raise_server_exceptions=False):
+                pass
+        finally:
+            llm_runtime.set_active_backend("local")
+
+    assert fake_manager.idle_monitor_cancelled is True
+    assert fake_manager.stop_managed_calls == 1
+    raw_qdrant_mock.close.assert_awaited_once()
+
+
+def test_runtime_lifespan_cleans_up_when_reconcile_startup_fails() -> None:
+    mock_qdrant = MagicMock()
+    raw_qdrant_mock = AsyncMock()
+    fake_manager = FakeLocalRuntimeManager()
+    startup_error = RuntimeError("reconcile failed")
+    with (
+        patch("adacascade.api.app.AsyncQdrantClient", return_value=raw_qdrant_mock),
+        patch("adacascade.api.app.AdacQdrantClient", return_value=mock_qdrant),
+        patch(
+            "adacascade.api.app.reconcile_orphan_ingests",
+            new=AsyncMock(side_effect=startup_error),
+        ),
+        patch("adacascade.local_llm_runtime.get_manager", return_value=fake_manager),
+    ):
+        from adacascade import llm_runtime
+        from adacascade.api.app import app
+
+        llm_runtime.set_active_backend("local")
+        try:
+            with pytest.raises(RuntimeError, match="reconcile failed"):
+                with TestClient(app, raise_server_exceptions=False):
+                    pass
+        finally:
+            llm_runtime.set_active_backend("local")
+
+    assert fake_manager.idle_monitor_cancelled is True
+    assert fake_manager.stop_managed_calls == 1
+    raw_qdrant_mock.close.assert_awaited_once()
 
 
 def test_runtime_llm_get_returns_safe_metadata(client: TestClient) -> None:
