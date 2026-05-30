@@ -20,6 +20,7 @@ def _load_yaml() -> dict[str, Any]:
 
 
 _yaml = _load_yaml()
+_vllm = _yaml["vllm"]
 
 
 class Settings(BaseSettings):
@@ -52,6 +53,12 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = "EMPTY"
     LLM_MODEL: str = "qwen3.5:9b"
     LLM_TIMEOUT: int = 30
+    VLLM_IDLE_TIMEOUT_SECONDS: int = Field(default=_vllm["idle_timeout_seconds"])
+    VLLM_STARTUP_TIMEOUT_SECONDS: int = Field(default=_vllm["startup_timeout_seconds"])
+    VLLM_SHUTDOWN_GRACE_SECONDS: int = Field(default=_vllm["shutdown_grace_seconds"])
+    VLLM_HEALTH_POLL_SECONDS: float = Field(default=_vllm["health_poll_seconds"])
+    VLLM_LOG_PATH: str = Field(default=_vllm["log_path"])
+    VLLM_START_COMMAND: str = Field(default=_vllm["start_command"])
 
     # ── SBERT ─────────────────────────────────────────────────────────────
     SBERT_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"

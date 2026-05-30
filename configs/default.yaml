@@ -100,6 +100,15 @@ llm:
   concurrency:     4            # 默认保守并发；Demo fast 可覆盖为压测最佳值
   cache_ttl_h:     168          # L3 LLM 结果缓存 7 天
 
+# ============ vLLM Runtime ============
+vllm:
+  idle_timeout_seconds: 900
+  startup_timeout_seconds: 240
+  shutdown_grace_seconds: 10
+  health_poll_seconds: 1.0
+  log_path: "./data/logs/vllm.log"
+  start_command: "bash scripts/start_llm.sh"
+
 # ============ Planner ============
 planner:
   # JOIN 默认 plan（论文 §3.6.4）
