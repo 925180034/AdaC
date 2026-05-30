@@ -13,7 +13,7 @@ GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.55}"
 MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
 GUIDED_DECODING_BACKEND="${VLLM_GUIDED_DECODING_BACKEND:-xgrammar}"
 
-vllm serve "$MODEL_PATH" \
+exec vllm serve "$MODEL_PATH" \
     --served-model-name qwen3.5:9b \
     --quantization awq \
     --max-model-len "$MAX_MODEL_LEN" \
