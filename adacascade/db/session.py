@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Generator
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -13,9 +13,28 @@ from sqlalchemy.orm import Session, sessionmaker
 _SessionFactory: sessionmaker[Session] | None = None
 
 
-def _copy_table_registry_without_legacy_unique_constraint(connection: Connection) -> None:
+def _configure_sqlite_pragmas(engine: Engine, database_url: str) -> None:
+    """Configure SQLite for deployment write contention tolerance."""
+    if not database_url.startswith("sqlite"):
+        return
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, _connection_record) -> None:  # type: ignore[no-untyped-def]
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+        finally:
+            cursor.close()
+
+
+def _copy_table_registry_without_legacy_unique_constraint(
+    connection: Connection,
+) -> None:
     """Rebuild legacy SQLite table_registry without tenant-wide content uniqueness."""
-    connection.execute(text("ALTER TABLE table_registry RENAME TO table_registry_legacy"))
+    connection.execute(
+        text("ALTER TABLE table_registry RENAME TO table_registry_legacy")
+    )
     connection.execute(
         text(
             """
@@ -69,24 +88,42 @@ def _ensure_sqlite_schema_compatibility(engine: Engine) -> None:
     if "table_registry" not in inspector.get_table_names():
         return
 
-    table_columns = {column["name"] for column in inspector.get_columns("table_registry")}
+    table_columns = {
+        column["name"] for column in inspector.get_columns("table_registry")
+    }
     with engine.begin() as connection:
         if "dataset_id" not in table_columns:
-            connection.execute(text("ALTER TABLE table_registry ADD COLUMN dataset_id VARCHAR"))
+            connection.execute(
+                text("ALTER TABLE table_registry ADD COLUMN dataset_id VARCHAR")
+            )
             inspector = inspect(engine)
-        sqlite_indexes = connection.execute(text("PRAGMA index_list('table_registry')")).fetchall()
+        sqlite_indexes = connection.execute(
+            text("PRAGMA index_list('table_registry')")
+        ).fetchall()
         indexed_columns = [
-            [column[2] for column in connection.execute(text(f"PRAGMA index_info('{index[1]}')")).fetchall()]
+            [
+                column[2]
+                for column in connection.execute(
+                    text(f"PRAGMA index_info('{index[1]}')")
+                ).fetchall()
+            ]
             for index in sqlite_indexes
         ]
         has_legacy_unique_constraint = ["tenant_id", "content_hash"] in indexed_columns
         if has_legacy_unique_constraint:
             _copy_table_registry_without_legacy_unique_constraint(connection)
             inspector = inspect(engine)
-        existing_indexes = {index[1] for index in connection.execute(text("PRAGMA index_list('table_registry')")).fetchall()}
+        existing_indexes = {
+            index[1]
+            for index in connection.execute(
+                text("PRAGMA index_list('table_registry')")
+            ).fetchall()
+        }
         if "ix_tr_tenant_status" not in existing_indexes:
             connection.execute(
-                text("CREATE INDEX ix_tr_tenant_status ON table_registry (tenant_id, status)")
+                text(
+                    "CREATE INDEX ix_tr_tenant_status ON table_registry (tenant_id, status)"
+                )
             )
         if "ix_tr_dataset_content" not in existing_indexes:
             connection.execute(
@@ -109,6 +146,7 @@ def init_db(database_url: str) -> None:
     from adacascade.db.models import Base
 
     engine = create_engine(database_url)
+    _configure_sqlite_pragmas(engine, database_url)
     Base.metadata.create_all(engine)
     _ensure_sqlite_schema_compatibility(engine)
     _SessionFactory = sessionmaker(bind=engine, autocommit=False, autoflush=False)

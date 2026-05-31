@@ -118,7 +118,7 @@ def _claim_terminal_write(
     status: str,
     error_message: str | None = None,
 ) -> IntegrationTask | None:
-    values: dict[str, Any] = {
+    values: dict[Any, Any] = {
         "status": status,
         "finished_at": datetime.now(timezone.utc),
     }
@@ -159,7 +159,9 @@ def _output_size(task_type: str, state: dict[str, Any]) -> int:
     return len(value) if isinstance(value, list) else 0
 
 
-def _operation_options(options: dict[str, Any], user_hint: str | None) -> dict[str, Any]:
+def _operation_options(
+    options: dict[str, Any], user_hint: str | None
+) -> dict[str, Any]:
     merged = dict(options)
     if user_hint:
         merged["user_hint"] = user_hint
@@ -258,12 +260,15 @@ async def _execute_task_background(
         await emit_task_event(task_id, {"type": "task_completed", "status": "SUCCESS"})
     except Exception as exc:
         with get_session() as db:
-            if _claim_terminal_write(
-                db,
-                task_id=task_id,
-                status="FAILED",
-                error_message=str(exc),
-            ) is None:
+            if (
+                _claim_terminal_write(
+                    db,
+                    task_id=task_id,
+                    status="FAILED",
+                    error_message=str(exc),
+                )
+                is None
+            ):
                 return
         await emit_task_event(
             task_id,

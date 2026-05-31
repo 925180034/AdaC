@@ -2,7 +2,8 @@ FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    HF_ENDPOINT=https://hf-mirror.com
 
 WORKDIR /app
 RUN apt-get update \
@@ -11,6 +12,7 @@ RUN apt-get update \
 
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
 
 COPY adacascade ./adacascade
 COPY configs ./configs

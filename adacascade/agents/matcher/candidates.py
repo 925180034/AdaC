@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, NotRequired, TypedDict
+from typing import Any, TypedDict
+
+from typing_extensions import NotRequired
 
 from adacascade.agents.matcher.mixed import Scenario, mixed_score
 from adacascade.agents.matcher.stat_sim import _get

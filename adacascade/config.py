@@ -86,7 +86,10 @@ class Settings(BaseSettings):
     API_KEY: str = "dev-local-token"
     AUTH_ENABLED: bool = True
     METRICS_ENABLED: bool = True
-    CORS_ALLOW_ORIGINS: str = "http://localhost:13000,http://localhost:5173"
+    CORS_ALLOW_ORIGINS: str = (
+        "http://localhost:13000,http://localhost:5173,"
+        "https://u307207-94cd-0c29b003.nmb1.seetacloud.com:8443"
+    )
     DOCS_ENABLED: bool = True
 
     # ── 上传资源限制 ──────────────────────────────────────────────────────
@@ -99,7 +102,11 @@ class Settings(BaseSettings):
     # ── 算法超参（直接从 YAML 读，供各 Agent 访问） ───────────────────────
     @property
     def cors_allow_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.CORS_ALLOW_ORIGINS.split(",") if origin.strip()]
+        return [
+            origin.strip()
+            for origin in self.CORS_ALLOW_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
     @property
     def tlcf_cfg(self) -> dict[str, Any]:

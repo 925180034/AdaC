@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 
 import pytest
+from sqlalchemy import text
 
 
 def test_get_session_raises_before_init() -> None:
@@ -33,6 +34,21 @@ def test_get_session_happy_path() -> None:
     mod.init_db("sqlite:///:memory:")
     with mod.get_session() as db:
         assert db is not None
+
+
+def test_init_db_configures_sqlite_wal_and_busy_timeout(tmp_path) -> None:
+    """SQLite deployments should wait briefly on write contention and use WAL."""
+    import adacascade.db.session as mod
+
+    db_path = tmp_path / "metadata.db"
+    mod.init_db(f"sqlite:///{db_path}")
+
+    with mod.get_session() as db:
+        journal_mode = db.execute(text("PRAGMA journal_mode")).scalar_one()
+        busy_timeout = db.execute(text("PRAGMA busy_timeout")).scalar_one()
+
+    assert str(journal_mode).lower() == "wal"
+    assert busy_timeout == 5000
 
 
 def test_init_db_removes_legacy_tenant_content_unique_constraint(tmp_path) -> None:
@@ -70,7 +86,12 @@ def test_init_db_removes_legacy_tenant_content_unique_constraint(tmp_path) -> No
     try:
         indexes = connection.execute("PRAGMA index_list('table_registry')").fetchall()
         indexed_columns = [
-            [column[2] for column in connection.execute(f"PRAGMA index_info('{index[1]}')").fetchall()]
+            [
+                column[2]
+                for column in connection.execute(
+                    f"PRAGMA index_info('{index[1]}')"
+                ).fetchall()
+            ]
             for index in indexes
         ]
     finally:

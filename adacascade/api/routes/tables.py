@@ -105,6 +105,7 @@ async def upload_table(
     table_name: str = Form(...),
     source_system: str = Form(default="upload"),
     tenant_id: str = Form(default=settings.DEFAULT_TENANT_ID),
+    dataset_id: str | None = Form(default=None),
     uploaded_by: str | None = Form(default=None),
     col_descriptions: str | None = Form(default=None),  # JSON string
     db: Session = Depends(get_db),
@@ -133,10 +134,12 @@ async def upload_table(
         table_name=table_name,
         source_system=source_system,
         tenant_id=active_tenant_id,
+        dataset_id=dataset_id,
         uploaded_by=uploaded_by,
         col_descriptions=descriptions,
         db=db,
     )
+    db.commit()
 
     if status == "INGESTED":
         qdrant = request.app.state.qdrant
