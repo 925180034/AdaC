@@ -17,6 +17,7 @@ class _FakeCompletions:
         self.kwargs: dict[str, Any] | None = None
 
     def create(self, **kwargs: Any) -> object:
+        self.manager.active_local_count_during_create = self.manager.active_local_count
         self.manager.events.append("create")
         self.kwargs = kwargs
         return object()
@@ -38,6 +39,7 @@ class _FakeManager:
         self.events: list[str] = []
         self.active_local_count = 0
         self.max_active_local_count = 0
+        self.active_local_count_during_create = 0
         self.ensure_ready_sync_calls = 0
         self.ensure_ready_calls = 0
 
@@ -101,7 +103,13 @@ def test_chat_tracks_local_backend_requests(monkeypatch: pytest.MonkeyPatch) -> 
     assert manager.backends == ["local"]
     assert manager.max_active_local_count == 1
     assert manager.active_local_count == 0
-    assert manager.events == ["ensure_ready_sync", "enter:local", "create", "exit:local"]
+    assert manager.active_local_count_during_create == 1
+    assert manager.events == [
+        "enter:local",
+        "ensure_ready_sync",
+        "create",
+        "exit:local",
+    ]
 
 
 def test_chat_tracks_api_backend_without_local_activity(
@@ -118,7 +126,7 @@ def test_chat_tracks_api_backend_without_local_activity(
     assert manager.events == ["enter:api", "create", "exit:api"]
 
 
-def test_chat_ensures_local_runtime_ready_before_create(
+def test_chat_tracks_local_request_before_readiness(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manager = _FakeManager()
@@ -128,7 +136,13 @@ def test_chat_ensures_local_runtime_ready_before_create(
 
     assert manager.ensure_ready_sync_calls == 1
     assert manager.ensure_ready_calls == 0
-    assert manager.events.index("ensure_ready_sync") < manager.events.index("create")
+    assert manager.events == [
+        "enter:local",
+        "ensure_ready_sync",
+        "create",
+        "exit:local",
+    ]
+    assert manager.active_local_count_during_create == 1
 
 
 @pytest.mark.anyio
@@ -145,4 +159,5 @@ async def test_chat_async_ensures_local_runtime_ready_before_create(
     assert manager.backends == ["local"]
     assert manager.max_active_local_count == 1
     assert manager.active_local_count == 0
-    assert manager.events == ["ensure_ready", "enter:local", "create", "exit:local"]
+    assert manager.active_local_count_during_create == 1
+    assert manager.events == ["enter:local", "ensure_ready", "create", "exit:local"]

@@ -16,6 +16,7 @@ from openai.types.chat import ChatCompletion
 from adacascade import llm_runtime, local_llm_runtime
 from adacascade.config import settings
 
+
 def _client_for_config(config: llm_runtime.LlmRequestConfig) -> OpenAI:
     """Create an OpenAI-compatible client for an immutable request config.
 
@@ -122,10 +123,9 @@ def chat(
     )
 
     manager = local_llm_runtime.get_manager()
-    if runtime_config.backend == "local":
-        manager.ensure_ready_sync()
-
     with manager.track_request(runtime_config.backend):
+        if runtime_config.backend == "local":
+            manager.ensure_ready_sync()
         resp = client.chat.completions.create(**request_kwargs)
     return cast(ChatCompletion, resp)
 
@@ -169,12 +169,12 @@ async def chat_async(
     )
 
     manager = local_llm_runtime.get_manager()
-    if runtime_config.backend == "local":
-        await manager.ensure_ready()
+    with manager.track_request(runtime_config.backend):
+        if runtime_config.backend == "local":
+            await manager.ensure_ready()
 
-    def _create() -> ChatCompletion:
-        with manager.track_request(runtime_config.backend):
+        def _create() -> ChatCompletion:
             resp = client.chat.completions.create(**request_kwargs)
-        return cast(ChatCompletion, resp)
+            return cast(ChatCompletion, resp)
 
-    return await asyncio.to_thread(_create)
+        return await asyncio.to_thread(_create)
