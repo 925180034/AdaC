@@ -670,23 +670,30 @@ adacascade/
 
 ### 8.2 `requirements.txt` 关键版本
 ```
-fastapi>=0.115
-uvicorn[standard]>=0.30
-langgraph>=1.1.0
-langgraph-checkpoint-sqlite>=2.0.6
-langchain-core>=0.3
-openai>=1.40
-sentence-transformers>=3.0
-torch>=2.2                      # SBERT GPU 推理
-qdrant-client>=1.10
-pandas>=2.2
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+langgraph>=1.1.8,<1.3
+langgraph-checkpoint-sqlite>=3.0.1,<4.0
+langchain-core>=1.0,<2.0
+openai>=1.52,<3.0
+vllm==0.8.5
+transformers==4.51.3
+torch==2.6.0
+torchvision==0.21.0
+torchaudio==2.6.0
+sentence-transformers>=3.0,<6.0
+qdrant-client>=1.10,<2.0
+pandas>=2.2,<3.0
 pyarrow>=16.0
-sqlalchemy>=2.0
-pydantic>=2.8
-pydantic-settings>=2.4
+sqlalchemy>=2.0,<3.0
+pydantic>=2.9,<3.0
+pydantic-settings>=2.4,<3.0
+numpy>=1.26,<2.3
 structlog>=24.1
 prometheus-fastapi-instrumentator>=7.0
 ```
+
+国内网络 Docker 构建默认使用清华 PyPI 镜像、`hf-mirror.com` 下载 HuggingFace/SBERT 模型、npmmirror 下载前端 npm 包，并通过 `HTTP_PROXY` / `HTTPS_PROXY` build args 支持代理；apt 源暂不替换。Docker Hub 镜像拉取由 Docker daemon 镜像加速控制，仓库同时提供 `PYTORCH_BASE_IMAGE`、`NODE_BASE_IMAGE`、`NGINX_BASE_IMAGE`、`QDRANT_IMAGE` 变量用于替换为内网/镜像仓库地址。
 
 ### 8.3 启动四步
 ```bash

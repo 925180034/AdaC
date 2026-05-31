@@ -1,6 +1,6 @@
 services:
   qdrant:
-    image: qdrant/qdrant:v1.17.1
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.17.1}
     restart: unless-stopped
     volumes:
       - ${ADACASCADE_RUNTIME_DIR:-/data/xiaoyunhao/adacascade/runtime}/qdrant:/qdrant/storage
@@ -11,6 +11,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
+      args:
+        PYTORCH_BASE_IMAGE: ${PYTORCH_BASE_IMAGE:-pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1}
+        http_proxy: ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
+        no_proxy: ${no_proxy:-localhost,127.0.0.1}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}
+        HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
     restart: unless-stopped
     env_file:
       - .env
@@ -20,6 +31,15 @@ services:
       DATABASE_URL: sqlite:////app/data/metadata.db
       CKPT_PATH: /app/data/ckpt.db
       ARTIFACTS_DIR: /app/data/artifacts
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+      PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,qdrant}
+      http_proxy: ${http_proxy:-}
+      https_proxy: ${https_proxy:-}
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,qdrant}
       NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-0}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -36,6 +56,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
+        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-node:20-alpine}
+        NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-nginx:1.27-alpine}
+        NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
         VITE_API_BASE_URL: /api
         VITE_API_KEY: ${API_KEY:-change-me}
     restart: unless-stopped

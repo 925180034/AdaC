@@ -1,9 +1,22 @@
-FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+ARG PYTORCH_BASE_IMAGE=pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+FROM ${PYTORCH_BASE_IMAGE}
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY=localhost,127.0.0.1
+ARG http_proxy
+ARG https_proxy
+ARG no_proxy=localhost,127.0.0.1
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
+ARG HF_ENDPOINT=https://hf-mirror.com
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    HF_ENDPOINT=https://hf-mirror.com
+    PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
+    HF_ENDPOINT=${HF_ENDPOINT}
 
 WORKDIR /app
 RUN apt-get update \
