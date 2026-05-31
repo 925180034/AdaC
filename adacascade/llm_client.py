@@ -6,15 +6,15 @@ Switch backends by changing LLM_BASE_URL in .env — zero business logic changes
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, cast
 from urllib.parse import urlparse
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
 
-from adacascade import llm_runtime
+from adacascade import llm_runtime, local_llm_runtime
 from adacascade.config import settings
-
 
 def _client_for_config(config: llm_runtime.LlmRequestConfig) -> OpenAI:
     """Create an OpenAI-compatible client for an immutable request config.
@@ -49,33 +49,18 @@ def _adapt_response_format(
     return response_format
 
 
-def chat(
+def _build_request_kwargs(
     messages: list[dict[str, str]],
+    runtime_config: llm_runtime.LlmRequestConfig,
     *,
-    model: str | None = None,
-    temperature: float = 0.0,
-    response_format: dict[str, Any] | None = None,
-    max_tokens: int | None = None,
-    enable_thinking: bool = False,
-    **kwargs: Any,
-) -> ChatCompletion:
-    """Send a chat completion request.
-
-    Args:
-        messages: OpenAI-format message list.
-        model: Override the default LLM model.
-        temperature: Sampling temperature (0.0 for deterministic).
-        response_format: JSON Schema constrained decoding config.
-        max_tokens: Max output tokens.
-        enable_thinking: Qwen3-specific thinking mode (always False for
-            classification tasks per CLAUDE.md §9 pitfalls).
-        **kwargs: Extra parameters forwarded to the API.
-
-    Returns:
-        Raw ChatCompletion response.
-    """
-    runtime_config = llm_runtime.get_request_config()
-    client = _client_for_config(runtime_config)
+    model: str | None,
+    temperature: float,
+    response_format: dict[str, Any] | None,
+    max_tokens: int | None,
+    enable_thinking: bool,
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    """Build OpenAI-compatible chat completion request arguments."""
     extra_body: dict[str, Any] = kwargs.pop("extra_body", {})
     if not _is_deepseek_backend(runtime_config.base_url):
         extra_body.setdefault(
@@ -95,8 +80,101 @@ def chat(
     }
     if extra_body:
         request_kwargs["extra_body"] = extra_body
+    return request_kwargs
 
-    resp = client.chat.completions.create(
-        **request_kwargs,
+
+def chat(
+    messages: list[dict[str, str]],
+    *,
+    model: str | None = None,
+    temperature: float = 0.0,
+    response_format: dict[str, Any] | None = None,
+    max_tokens: int | None = None,
+    enable_thinking: bool = False,
+    **kwargs: Any,
+) -> ChatCompletion:
+    """Send a synchronous chat completion request.
+
+    Args:
+        messages: OpenAI-format message list.
+        model: Override the default LLM model.
+        temperature: Sampling temperature (0.0 for deterministic).
+        response_format: JSON Schema constrained decoding config.
+        max_tokens: Max output tokens.
+        enable_thinking: Qwen3-specific thinking mode (always False for
+            classification tasks per CLAUDE.md §9 pitfalls).
+        **kwargs: Extra parameters forwarded to the API.
+
+    Returns:
+        Raw ChatCompletion response.
+    """
+    runtime_config = llm_runtime.get_request_config()
+    client = _client_for_config(runtime_config)
+    request_kwargs = _build_request_kwargs(
+        messages,
+        runtime_config,
+        model=model,
+        temperature=temperature,
+        response_format=response_format,
+        max_tokens=max_tokens,
+        enable_thinking=enable_thinking,
+        kwargs=kwargs,
     )
+
+    manager = local_llm_runtime.get_manager()
+    if runtime_config.backend == "local":
+        manager.ensure_ready_sync()
+
+    with manager.track_request(runtime_config.backend):
+        resp = client.chat.completions.create(**request_kwargs)
     return cast(ChatCompletion, resp)
+
+
+async def chat_async(
+    messages: list[dict[str, str]],
+    *,
+    model: str | None = None,
+    temperature: float = 0.0,
+    response_format: dict[str, Any] | None = None,
+    max_tokens: int | None = None,
+    enable_thinking: bool = False,
+    **kwargs: Any,
+) -> ChatCompletion:
+    """Send an async-safe chat completion request.
+
+    Args:
+        messages: OpenAI-format message list.
+        model: Override the default LLM model.
+        temperature: Sampling temperature (0.0 for deterministic).
+        response_format: JSON Schema constrained decoding config.
+        max_tokens: Max output tokens.
+        enable_thinking: Qwen3-specific thinking mode (always False for
+            classification tasks per CLAUDE.md §9 pitfalls).
+        **kwargs: Extra parameters forwarded to the API.
+
+    Returns:
+        Raw ChatCompletion response.
+    """
+    runtime_config = llm_runtime.get_request_config()
+    client = _client_for_config(runtime_config)
+    request_kwargs = _build_request_kwargs(
+        messages,
+        runtime_config,
+        model=model,
+        temperature=temperature,
+        response_format=response_format,
+        max_tokens=max_tokens,
+        enable_thinking=enable_thinking,
+        kwargs=kwargs,
+    )
+
+    manager = local_llm_runtime.get_manager()
+    if runtime_config.backend == "local":
+        await manager.ensure_ready()
+
+    def _create() -> ChatCompletion:
+        with manager.track_request(runtime_config.backend):
+            resp = client.chat.completions.create(**request_kwargs)
+        return cast(ChatCompletion, resp)
+
+    return await asyncio.to_thread(_create)

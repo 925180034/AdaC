@@ -7,6 +7,7 @@ import os
 import shlex
 import signal
 import subprocess
+import threading
 import time
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
@@ -111,7 +112,8 @@ class LocalLlmRuntimeManager:
         self._popen_factory = popen_factory
         self._sleep = sleep
         self._monotonic = monotonic
-        self._lock = asyncio.Lock()
+        self._lifecycle_lock = threading.RLock()
+        self._state_lock = threading.RLock()
         self._state = _State(last_used_at=monotonic())
 
     @classmethod
@@ -129,74 +131,111 @@ class LocalLlmRuntimeManager:
 
     def snapshot(self) -> LocalRuntimeSnapshot:
         """Return safe local runtime state."""
-        self._refresh_state_from_process()
-        return {
-            "local_status": self._state.status,
-            "local_ready": self._state.status == "ready",
-            "local_last_error": self._state.last_error,
-        }
+        with self._state_lock:
+            self._refresh_state_from_process()
+            return self._snapshot_locked()
 
     async def ensure_ready(self) -> LocalRuntimeSnapshot:
-        """Start managed vLLM if needed and wait until the local endpoint is ready."""
-        async with self._lock:
+        """Start managed vLLM if needed without blocking the caller's event loop."""
+        return await asyncio.to_thread(self.ensure_ready_sync)
+
+    def ensure_ready_sync(self) -> LocalRuntimeSnapshot:
+        """Synchronously start managed vLLM if needed and wait until it is ready.
+
+        A single thread lock protects all lifecycle operations across sync callers
+        and async callers delegated through ``asyncio.to_thread``. This avoids
+        sharing asyncio synchronization primitives across event loops.
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError(
+                "Local LLM sync readiness cannot run inside an active event loop; "
+                "use adacascade.llm_client.chat_async() instead."
+            )
+        with self._lifecycle_lock:
+            return asyncio.run(self._ensure_ready_core())
+
+    async def _ensure_ready_core(self) -> LocalRuntimeSnapshot:
+        with self._state_lock:
             self._refresh_state_from_process()
-            if await self._ready_probe(self.base_url):
+        if await self._ready_probe(self.base_url):
+            with self._state_lock:
                 if self._state.process is None or self._state.process.poll() is not None:
                     self._state.process = None
                     self._state.managed = False
                 self._state.status = "ready"
                 self._state.last_error = None
                 self._state.last_used_at = self._monotonic()
-                return self.snapshot()
+                return self._snapshot_locked()
 
-            if self._state.process is None or self._state.process.poll() is not None:
-                try:
+        with self._state_lock:
+            should_start = self._state.process is None or self._state.process.poll() is not None
+        if should_start:
+            try:
+                with self._state_lock:
                     self._start_process()
-                except Exception:
+            except Exception:
+                with self._state_lock:
                     self._set_error("Local vLLM failed to start")
-                    log.exception(
-                        "vllm.start_failed",
-                        log_path=str(self.log_path),
-                        task_id="runtime-manager",
-                    )
-                    raise LocalRuntimeError("Local vLLM failed to start") from None
+                log.exception(
+                    "vllm.start_failed",
+                    log_path=str(self.log_path),
+                    task_id="runtime-manager",
+                )
+                raise LocalRuntimeError("Local vLLM failed to start") from None
 
-            deadline = self._monotonic() + self.startup_timeout_seconds
-            while True:
+        deadline = self._monotonic() + self.startup_timeout_seconds
+        while True:
+            with self._state_lock:
                 process = self._state.process
-                if process is not None and process.poll() is not None:
+                process_exited = process is not None and process.poll() is not None
+            if process_exited:
+                with self._state_lock:
                     self._set_error("Local vLLM exited before becoming ready")
-                    raise LocalRuntimeError("Local vLLM exited before becoming ready")
-                if await self._ready_probe(self.base_url):
+                raise LocalRuntimeError("Local vLLM exited before becoming ready")
+            if await self._ready_probe(self.base_url):
+                with self._state_lock:
                     self._state.status = "ready"
                     self._state.last_error = None
                     self._state.last_used_at = self._monotonic()
-                    return self.snapshot()
-                if self._monotonic() >= deadline:
-                    await self._stop_managed_locked()
+                    return self._snapshot_locked()
+            if self._monotonic() >= deadline:
+                await self._stop_managed_locked()
+                with self._state_lock:
                     self._set_error("Local vLLM startup timed out")
-                    raise LocalRuntimeError("Local vLLM startup timed out")
-                await self._sleep(self.health_poll_seconds)
+                raise LocalRuntimeError("Local vLLM startup timed out")
+            await self._sleep(self.health_poll_seconds)
 
     async def stop_managed(self) -> LocalRuntimeSnapshot:
         """Stop only the managed vLLM process started by this manager."""
-        async with self._lock:
-            return await self._stop_managed_locked()
+        return await asyncio.to_thread(self.stop_managed_sync)
+
+    def stop_managed_sync(self) -> LocalRuntimeSnapshot:
+        """Synchronously stop only the managed vLLM process started by this manager."""
+        with self._lifecycle_lock:
+            return asyncio.run(self._stop_managed_locked())
 
     async def stop_if_idle(self) -> bool:
         """Stop managed vLLM when no local request is active and idle timeout elapsed."""
-        async with self._lock:
-            self._refresh_state_from_process()
-            if not self._state.managed or self._state.process is None:
-                return False
-            if self._state.status != "ready":
-                return False
-            if self._state.active_requests > 0:
-                return False
-            idle_for = self._monotonic() - self._state.last_used_at
-            if idle_for < self.idle_timeout_seconds:
-                return False
-            await self._stop_managed_locked()
+        return await asyncio.to_thread(self._stop_if_idle_sync)
+
+    def _stop_if_idle_sync(self) -> bool:
+        with self._lifecycle_lock:
+            with self._state_lock:
+                self._refresh_state_from_process()
+                if not self._state.managed or self._state.process is None:
+                    return False
+                if self._state.status != "ready":
+                    return False
+                if self._state.active_requests > 0:
+                    return False
+                idle_for = self._monotonic() - self._state.last_used_at
+                if idle_for < self.idle_timeout_seconds:
+                    return False
+            asyncio.run(self._stop_managed_locked())
             return True
 
     async def idle_monitor_loop(self) -> None:
@@ -212,12 +251,21 @@ class LocalLlmRuntimeManager:
             yield
             return
 
-        self._state.active_requests += 1
+        with self._state_lock:
+            self._state.active_requests += 1
         try:
             yield
         finally:
-            self._state.active_requests = max(0, self._state.active_requests - 1)
-            self._state.last_used_at = self._monotonic()
+            with self._state_lock:
+                self._state.active_requests = max(0, self._state.active_requests - 1)
+                self._state.last_used_at = self._monotonic()
+
+    def _snapshot_locked(self) -> LocalRuntimeSnapshot:
+        return {
+            "local_status": self._state.status,
+            "local_ready": self._state.status == "ready",
+            "local_last_error": self._state.last_error,
+        }
 
     def _start_process(self) -> None:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -247,17 +295,18 @@ class LocalLlmRuntimeManager:
         )
 
     async def _stop_managed_locked(self) -> LocalRuntimeSnapshot:
-        process = self._state.process
-        if not self._state.managed or process is None:
-            return self.snapshot()
+        with self._state_lock:
+            process = self._state.process
+            if not self._state.managed or process is None:
+                return self._snapshot_locked()
 
-        if process.poll() is not None:
-            self._refresh_state_from_process()
-            if self._state.status != "error":
-                self._state = _State(status="stopped", last_used_at=self._monotonic())
-            return self.snapshot()
+            if process.poll() is not None:
+                self._refresh_state_from_process()
+                if self._state.status != "error":
+                    self._state = _State(status="stopped", last_used_at=self._monotonic())
+                return self._snapshot_locked()
 
-        self._state.status = "stopping"
+            self._state.status = "stopping"
         process_already_dead = False
         try:
             pgid = os.getpgid(process.pid)
@@ -285,9 +334,11 @@ class LocalLlmRuntimeManager:
                     pass
                 await asyncio.to_thread(process.wait, None)
 
-        self._state = _State(status="stopped", last_used_at=self._monotonic())
+        with self._state_lock:
+            self._state = _State(status="stopped", last_used_at=self._monotonic())
+            snapshot = self._snapshot_locked()
         log.info("vllm.stop", task_id="runtime-manager")
-        return self.snapshot()
+        return snapshot
 
     def _refresh_state_from_process(self) -> None:
         process = self._state.process

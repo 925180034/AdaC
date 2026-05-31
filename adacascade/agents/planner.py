@@ -7,7 +7,7 @@ from typing import Any, Literal
 import structlog
 
 from adacascade.config import settings
-from adacascade.llm_client import chat
+from adacascade.llm_client import chat_async
 from adacascade.llm_schemas import PlannerDecision, json_schema_format
 from adacascade.state import IntegrationState
 
@@ -56,11 +56,12 @@ def _detect_subtask_heuristic(
     return None
 
 
-def _call_llm_subtask(
+async def _call_llm_subtask(
     table_name: str,
     columns: list[dict[str, str]],
     sample_rows: list[dict[str, Any]],
     user_hint: str,
+    bound_log: structlog.stdlib.BoundLogger,
 ) -> str:
     """Ask LLM to classify JOIN vs UNION (Algorithm Spec §1.3)."""
     col_repr = [f"{c['name']}:{c['type']}" for c in columns]
@@ -86,10 +87,10 @@ def _call_llm_subtask(
             ),
         },
     ]
-    resp = chat(messages, response_format=json_schema_format(PlannerDecision))
+    resp = await chat_async(messages, response_format=json_schema_format(PlannerDecision))
     content = resp.choices[0].message.content or ""
     decision = PlannerDecision.model_validate_json(content)
-    log.info("planner.llm_decision", subtask=decision.subtask, reason=decision.reason)
+    bound_log.info("planner.llm_decision", subtask=decision.subtask, reason=decision.reason)
     return decision.subtask
 
 
@@ -122,13 +123,14 @@ async def run(state: IntegrationState) -> IntegrationState:
                 subtask = heuristic
                 bound_log.info("planner.heuristic", subtask=subtask)
             else:
-                subtask = _call_llm_subtask(
+                subtask = await _call_llm_subtask(
                     table_name=query_profile.get("table_name", ""),
                     columns=[
                         {"name": n, "type": t} for n, t in zip(col_names, col_types)
                     ],
                     sample_rows=query_profile.get("sample_rows", []),
                     user_hint=user_hint,
+                    bound_log=bound_log,
                 )
 
     raw_plans = settings.planner_cfg.get("default_plans") or {}

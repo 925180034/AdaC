@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -128,12 +131,19 @@ def monotonic_sequence(values: list[float]) -> Callable[[], float]:
     return _next
 
 
+class ThreadGate:
+    def __init__(self) -> None:
+        self.first_entered = threading.Event()
+        self.release_first = threading.Event()
+
+
 def manager(
     tmp_path: Path,
     *,
     ready_probe: Callable[[str], Awaitable[bool]],
     popen_factory: Callable[..., FakeProcess] | None = None,
     monotonic: Callable[[], float] | None = None,
+    sleep: Callable[[float], Awaitable[None]] = instant_sleep,
 ) -> LocalLlmRuntimeManager:
     return LocalLlmRuntimeManager(
         base_url="http://localhost:8000/v1",
@@ -145,9 +155,115 @@ def manager(
         health_poll_seconds=1,
         ready_probe=ready_probe,
         popen_factory=popen_factory or (lambda *args, **kwargs: FakeProcess()),
-        sleep=instant_sleep,
+        sleep=sleep,
         monotonic=monotonic or monotonic_sequence([0, 1, 2, 3, 4, 20]),
     )
+
+
+def test_ensure_ready_sync_serializes_concurrent_callers(tmp_path: Path) -> None:
+    gate = ThreadGate()
+    running_calls = 0
+    max_running_calls = 0
+    calls_lock = threading.Lock()
+
+    async def slow_ready_probe(_: str) -> bool:
+        nonlocal running_calls, max_running_calls
+        with calls_lock:
+            running_calls += 1
+            max_running_calls = max(max_running_calls, running_calls)
+            is_first_call = max_running_calls == 1
+        if is_first_call:
+            gate.first_entered.set()
+            assert gate.release_first.wait(timeout=2)
+        try:
+            return True
+        finally:
+            with calls_lock:
+                running_calls -= 1
+
+    runtime = manager(tmp_path, ready_probe=slow_ready_probe)
+    snapshots: list[local_llm_runtime.LocalRuntimeSnapshot] = []
+    errors: list[BaseException] = []
+
+    def call_ensure_ready_sync() -> None:
+        try:
+            snapshots.append(runtime.ensure_ready_sync())
+        except BaseException as exc:  # pragma: no cover - assertion reports failures
+            errors.append(exc)
+
+    first_thread = threading.Thread(target=call_ensure_ready_sync)
+    second_thread = threading.Thread(target=call_ensure_ready_sync)
+    first_thread.start()
+    assert gate.first_entered.wait(timeout=2)
+    second_thread.start()
+    time.sleep(0.05)
+    with calls_lock:
+        assert running_calls == 1
+        assert max_running_calls == 1
+    gate.release_first.set()
+    first_thread.join(timeout=2)
+    second_thread.join(timeout=2)
+
+    assert not first_thread.is_alive()
+    assert not second_thread.is_alive()
+    assert errors == []
+    assert len(snapshots) == 2
+    assert [snapshot["local_ready"] for snapshot in snapshots] == [True, True]
+    assert max_running_calls == 1
+
+
+@pytest.mark.anyio
+async def test_ensure_ready_serializes_mixed_async_and_sync_callers(
+    tmp_path: Path,
+) -> None:
+    gate = ThreadGate()
+    running_calls = 0
+    max_running_calls = 0
+    calls_lock = threading.Lock()
+
+    async def slow_ready_probe(_: str) -> bool:
+        nonlocal running_calls, max_running_calls
+        with calls_lock:
+            running_calls += 1
+            max_running_calls = max(max_running_calls, running_calls)
+            is_first_call = max_running_calls == 1
+        if is_first_call:
+            gate.first_entered.set()
+            assert await asyncio.to_thread(gate.release_first.wait, 2)
+        try:
+            return True
+        finally:
+            with calls_lock:
+                running_calls -= 1
+
+    runtime = manager(tmp_path, ready_probe=slow_ready_probe)
+    sync_snapshots: list[local_llm_runtime.LocalRuntimeSnapshot] = []
+    sync_errors: list[BaseException] = []
+
+    def call_ensure_ready_sync() -> None:
+        try:
+            sync_snapshots.append(runtime.ensure_ready_sync())
+        except BaseException as exc:  # pragma: no cover - assertion reports failures
+            sync_errors.append(exc)
+
+    async_task = asyncio.create_task(runtime.ensure_ready())
+    assert await asyncio.to_thread(gate.first_entered.wait, 2)
+    sync_thread = threading.Thread(target=call_ensure_ready_sync)
+    sync_thread.start()
+    await asyncio.sleep(0.05)
+    with calls_lock:
+        assert running_calls == 1
+        assert max_running_calls == 1
+    gate.release_first.set()
+
+    async_snapshot = await async_task
+    sync_thread.join(timeout=2)
+
+    assert not sync_thread.is_alive()
+    assert sync_errors == []
+    assert async_snapshot["local_ready"] is True
+    assert [snapshot["local_ready"] for snapshot in sync_snapshots] == [True]
+    assert max_running_calls == 1
 
 
 @pytest.mark.anyio
@@ -599,19 +715,23 @@ async def test_stop_managed_waits_without_blocking_event_loop(
     proc = FakeProcess()
     to_thread_calls: list[tuple[Callable[..., Any], tuple[Any, ...]]] = []
 
+    original_to_thread = local_llm_runtime.asyncio.to_thread
+
     async def fake_to_thread(func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        if getattr(func, "__name__", "") == "stop_managed_sync":
+            return await original_to_thread(func, *args, **kwargs)
         to_thread_calls.append((func, args))
         return func(*args, **kwargs)
 
     monkeypatch.setattr(local_llm_runtime.os, "getpgid", lambda pid: pid + 10)
     monkeypatch.setattr(local_llm_runtime.os, "killpg", lambda pgid, sig: proc.terminate())
-    monkeypatch.setattr(local_llm_runtime.asyncio, "to_thread", fake_to_thread)
     runtime = manager(
         tmp_path,
         ready_probe=ProbeSequence([False, True]),
         popen_factory=lambda *args, **kwargs: proc,
     )
     await runtime.ensure_ready()
+    monkeypatch.setattr(local_llm_runtime.asyncio, "to_thread", fake_to_thread)
 
     await runtime.stop_managed()
 
@@ -665,6 +785,40 @@ async def test_idle_shutdown_skips_active_requests(tmp_path: Path) -> None:
 
     assert stopped is False
     assert proc.terminated is False
+
+
+@pytest.mark.anyio
+async def test_idle_shutdown_skips_request_that_enters_during_idle_check(
+    tmp_path: Path,
+) -> None:
+    proc = FakeProcess()
+    runtime = manager(
+        tmp_path,
+        ready_probe=ProbeSequence([False, True]),
+        popen_factory=lambda *args, **kwargs: proc,
+        monotonic=monotonic_sequence([0, 1, 20, 21]),
+    )
+    await runtime.ensure_ready()
+    entered_track_request = threading.Event()
+    release_track_request = threading.Event()
+
+    def run_request() -> None:
+        with runtime.track_request("local"):
+            entered_track_request.set()
+            assert release_track_request.wait(timeout=2)
+
+    request_thread = threading.Thread(target=run_request)
+    request_thread.start()
+    assert entered_track_request.wait(timeout=2)
+
+    stopped = await runtime.stop_if_idle()
+
+    release_track_request.set()
+    request_thread.join(timeout=2)
+
+    assert stopped is False
+    assert proc.terminated is False
+    assert not request_thread.is_alive()
 
 
 @pytest.mark.anyio
