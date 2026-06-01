@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -470,6 +471,49 @@ def test_retrieval_l1_can_load_corpus_scoped_tfidf(tmp_path: Path) -> None:
 
     assert "join_only" in vectorizer.vocabulary_
     assert "union_only" not in vectorizer.vocabulary_
+
+
+def test_run_profiling_rebuilds_tfidf_after_table_is_ready(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from adacascade.agents import profiling
+    from scripts import rebuild_tfidf as rebuild_tfidf_module
+
+    db = _session(tmp_path)
+    db.add(_table("new-table", tenant_id="benchmark", table_name="new table"))
+    db.commit()
+
+    class DummyProfile:
+        table_id = "new-table"
+        columns: list = []
+
+    def fake_profile_table(**kwargs):
+        return DummyProfile()
+
+    async def fake_encode_and_index(**kwargs) -> None:
+        return None
+
+    rebuild_calls: list[tuple[str, str]] = []
+
+    def fake_rebuild_tfidf(db, *, tenant_id: str, **kwargs):
+        status = db.query(TableRegistry).filter_by(table_id="new-table").one().status
+        rebuild_calls.append((tenant_id, status))
+        return {"tables": 1, "path": str(tmp_path / "tfidf.pkl")}
+
+    monkeypatch.setattr(profiling, "profile_table", fake_profile_table)
+    monkeypatch.setattr(profiling, "encode_and_index", fake_encode_and_index)
+    monkeypatch.setattr(rebuild_tfidf_module, "rebuild_tfidf", fake_rebuild_tfidf)
+
+    asyncio.run(
+        profiling.run_profiling(
+            table_id="new-table",
+            db=db,
+            qdrant=RecordingQdrant(),
+            tenant_id="benchmark",
+        )
+    )
+
+    assert rebuild_calls == [("benchmark", "READY")]
 
 
 def test_rebuild_tfidf_writes_corpus_scoped_artifact(tmp_path: Path) -> None:

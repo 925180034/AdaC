@@ -448,6 +448,10 @@ async def run_profiling(
         db.commit()
         bound_log.info("profiling.done", status="READY")
 
+        from scripts import rebuild_tfidf as rebuild_tfidf_module
+
+        rebuild_tfidf_module.rebuild_tfidf(db, tenant_id=tenant_id)
+
     except Exception:
         db.rollback()
         db.query(TableRegistry).filter_by(table_id=table_id).update(
