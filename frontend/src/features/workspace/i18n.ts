@@ -5,8 +5,6 @@ export type WorkspaceCopy = {
   page: {
     eyebrow: string
     title: string
-    warningLabel: string
-    warning: string
   }
   toolbar: {
     preferencesLabel: string
@@ -165,8 +163,6 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
     page: {
       eyebrow: 'Adaptive scenario matching · Cascaded filtering',
       title: 'AdaCascade Workbench',
-      warningLabel: 'Local demo security warning',
-      warning: 'Local demo environment. Do not expose this build or its browser-visible API key on a public network.',
     },
     toolbar: {
       preferencesLabel: 'Workspace preferences',
@@ -239,7 +235,7 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       l3Threshold: 'L3 LLM threshold',
       matcherThreshold: 'Matcher threshold',
       matcherTopK: 'Matcher top-k',
-      resetDefaults: 'Reset to paper defaults',
+      resetDefaults: 'Reset to defaults',
       queryTable: 'Query table',
       sourceTable: 'Source table',
       targetTable: 'Target table',
@@ -357,8 +353,6 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
     page: {
       eyebrow: '自适应场景匹配 · 级联过滤',
       title: 'AdaCascade 工作台',
-      warningLabel: '本地演示安全提醒',
-      warning: '本地演示环境。请勿将此构建或浏览器可见的 API Key 暴露到公网。',
     },
     toolbar: {
       preferencesLabel: '工作区偏好',
@@ -419,19 +413,19 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       tables: '表',
       tablesReady: (count) => `${count} 张就绪`,
       mode: '模式',
-      modes: { discover: '发现', integrate: '集成', match: '匹配' },
-      tenantOptions: { default: 'default（演示）', benchmark: 'benchmark（全量）' },
+      modes: { discover: '表发现', integrate: '数据集成', match: '模式匹配' },
+      tenantOptions: { default: 'default（演示）', benchmark: 'benchmark（基准）' },
       executionProfile: '执行配置',
-      executionProfiles: { reproducible: '可复现', fast: '演示加速', joinTuned: 'JOIN 调优召回' },
+      executionProfiles: { reproducible: '可复现', fast: '演示加速', joinTuned: 'JOIN 召回优化' },
       advancedParameters: '高级参数',
       showAdvancedParameters: '展开高级参数',
       hideAdvancedParameters: '收起高级参数',
       l1Threshold: 'L1 阈值',
       l2Threshold: 'L2 阈值',
-      l3Threshold: 'L3 LLM 阈值',
-      matcherThreshold: 'Matcher 阈值',
-      matcherTopK: 'Matcher top-k',
-      resetDefaults: '重置为论文默认值',
+      l3Threshold: 'L3 LLM 判定阈值',
+      matcherThreshold: '匹配判定阈值',
+      matcherTopK: '匹配候选 top-k',
+      resetDefaults: '重置为默认值',
       queryTable: '查询表',
       sourceTable: '源表',
       targetTable: '目标表',
@@ -455,14 +449,14 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       summaryMappings: (count) => `${count} 个映射`,
       summaryTenant: '租户',
       viewsLabel: '结果视图',
-      tabs: { graph: '图谱', ranking: '排序', mappings: '映射', raw: '原始 JSON' },
+      tabs: { graph: '流程图', ranking: '候选排序', mappings: '列映射', raw: '原始 JSON' },
       emptyTitle: '暂无活跃任务',
-      emptyDescription: '选择模式和表上下文后运行 AdaCascade，即可查看图谱、排序、映射和原始 JSON。此预览不会自动运行。',
+      emptyDescription: '选择模式和表上下文后运行 AdaCascade，即可查看流程图、候选排序、列映射和原始 JSON。此预览不会自动运行。',
       noLayerScores: '暂无层级分数',
-      noRanking: '此任务未产生发现排序结果。',
-      matchNoRanking: '匹配模式会直接比较所选源表和目标表，因此不会产生发现排序。',
-      rankingAria: '排序结果',
-      rankingTitle: '排序',
+      noRanking: '此任务未产生表发现候选排序。',
+      matchNoRanking: '模式匹配会直接比较所选源表和目标表，因此不会产生表发现候选排序。',
+      rankingAria: '候选排序结果',
+      rankingTitle: '候选排序',
       candidates: (count) => `${count} 个候选`,
       candidateScore: (rank) => `候选 ${rank} 分数`,
       mappingsAria: '列映射结果',
@@ -510,35 +504,35 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       defaultActor: '任务',
       agents: {
         Planner: {
-          label: '规划',
-          purpose: '生成任务计划并选择模式路由。',
+          label: '规划智能体',
+          purpose: '生成任务计划并选择执行模式路由。',
           steps: {
-            overview: { label: '规划路由', summary: '选择发现、匹配或集成执行路径。' },
+            overview: { label: '模式路由', summary: '选择表发现、模式匹配或数据集成执行路径。' },
           },
         },
         Profiling: {
-          label: '画像',
-          purpose: '抽取表和列元数据。',
+          label: '特征分析智能体',
+          purpose: '抽取表级与列级特征。',
           steps: {
-            overview: { label: '表画像', summary: '读取表形状、列、类型和值统计。' },
+            overview: { label: '表特征分析', summary: '读取表规模、列模式、数据类型、缺失率、基数特征和值分布统计。' },
           },
         },
         Retrieval: {
-          label: '检索',
-          purpose: '通过 TLCF 级联缩小数据湖候选范围。',
+          label: '检索智能体',
+          purpose: '通过三层级联过滤（TLCF）缩小数据湖候选表范围。',
           steps: {
-            L1: { label: '词法过滤', summary: '使用表文本和模式关键词保留可能候选。' },
-            L2: { label: '向量召回', summary: '查询嵌入，找回语义相近的表。' },
-            L3: { label: 'LLM 重排', summary: '让 LLM 重排最强候选。' },
+            L1: { label: '词法过滤', summary: '基于表文本、列名和模式关键词保留候选表。' },
+            L2: { label: '向量召回', summary: '基于表嵌入召回语义相似候选表。' },
+            L3: { label: 'LLM 复核', summary: '使用 LLM 对高置信候选表进行语义复核与重排。' },
           },
         },
         Matcher: {
-          label: '匹配',
-          purpose: '验证列对齐并生成最终映射。',
+          label: '匹配智能体',
+          purpose: '执行列级匹配验证并生成最终列映射。',
           steps: {
-            filtering: { label: '候选过滤', summary: '在高成本验证前保留可能的列对。' },
-            LLM: { label: 'LLM 验证', summary: '检查候选列对的语义等价性。' },
-            decision: { label: '一对一决策', summary: '选择最终无冲突的列映射。' },
+            filtering: { label: '列候选过滤', summary: '在 LLM 验证前保留高相似度候选列对。' },
+            LLM: { label: 'LLM 验证', summary: '判定候选列对是否语义等价。' },
+            decision: { label: '一对一决策', summary: '选择最终无冲突的一对一列映射。' },
           },
         },
       },

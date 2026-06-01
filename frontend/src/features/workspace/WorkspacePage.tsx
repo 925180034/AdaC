@@ -379,9 +379,6 @@ export function WorkspacePage() {
           <p className="eyebrow">{copy.page.eyebrow}</p>
           <h1>{copy.page.title}</h1>
         </div>
-        <aside className="demo-warning" aria-label={copy.page.warningLabel}>
-          {copy.page.warning}
-        </aside>
       </header>
 
       <WorkspaceToolbar

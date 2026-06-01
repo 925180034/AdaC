@@ -65,13 +65,18 @@ describe('AgentTracePanel', () => {
     expect(screen.queryByRole('article', { name: /Retrieval L1/ })).not.toBeInTheDocument()
   })
 
-  it('renders Chinese agent purpose and step summaries when requested', () => {
+  it('renders academically accurate Chinese agent purpose and step summaries when requested', () => {
     render(<AgentTracePanel timeline={timelineFromEvents()} events={events} language="zh" />)
 
-    const retrieval = screen.getByRole('article', { name: /检索/ })
-    expect(within(retrieval).getByText('通过 TLCF 级联缩小数据湖候选范围。')).toBeInTheDocument()
+    expect(screen.getByRole('article', { name: /特征分析智能体/ })).toBeInTheDocument()
+    expect(screen.queryByText('画像')).not.toBeInTheDocument()
+    expect(screen.getByText('表特征分析')).toBeInTheDocument()
+
+    const retrieval = screen.getByRole('article', { name: /检索智能体/ })
+    expect(within(retrieval).getByText('通过三层级联过滤（TLCF）缩小数据湖候选表范围。')).toBeInTheDocument()
     expect(within(retrieval).getByText('向量召回')).toBeInTheDocument()
-    expect(within(retrieval).getByText('查询嵌入，找回语义相近的表。')).toBeInTheDocument()
+    expect(within(retrieval).getByText('基于表嵌入召回语义相似候选表。')).toBeInTheDocument()
+    expect(within(retrieval).getByText('LLM 复核')).toBeInTheDocument()
     expect(within(retrieval).getByText('当前步骤')).toBeInTheDocument()
     expect(within(retrieval).getByText('80 → 40 个候选')).toBeInTheDocument()
     expect(within(retrieval).getByText('降级：reuse lexical candidates')).toBeInTheDocument()

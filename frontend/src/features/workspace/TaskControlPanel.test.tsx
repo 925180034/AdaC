@@ -122,10 +122,10 @@ describe('TaskControlPanel', () => {
     expect(screen.getByLabelText('L3 LLM threshold')).toHaveValue('0.5')
     expect(screen.getByLabelText('Matcher threshold')).toHaveValue('0.7')
     expect(screen.getByLabelText('Matcher top-k')).toHaveValue('3')
-    expect(screen.getByRole('button', { name: 'Reset to paper defaults' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Reset to defaults' })).toBeEnabled()
   })
 
-  it('updates advanced parameters and resets them to paper defaults', async () => {
+  it('updates advanced parameters and resets them to defaults', async () => {
     const user = userEvent.setup()
     render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} />)
 
@@ -134,7 +134,7 @@ describe('TaskControlPanel', () => {
     await user.type(screen.getByLabelText('L3 LLM threshold'), '0.3')
     await user.clear(screen.getByLabelText('Matcher top-k'))
     await user.type(screen.getByLabelText('Matcher top-k'), '5')
-    await user.click(screen.getByRole('button', { name: 'Reset to paper defaults' }))
+    await user.click(screen.getByRole('button', { name: 'Reset to defaults' }))
 
     expect(baseProps.onParameterChange).toHaveBeenCalledWith('theta_3', 0.3)
     expect(baseProps.onParameterChange).toHaveBeenCalledWith('matcher_top_k', 5)

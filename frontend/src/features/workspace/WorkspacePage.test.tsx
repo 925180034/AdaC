@@ -246,7 +246,7 @@ describe('WorkspacePage', () => {
     renderWorkspace()
 
     expect(await screen.findByRole('heading', { name: 'AdaCascade 工作台' })).toBeInTheDocument()
-    expect(screen.getByLabelText('本地演示安全提醒')).toHaveTextContent('本地演示环境')
+    expect(screen.queryByText(/本地演示环境/)).not.toBeInTheDocument()
   })
 
   it('keeps runtime controls disabled and unselected while runtime info is loading', async () => {
@@ -673,9 +673,9 @@ describe('WorkspacePage', () => {
     await user.click(screen.getByRole('button', { name: '中文' }))
 
     expect(await screen.findByRole('heading', { name: 'AdaCascade 工作台' })).toBeInTheDocument()
-    expect(screen.getByLabelText('本地演示安全提醒')).toHaveTextContent('本地演示环境')
-    expect(screen.getByText('生成任务计划并选择模式路由。')).toBeInTheDocument()
-    expect(screen.getByText('选择发现、匹配或集成执行路径。')).toBeInTheDocument()
+    expect(screen.queryByText(/本地演示环境/)).not.toBeInTheDocument()
+    expect(screen.getByText('生成任务计划并选择执行模式路由。')).toBeInTheDocument()
+    expect(screen.getByText('选择表发现、模式匹配或数据集成执行路径。')).toBeInTheDocument()
     expect(window.localStorage.getItem('adacascade.language')).toBe('zh')
   })
 })

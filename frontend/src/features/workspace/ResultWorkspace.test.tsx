@@ -109,8 +109,8 @@ describe('ResultWorkspace', () => {
     expect(screen.getByText('暂无活跃任务')).toBeInTheDocument()
 
     rerender(<ResultWorkspace task={task} language="zh" />)
-    await user.click(screen.getByRole('tab', { name: '排序' }))
-    expect(screen.getByRole('tabpanel', { name: '排序' })).toHaveTextContent('1 个候选')
+    await user.click(screen.getByRole('tab', { name: '候选排序' }))
+    expect(screen.getByRole('tabpanel', { name: '候选排序' })).toHaveTextContent('1 个候选')
   })
 
   it('shows scenario badges and backend error details in results', async () => {
