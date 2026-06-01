@@ -19,7 +19,7 @@ from adacascade.config import settings
 log = structlog.get_logger(__name__)
 
 _TFIDF_PATH = Path(settings.ARTIFACTS_DIR) / "tfidf.pkl"
-_vectorizers: dict[str, Any] = {}
+_vectorizers: dict[str, tuple[int, int, int, Any]] = {}
 
 
 class C1Entry(TypedDict):
@@ -41,6 +41,14 @@ def _tfidf_path(
     return root / f"tfidf_{tenant_id}_{corpus}.pkl"
 
 
+def clear_cache(path: str | Path | None = None) -> None:
+    """Clear cached TF-IDF vectorizers."""
+    if path is None:
+        _vectorizers.clear()
+        return
+    _vectorizers.pop(str(Path(path)), None)
+
+
 def load_tfidf(
     *,
     tenant_id: str | None = None,
@@ -50,16 +58,26 @@ def load_tfidf(
     """Load a fitted TF-IDF vectorizer, optionally scoped by tenant and corpus."""
     path = _tfidf_path(tenant_id=tenant_id, corpus=corpus, artifacts_dir=artifacts_dir)
     cache_key = str(path)
-    if cache_key in _vectorizers:
-        return _vectorizers[cache_key]
     if not path.exists():
         raise FileNotFoundError(
             f"TF-IDF vectorizer not found at {path}. "
             "Run: python scripts/rebuild_tfidf.py"
         )
+    stat = path.stat()
+    fingerprint = hash(path.read_bytes())
+    cached = _vectorizers.get(cache_key)
+    if cached is not None:
+        mtime_ns, size, cached_fingerprint, vectorizer = cached
+        if (
+            mtime_ns == stat.st_mtime_ns
+            and size == stat.st_size
+            and cached_fingerprint == fingerprint
+        ):
+            return vectorizer
     with path.open("rb") as f:
-        _vectorizers[cache_key] = pickle.load(f)  # noqa: S301
-    return _vectorizers[cache_key]
+        vectorizer = pickle.load(f)  # noqa: S301
+    _vectorizers[cache_key] = (stat.st_mtime_ns, stat.st_size, fingerprint, vectorizer)
+    return vectorizer
 
 
 def _load_tfidf() -> Any:

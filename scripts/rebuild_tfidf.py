@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import pickle
 import sys
 from pathlib import Path
 from typing import Literal
@@ -15,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from adacascade.artifacts import save_pickle_atomic
 from adacascade.config import settings
 from adacascade.db.models import ColumnMetadata, TableRegistry
 
@@ -93,10 +93,14 @@ def rebuild_tfidf(
     )
     vec.fit(blobs)
 
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
     path = _artifact_path(artifacts_dir, tenant_id, corpus)
-    with path.open("wb") as f:
-        pickle.dump(vec, f)
+    save_pickle_atomic(path, vec)
+
+    from adacascade.agents import profiling
+    from adacascade.agents.retrieval import layer1
+
+    layer1.clear_cache(path)
+    profiling.clear_tfidf_cache()
 
     return {
         "tables": len(blobs),

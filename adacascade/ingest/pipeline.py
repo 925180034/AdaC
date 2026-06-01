@@ -13,6 +13,7 @@ import json
 import zipfile
 from collections.abc import Iterable
 import uuid
+from openpyxl import load_workbook  # type: ignore[import-untyped]
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import IO, Any
@@ -432,6 +433,33 @@ def ingest_upload_bundle(
     return summary
 
 
+def _excel_preflight_rejection(source: str, payload: bytes) -> str | None:
+    """Return an Excel rejection reason before pandas materializes all sheets."""
+    try:
+        workbook = load_workbook(
+            io.BytesIO(payload),
+            read_only=True,
+            data_only=True,
+        )
+    except ImportError as exc:
+        raise ValueError("Excel ingestion requires openpyxl") from exc
+    sheet_names = workbook.sheetnames
+    if len(sheet_names) > settings.MAX_EXCEL_SHEETS:
+        workbook.close()
+        return f"excel workbook contains more than {settings.MAX_EXCEL_SHEETS} sheets"
+
+    total_cells = 0
+    for worksheet in workbook.worksheets:
+        max_row = int(worksheet.max_row or 0)
+        max_column = int(worksheet.max_column or 0)
+        total_cells += max_row * max_column
+        if total_cells > settings.MAX_EXCEL_CELLS:
+            workbook.close()
+            return f"excel workbook exceeds {settings.MAX_EXCEL_CELLS} cells"
+    workbook.close()
+    return None
+
+
 def _ingest_bundle_member(
     *,
     source: str,
@@ -446,18 +474,14 @@ def _ingest_bundle_member(
     """Ingest one table-like bundle member and update summary in place."""
     suffix = Path(source).suffix.lower()
     if suffix == ".xlsx":
+        rejection = _excel_preflight_rejection(source, payload)
+        if rejection is not None:
+            summary["rejected"].append({"source": source, "reason": rejection})
+            return
         try:
             sheets = pd.read_excel(io.BytesIO(payload), sheet_name=None)
         except ImportError as exc:
             raise ValueError("Excel ingestion requires openpyxl") from exc
-        if len(sheets) > settings.MAX_EXCEL_SHEETS:
-            summary["rejected"].append(
-                {
-                    "source": source,
-                    "reason": f"excel workbook contains more than {settings.MAX_EXCEL_SHEETS} sheets",
-                }
-            )
-            return
         for sheet_name, frame in sheets.items():
             try:
                 normalized = _validate_and_normalize_schema(frame)

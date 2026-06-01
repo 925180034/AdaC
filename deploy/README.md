@@ -23,11 +23,16 @@ cp .env.example .env
 # edit .env; never commit it
 ```
 
+`.env` is recommended for real deployments but optional for `docker compose config`; the Compose file uses `env_file.required: false`, which requires a modern Docker Compose plugin. Without `.env`, the demo defaults use the repository's development bearer token value, so production deployments must set `API_KEY` explicitly before building the frontend.
+
 For the lab server, set these deployment-local values in `.env`:
 
 ```dotenv
 CORS_ALLOW_ORIGINS=http://218.199.69.88:13000
+LLM_LOCAL_BASE_URL=http://host.docker.internal:8000/v1
 LLM_BASE_URL=http://host.docker.internal:8000/v1
+NO_PROXY=localhost,127.0.0.1,qdrant,host.docker.internal
+no_proxy=localhost,127.0.0.1,qdrant,host.docker.internal
 SBERT_DEVICE=cuda:0
 ```
 
@@ -42,7 +47,20 @@ docker compose up -d
 docker compose logs -f backend
 ```
 
-Keep `.env` deployment-local and out of git. Use placeholders from `.env.example` as a starting point, then set the real API key and any target-server origins or limits needed for the demo. Rebuild `frontend` after changing `API_KEY`, because the demo UI embeds the same token at build time. If the host vLLM is not on port 8000, update `LLM_BASE_URL` accordingly.
+Keep `.env` deployment-local and out of git. Use placeholders from `.env.example` as a starting point, then set `API_KEY` and any target-server origins or limits needed for the demo. Rebuild `frontend` after changing `API_KEY`, because the demo UI embeds the same token at build time. If the host vLLM is not on port 8000, update both `LLM_LOCAL_BASE_URL` and `LLM_BASE_URL` accordingly.
+
+After bulk ingestion or demo dataset upload, rebuild TF-IDF explicitly before running Discover/Integrate:
+
+```bash
+docker compose run --rm backend python scripts/rebuild_tfidf.py --tenant-id default --corpus all
+```
+
+For benchmark corpora, rebuild scoped artifacts too:
+
+```bash
+docker compose run --rm backend python scripts/rebuild_tfidf.py --tenant-id benchmark --corpus join
+docker compose run --rm backend python scripts/rebuild_tfidf.py --tenant-id benchmark --corpus union
+```
 
 ## Smoke test
 

@@ -187,8 +187,20 @@ async def upload_dataset_tables(
             from adacascade.agents.profiling import run_profiling
 
             for table_id in accepted_ids:
-                with get_session() as bg_db:
-                    await run_profiling(table_id=table_id, db=bg_db, qdrant=qdrant, tenant_id=tenant_id)
+                try:
+                    with get_session() as bg_db:
+                        await run_profiling(
+                            table_id=table_id,
+                            db=bg_db,
+                            qdrant=qdrant,
+                            tenant_id=tenant_id,
+                        )
+                except Exception:
+                    log.exception(
+                        "datasets.profiling_table_failed",
+                        dataset_id=dataset_id,
+                        table_id=table_id,
+                    )
 
         background_tasks.add_task(_profiling_task)
         log.info("datasets.upload", dataset_id=dataset_id, accepted=len(accepted_ids))

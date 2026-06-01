@@ -6,6 +6,7 @@ persisted via save_pkl / load_pkl so that LangGraph checkpoints stay small.
 
 from __future__ import annotations
 
+import os
 import pickle
 import re
 from pathlib import Path
@@ -25,6 +26,31 @@ def _safe_artifact_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("_") or "artifact"
 
 
+def save_pickle_atomic(path: str | Path, obj: Any) -> str:
+    """Serialize an object through a same-directory atomic replace.
+
+    Args:
+        path: Final pickle path.
+        obj: Any picklable Python object.
+
+    Returns:
+        Absolute path to the saved file.
+    """
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(f".{target.name}.tmp")
+    try:
+        with tmp.open("wb") as f:
+            pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp.replace(target)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+    return str(target)
+
+
 def save_pkl(task_id: str, name: str, obj: Any) -> str:
     """Serialize obj to data/artifacts/{task_id}/{name}.pkl.
 
@@ -37,9 +63,7 @@ def save_pkl(task_id: str, name: str, obj: Any) -> str:
         Absolute path to the saved file (store this in state, not the object).
     """
     path = _artifact_dir(task_id) / f"{_safe_artifact_name(name)}.pkl"
-    with path.open("wb") as f:
-        pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
-    return str(path)
+    return save_pickle_atomic(path, obj)
 
 
 def load_pkl(path: str) -> Any:

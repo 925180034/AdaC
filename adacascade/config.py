@@ -98,6 +98,7 @@ class Settings(BaseSettings):
     MAX_ZIP_MEMBER_COUNT: int = 200
     MAX_ZIP_UNCOMPRESSED_BYTES: int = 500 * 1024 * 1024
     MAX_EXCEL_SHEETS: int = 50
+    MAX_EXCEL_CELLS: int = 5_000_000
 
     # ── 算法超参（直接从 YAML 读，供各 Agent 访问） ───────────────────────
     @property

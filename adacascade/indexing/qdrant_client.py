@@ -40,13 +40,14 @@ class AdacQdrantClient:
         table_id: str,
         tenant_id: str,
         vector: list[float],
+        status: str = "READY",
         extra_payload: dict[str, Any] | None = None,
     ) -> None:
         """Upsert a table-level embedding into tbl_embeddings."""
         payload: dict[str, Any] = {
             "table_id": table_id,
             "tenant_id": tenant_id,
-            "status": "READY",
+            "status": status,
         }
         if extra_payload:
             payload.update(extra_payload)
@@ -91,6 +92,7 @@ class AdacQdrantClient:
         self,
         *,
         points: list[dict[str, Any]],
+        status: str = "READY",
     ) -> None:
         """Batch-upsert column-level embeddings into col_embeddings."""
         structs = [
@@ -102,7 +104,7 @@ class AdacQdrantClient:
                     "table_id": p["table_id"],
                     "tenant_id": p["tenant_id"],
                     "col_type": p.get("col_type", "str"),
-                    "status": "READY",
+                    "status": status,
                     "source_system": p.get("source_system"),
                 },
             )

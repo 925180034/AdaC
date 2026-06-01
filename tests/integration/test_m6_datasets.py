@@ -366,3 +366,45 @@ def test_dataset_upload_commits_before_background_profiling(monkeypatch: pytest.
         assert len(accepted) == 1
 
     assert profiled_statuses == ["INGESTED"]
+
+
+def test_dataset_upload_profiles_later_tables_when_one_profile_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempted: list[str] = []
+
+    async def fake_run_profiling(*, table_id, db, qdrant, tenant_id):  # type: ignore[no-untyped-def]
+        attempted.append(table_id)
+        table = db.query(TableRegistry).filter_by(table_id=table_id).one()
+        if len(attempted) == 1:
+            table.status = "FAILED"
+            db.commit()
+            raise RuntimeError("boom")
+        table.status = "READY"
+        db.commit()
+
+    monkeypatch.setattr("adacascade.agents.profiling.run_profiling", fake_run_profiling)
+
+    with next(client_fixture()) as client:
+        response = client.post(
+            "/datasets/dataset-a/tables",
+            files=[
+                ("files", ("first_failure_case.csv", b"id,name\n101,Ada\n", "text/csv")),
+                ("files", ("second_success_case.csv", b"id,name\n202,Grace\n", "text/csv")),
+            ],
+            headers=TENANT_A_HEADERS,
+        )
+        assert response.status_code == 202, response.text
+        accepted = response.json()["accepted"]
+        assert len(accepted) == 2
+        accepted_ids = [item["table_id"] for item in accepted]
+
+    with get_session() as db:
+        statuses = {
+            table_id: db.query(TableRegistry).filter_by(table_id=table_id).one().status
+            for table_id in accepted_ids
+        }
+
+    assert attempted == accepted_ids
+    assert statuses[accepted_ids[0]] == "FAILED"
+    assert statuses[accepted_ids[1]] == "READY"

@@ -304,3 +304,68 @@ def test_ingest_upload_bundle_rejects_excel_with_too_many_sheets(
         }
     ]
     assert summary["skipped"] == []
+
+
+def test_excel_too_many_sheets_rejected_before_pandas_read_excel(
+    db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.MAX_EXCEL_SHEETS", 1)
+    workbook = xlsx_bytes(
+        {
+            "People": pd.DataFrame({"id": [1], "name": ["Ada"]}),
+            "Cities": pd.DataFrame({"city": ["London"]}),
+        }
+    )
+
+    def fail_read_excel(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("pd.read_excel should not be called")
+
+    monkeypatch.setattr("adacascade.ingest.pipeline.pd.read_excel", fail_read_excel)
+
+    summary = ingest_upload_bundle(
+        files=[("demo.xlsx", workbook.getvalue())],
+        tenant_id="tenant-a",
+        dataset_id="dataset-a",
+        uploaded_by="tester",
+        table_name_prefix=None,
+        db=db,
+    )
+
+    assert summary["accepted"] == []
+    assert summary["rejected"] == [
+        {
+            "source": "demo.xlsx",
+            "reason": "excel workbook contains more than 1 sheets",
+        }
+    ]
+
+
+def test_excel_too_many_cells_rejected_before_pandas_read_excel(
+    db: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("adacascade.ingest.pipeline.settings.MAX_EXCEL_CELLS", 1)
+    workbook = xlsx_bytes({"People": pd.DataFrame({"id": [1], "name": ["Ada"]})})
+
+    def fail_read_excel(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("pd.read_excel should not be called")
+
+    monkeypatch.setattr("adacascade.ingest.pipeline.pd.read_excel", fail_read_excel)
+
+    summary = ingest_upload_bundle(
+        files=[("demo.xlsx", workbook.getvalue())],
+        tenant_id="tenant-a",
+        dataset_id="dataset-a",
+        uploaded_by="tester",
+        table_name_prefix=None,
+        db=db,
+    )
+
+    assert summary["accepted"] == []
+    assert summary["rejected"] == [
+        {
+            "source": "demo.xlsx",
+            "reason": "excel workbook exceeds 1 cells",
+        }
+    ]

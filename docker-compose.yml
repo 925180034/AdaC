@@ -15,31 +15,34 @@ services:
         PYTORCH_BASE_IMAGE: ${PYTORCH_BASE_IMAGE:-pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime}
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,qdrant,host.docker.internal}
         http_proxy: ${http_proxy:-}
         https_proxy: ${https_proxy:-}
-        no_proxy: ${no_proxy:-localhost,127.0.0.1}
+        no_proxy: ${no_proxy:-localhost,127.0.0.1,qdrant,host.docker.internal}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}
         HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       QDRANT_URL: http://qdrant:6333
       DATA_DIR: /app/data
       DATABASE_URL: sqlite:////app/data/metadata.db
       CKPT_PATH: /app/data/ckpt.db
       ARTIFACTS_DIR: /app/data/artifacts
+      LLM_LOCAL_BASE_URL: ${LLM_LOCAL_BASE_URL:-http://host.docker.internal:8000/v1}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:8000/v1}
       PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
       PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}
       HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,qdrant}
+      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,qdrant,host.docker.internal}
       http_proxy: ${http_proxy:-}
       https_proxy: ${https_proxy:-}
-      no_proxy: ${no_proxy:-localhost,127.0.0.1,qdrant}
+      no_proxy: ${no_proxy:-localhost,127.0.0.1,qdrant,host.docker.internal}
       NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-0}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -60,7 +63,7 @@ services:
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-nginx:1.27-alpine}
         NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
         VITE_API_BASE_URL: /api
-        VITE_API_KEY: ${API_KEY:-change-me}
+        VITE_API_KEY: ${API_KEY:-dev-local-token}
     restart: unless-stopped
     ports:
       - "${ADACASCADE_FRONTEND_PORT:-13000}:80"

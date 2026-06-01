@@ -1,8 +1,48 @@
 # tests/unit/test_retrieval.py
 import asyncio
+import pickle
 from types import SimpleNamespace
 
 import pytest
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+
+def _write_tfidf(path, corpus: list[str]) -> None:
+    vec = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
+    vec.fit(corpus)
+    with path.open("wb") as handle:
+        pickle.dump(vec, handle)
+
+
+def test_layer1_clear_cache_reloads_vectorizer(tmp_path) -> None:
+    from adacascade.agents.retrieval import layer1
+
+    path = tmp_path / "tfidf.pkl"
+    _write_tfidf(path, ["old_token"])
+    first = layer1.load_tfidf(artifacts_dir=tmp_path)
+    _write_tfidf(path, ["new_token"])
+
+    layer1.clear_cache(path)
+    second = layer1.load_tfidf(artifacts_dir=tmp_path)
+
+    assert "old_token" in first.vocabulary_
+    assert "new_token" in second.vocabulary_
+    assert "old_token" not in second.vocabulary_
+
+
+def test_layer1_load_tfidf_reloads_when_artifact_changes(tmp_path) -> None:
+    from adacascade.agents.retrieval import layer1
+
+    path = tmp_path / "tfidf.pkl"
+    _write_tfidf(path, ["old_token"])
+    first = layer1.load_tfidf(artifacts_dir=tmp_path)
+    _write_tfidf(path, ["new_token"])
+
+    second = layer1.load_tfidf(artifacts_dir=tmp_path)
+
+    assert "old_token" in first.vocabulary_
+    assert "new_token" in second.vocabulary_
+    assert "old_token" not in second.vocabulary_
 
 
 def test_type_jaccard_basic() -> None:

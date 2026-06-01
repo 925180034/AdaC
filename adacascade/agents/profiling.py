@@ -47,6 +47,12 @@ _tfidf: TfidfVectorizer | None = None
 _TFIDF_PATH = Path(settings.ARTIFACTS_DIR) / "tfidf.pkl"
 
 
+def clear_tfidf_cache() -> None:
+    """Clear the profiling-local TF-IDF singleton."""
+    global _tfidf
+    _tfidf = None
+
+
 def _get_tfidf() -> TfidfVectorizer | None:
     global _tfidf
     if _tfidf is None and _TFIDF_PATH.exists():
@@ -187,6 +193,25 @@ def _compute_cat_stats(series: pd.Series, table_id: str, col_id: str) -> CatStat
 # ── Core profile function ─────────────────────────────────────────────────────
 
 
+def _read_parquet_sample(parquet_path: str, sample_rows: int) -> pd.DataFrame:
+    """Read at most sample_rows rows from a Parquet file using row groups."""
+    import pyarrow.parquet as pq
+
+    parquet_file = pq.ParquetFile(parquet_path)  # type: ignore[no-untyped-call]
+    frames: list[pd.DataFrame] = []
+    rows = 0
+    for row_group in range(parquet_file.num_row_groups):
+        table = parquet_file.read_row_group(row_group)  # type: ignore[no-untyped-call]
+        frame = table.to_pandas()
+        frames.append(frame)
+        rows += len(frame)
+        if rows >= sample_rows:
+            break
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True).head(sample_rows)
+
+
 def profile_table(
     *,
     table_id: str,
@@ -217,9 +242,7 @@ def profile_table(
         .all()
     )
 
-    df = pd.read_parquet(parquet_path)
-    if len(df) > sample_rows:
-        df = df.sample(sample_rows, random_state=42)
+    df = _read_parquet_sample(parquet_path, sample_rows)
 
     col_dicts = [
         {
@@ -352,6 +375,7 @@ async def encode_and_index(
         table_id=profile.table_id,
         tenant_id=tenant_id,
         vector=table_vec,
+        status="PROFILING",
         extra_payload={"table_name": tr.table_name, "source_system": tr.source_system},
     )
 
@@ -370,7 +394,7 @@ async def encode_and_index(
         }
         for i, col_row in enumerate(col_rows)
     ]
-    await qdrant.upsert_columns(points=points)
+    await qdrant.upsert_columns(points=points, status="PROFILING")
 
     # Update qdrant_point_id in DB
     for col_row in col_rows:
@@ -446,11 +470,8 @@ async def run_profiling(
             {"status": "READY", "updated_at": datetime.now(timezone.utc)}
         )
         db.commit()
+        await qdrant.update_status(table_id=table_id, status="READY")
         bound_log.info("profiling.done", status="READY")
-
-        from scripts import rebuild_tfidf as rebuild_tfidf_module
-
-        rebuild_tfidf_module.rebuild_tfidf(db, tenant_id=tenant_id)
 
     except Exception:
         db.rollback()
@@ -458,6 +479,10 @@ async def run_profiling(
             {"status": "FAILED", "updated_at": datetime.now(timezone.utc)}
         )
         db.commit()
+        try:
+            await qdrant.delete_table(table_id=table_id)
+        except Exception:
+            bound_log.exception("profiling.qdrant_cleanup_failed")
         bound_log.exception("profiling.failed")
         raise
 

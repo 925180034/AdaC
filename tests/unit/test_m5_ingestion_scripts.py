@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
+import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -46,6 +47,17 @@ def test_save_pkl_sanitizes_artifact_name(tmp_path: Path, monkeypatch) -> None:
     assert Path(path).name == "freq_table_0_line_ramp.pkl"
 
 
+def test_save_pickle_atomic_replaces_existing_file(tmp_path: Path) -> None:
+    import adacascade.artifacts as artifacts
+
+    path = tmp_path / "artifact.pkl"
+    artifacts.save_pickle_atomic(path, {"version": 1})
+    artifacts.save_pickle_atomic(path, {"version": 2})
+
+    assert artifacts.load_pkl(str(path)) == {"version": 2}
+    assert not list(tmp_path.glob("*.tmp"))
+
+
 def test_qdrant_table_points_use_valid_point_ids() -> None:
     from qdrant_client.models import PointStruct
 
@@ -72,16 +84,62 @@ def test_qdrant_column_points_use_valid_point_ids() -> None:
     assert point_id == _column_point_id(raw_column_id)
 
 
+def test_qdrant_upsert_payloads_accept_staged_status() -> None:
+    from qdrant_client.models import PointStruct
+
+    captured: list[dict] = []
+
+    class FakeAsyncQdrant:
+        async def upsert(self, *, collection_name, points):  # type: ignore[no-untyped-def]
+            captured.extend([point.payload for point in points])
+
+    from adacascade.indexing.qdrant_client import AdacQdrantClient
+
+    client = AdacQdrantClient(FakeAsyncQdrant())  # type: ignore[arg-type]
+    asyncio.run(
+        client.upsert_table(
+            table_id="table",
+            tenant_id="tenant",
+            vector=[0.1],
+            status="PROFILING",
+        )
+    )
+    asyncio.run(
+        client.upsert_columns(
+            points=[
+                {
+                    "column_id": "column",
+                    "table_id": "table",
+                    "tenant_id": "tenant",
+                    "vector": [0.1],
+                }
+            ],
+            status="PROFILING",
+        )
+    )
+
+    assert all(payload["status"] == "PROFILING" for payload in captured)
+    assert PointStruct
+
+
 class RecordingQdrant:
     def __init__(self) -> None:
         self.tables: list[dict] = []
         self.columns: list[list[dict]] = []
+        self.statuses: list[tuple[str, str]] = []
+        self.deleted: list[str] = []
 
     async def upsert_table(self, **kwargs) -> None:
         self.tables.append(kwargs)
 
-    async def upsert_columns(self, *, points: list[dict]) -> None:
-        self.columns.append(points)
+    async def upsert_columns(self, *, points: list[dict], status: str = "READY") -> None:
+        self.columns.append([{**point, "status": status} for point in points])
+
+    async def update_status(self, *, table_id: str, status: str) -> None:
+        self.statuses.append((table_id, status))
+
+    async def delete_table(self, *, table_id: str) -> None:
+        self.deleted.append(table_id)
 
 
 def _session(tmp_path: Path):
@@ -416,6 +474,61 @@ def test_index_schema_only_tables_can_scope_to_table_ids(
     assert [table["table_id"] for table in qdrant.tables] == ["mimic:ADMISSIONS"]
 
 
+def test_profile_table_reads_bounded_parquet_sample(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from adacascade.agents import profiling
+
+    db = _session(tmp_path)
+    parquet_path = tmp_path / "large.parquet"
+    frame = pd.DataFrame({"id": range(4), "name": ["Ada", "Grace", "Lin", "Katherine"]})
+    frame.to_parquet(parquet_path, index=False, row_group_size=2)
+    db.add(
+        _table(
+            "bounded-table",
+            tenant_id="benchmark",
+            table_name="bounded",
+            status="INGESTED",
+        )
+    )
+    db.query(TableRegistry).filter_by(table_id="bounded-table").update(
+        {"source_uri": str(parquet_path)}
+    )
+    db.add_all(
+        [
+            ColumnMetadata(
+                column_id="bounded-table:0:id",
+                table_id="bounded-table",
+                ordinal=0,
+                col_name="id",
+                col_type="int",
+            ),
+            ColumnMetadata(
+                column_id="bounded-table:1:name",
+                table_id="bounded-table",
+                ordinal=1,
+                col_name="name",
+                col_type="str",
+            ),
+        ]
+    )
+    db.commit()
+
+    def fail_read_parquet(*args, **kwargs):
+        raise AssertionError("pd.read_parquet should not be called")
+
+    monkeypatch.setattr(profiling.pd, "read_parquet", fail_read_parquet)
+
+    profile = profiling.profile_table(
+        table_id="bounded-table",
+        parquet_path=str(parquet_path),
+        db=db,
+    )
+
+    assert profile.table_id == "bounded-table"
+    assert [column.name for column in profile.columns] == ["id", "name"]
+
+
 def test_retrieval_l1_can_load_corpus_scoped_tfidf(tmp_path: Path) -> None:
     from scripts.rebuild_tfidf import rebuild_tfidf
     from adacascade.agents.retrieval import layer1
@@ -473,7 +586,85 @@ def test_retrieval_l1_can_load_corpus_scoped_tfidf(tmp_path: Path) -> None:
     assert "union_only" not in vectorizer.vocabulary_
 
 
-def test_run_profiling_rebuilds_tfidf_after_table_is_ready(
+def test_run_profiling_promotes_qdrant_after_db_ready_commit(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from adacascade.agents import profiling
+
+    db = _session(tmp_path)
+    db.add(_table("new-table", tenant_id="benchmark", table_name="new table"))
+    db.commit()
+
+    class DummyProfile:
+        table_id = "new-table"
+        columns: list = []
+
+    def fake_profile_table(**kwargs):
+        return DummyProfile()
+
+    async def fake_encode_and_index(**kwargs) -> None:
+        table = db.query(TableRegistry).filter_by(table_id="new-table").one()
+        assert table.status == "PROFILING"
+
+    monkeypatch.setattr(profiling, "profile_table", fake_profile_table)
+    monkeypatch.setattr(profiling, "encode_and_index", fake_encode_and_index)
+    qdrant = RecordingQdrant()
+
+    asyncio.run(
+        profiling.run_profiling(
+            table_id="new-table",
+            db=db,
+            qdrant=qdrant,
+            tenant_id="benchmark",
+        )
+    )
+
+    table = db.query(TableRegistry).filter_by(table_id="new-table").one()
+    assert table.status == "READY"
+    assert qdrant.statuses == [("new-table", "READY")]
+
+
+def test_run_profiling_deletes_qdrant_vectors_on_failure_after_upsert(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from adacascade.agents import profiling
+
+    db = _session(tmp_path)
+    db.add(_table("new-table", tenant_id="benchmark", table_name="new table"))
+    db.commit()
+
+    class DummyProfile:
+        table_id = "new-table"
+        columns: list = []
+
+    def fake_profile_table(**kwargs):
+        return DummyProfile()
+
+    async def fake_encode_and_index(**kwargs) -> None:
+        raise RuntimeError("index failed")
+
+    monkeypatch.setattr(profiling, "profile_table", fake_profile_table)
+    monkeypatch.setattr(profiling, "encode_and_index", fake_encode_and_index)
+    qdrant = RecordingQdrant()
+
+    try:
+        asyncio.run(
+            profiling.run_profiling(
+                table_id="new-table",
+                db=db,
+                qdrant=qdrant,
+                tenant_id="benchmark",
+            )
+        )
+    except RuntimeError:
+        pass
+
+    table = db.query(TableRegistry).filter_by(table_id="new-table").one()
+    assert table.status == "FAILED"
+    assert qdrant.deleted == ["new-table"]
+
+
+def test_run_profiling_does_not_retrain_tfidf_per_table(
     monkeypatch, tmp_path: Path
 ) -> None:
     from adacascade.agents import profiling
@@ -493,11 +684,10 @@ def test_run_profiling_rebuilds_tfidf_after_table_is_ready(
     async def fake_encode_and_index(**kwargs) -> None:
         return None
 
-    rebuild_calls: list[tuple[str, str]] = []
+    rebuild_calls: list[str] = []
 
     def fake_rebuild_tfidf(db, *, tenant_id: str, **kwargs):
-        status = db.query(TableRegistry).filter_by(table_id="new-table").one().status
-        rebuild_calls.append((tenant_id, status))
+        rebuild_calls.append(tenant_id)
         return {"tables": 1, "path": str(tmp_path / "tfidf.pkl")}
 
     monkeypatch.setattr(profiling, "profile_table", fake_profile_table)
@@ -513,7 +703,44 @@ def test_run_profiling_rebuilds_tfidf_after_table_is_ready(
         )
     )
 
-    assert rebuild_calls == [("benchmark", "READY")]
+    table = db.query(TableRegistry).filter_by(table_id="new-table").one()
+    assert table.status == "READY"
+    assert rebuild_calls == []
+
+
+def test_run_profiling_keeps_ready_when_optional_tfidf_maintenance_fails(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from adacascade.agents import profiling
+
+    db = _session(tmp_path)
+    db.add(_table("new-table", tenant_id="benchmark", table_name="new table"))
+    db.commit()
+
+    class DummyProfile:
+        table_id = "new-table"
+        columns: list = []
+
+    def fake_profile_table(**kwargs):
+        return DummyProfile()
+
+    async def fake_encode_and_index(**kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(profiling, "profile_table", fake_profile_table)
+    monkeypatch.setattr(profiling, "encode_and_index", fake_encode_and_index)
+
+    asyncio.run(
+        profiling.run_profiling(
+            table_id="new-table",
+            db=db,
+            qdrant=RecordingQdrant(),
+            tenant_id="benchmark",
+        )
+    )
+
+    table = db.query(TableRegistry).filter_by(table_id="new-table").one()
+    assert table.status == "READY"
 
 
 def test_rebuild_tfidf_writes_corpus_scoped_artifact(tmp_path: Path) -> None:
