@@ -16,16 +16,28 @@ const copy = {
   runtimeSwitching: 'Switching runtime…',
   runtimeLoadError: 'Runtime status is unavailable.',
   runtimeSwitchError: 'Runtime switch failed.',
+  localRuntimeStatusLabel: 'Local vLLM status',
+  localRuntimeStatuses: {
+    unknown: 'unknown',
+    stopped: 'stopped',
+    starting: 'starting',
+    ready: 'ready',
+    stopping: 'stopping',
+    error: 'error',
+  },
+  localRuntimeErrorDetail: (message: string) => `Error: ${message}`,
 }
 
 describe('WorkspaceToolbar', () => {
-  it('renders language, theme, and runtime controls', () => {
+  it('renders language, theme, runtime controls, and local vLLM status', () => {
     render(
       <WorkspaceToolbar
         copy={copy}
         language="en"
         theme="light"
         runtimeBackend="local"
+        localRuntimeStatus="ready"
+        localRuntimeReady={true}
         isRuntimePending={false}
         isRunning={false}
         onLanguageChange={vi.fn()}
@@ -38,6 +50,7 @@ describe('WorkspaceToolbar', () => {
     expect(screen.getByRole('group', { name: 'Language' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Theme' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Model runtime' })).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Local vLLM status' })).toHaveTextContent('ready')
   })
 
   it('exposes selected state for each segmented control', () => {
@@ -199,13 +212,15 @@ describe('WorkspaceToolbar', () => {
     expect(onRuntimeBackendChange).not.toHaveBeenCalled()
   })
 
-  it('shows pending text on the targeted runtime while runtime change is pending', () => {
+  it('shows pending text and starting status on the targeted runtime while runtime change is pending', () => {
     render(
       <WorkspaceToolbar
         copy={copy}
         language="en"
         theme="light"
         runtimeBackend="api"
+        localRuntimeStatus="starting"
+        localRuntimeReady={false}
         isRuntimePending={true}
         pendingRuntimeBackend="local"
         isRunning={false}
@@ -217,6 +232,7 @@ describe('WorkspaceToolbar', () => {
 
     expect(screen.getByRole('button', { name: 'Switching runtime…', pressed: false })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'DeepSeek API', pressed: true })).toBeDisabled()
+    expect(screen.getByRole('status', { name: 'Local vLLM status' })).toHaveTextContent('starting')
   })
 
   it('disables both runtime switch buttons while runtime change is pending', () => {
@@ -246,5 +262,28 @@ describe('WorkspaceToolbar', () => {
     fireEvent.click(apiButton)
 
     expect(onRuntimeBackendChange).not.toHaveBeenCalled()
+  })
+
+  it('renders local vLLM error details when startup failed', () => {
+    render(
+      <WorkspaceToolbar
+        copy={copy}
+        language="en"
+        theme="light"
+        runtimeBackend="api"
+        localRuntimeStatus="error"
+        localRuntimeReady={false}
+        localRuntimeLastError="startup timeout"
+        isRuntimePending={false}
+        isRunning={false}
+        onLanguageChange={vi.fn()}
+        onThemeChange={vi.fn()}
+        onRuntimeBackendChange={vi.fn()}
+      />,
+    )
+
+    const status = screen.getByRole('status', { name: 'Local vLLM status' })
+    expect(status).toHaveTextContent('error')
+    expect(status).toHaveTextContent('Error: startup timeout')
   })
 })

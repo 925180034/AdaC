@@ -20,6 +20,9 @@ export type WorkspaceCopy = {
     runtimeSwitching: string
     runtimeLoadError: string
     runtimeSwitchError: string
+    localRuntimeStatusLabel: string
+    localRuntimeStatuses: Record<'unknown' | 'stopped' | 'starting' | 'ready' | 'stopping' | 'error', string>
+    localRuntimeErrorDetail: (message: string) => string
   }
   dataset: {
     kicker: string
@@ -87,7 +90,6 @@ export type WorkspaceCopy = {
     run: string
     running: string
     cancel: string
-    note: string
   }
   results: {
     kicker: string
@@ -178,6 +180,16 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       runtimeSwitching: 'Switching…',
       runtimeLoadError: 'Runtime status is unavailable. Switching is disabled until it can be loaded.',
       runtimeSwitchError: 'Runtime switch failed. The previous backend is still selected.',
+      localRuntimeStatusLabel: 'Local vLLM status',
+      localRuntimeStatuses: {
+        unknown: 'unknown',
+        stopped: 'stopped',
+        starting: 'starting',
+        ready: 'ready',
+        stopping: 'stopping',
+        error: 'error',
+      },
+      localRuntimeErrorDetail: (message) => `Error: ${message}`,
     },
     dataset: {
       kicker: 'Dataset scope',
@@ -245,7 +257,6 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       run: 'Run AdaCascade',
       running: 'Running AdaCascade…',
       cancel: 'Cancel task',
-      note: 'Static shell preview. REST submission and SSE reconciliation will attach in the next task.',
     },
     results: {
       kicker: 'Central workspace',
@@ -368,6 +379,16 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       runtimeSwitching: '切换中…',
       runtimeLoadError: '运行时状态不可用。加载成功前无法切换。',
       runtimeSwitchError: '运行时切换失败，仍保留之前的后端。',
+      localRuntimeStatusLabel: '本地 vLLM 状态',
+      localRuntimeStatuses: {
+        unknown: '未知',
+        stopped: '未启动',
+        starting: '启动中',
+        ready: '已启动',
+        stopping: '停止中',
+        error: '启动失败',
+      },
+      localRuntimeErrorDetail: (message) => `启动失败：${message}`,
     },
     dataset: {
       kicker: '数据集范围',
@@ -435,7 +456,6 @@ export const workspaceCopy: Record<Language, WorkspaceCopy> = {
       run: '运行 AdaCascade',
       running: 'AdaCascade 运行中…',
       cancel: '取消任务',
-      note: '静态外壳预览。REST 提交与 SSE 对账将在后续任务接入。',
     },
     results: {
       kicker: '中央工作区',

@@ -393,7 +393,6 @@ export function TaskControlPanel({
         ) : null}
       </div>
 
-      <p className="control-panel__note">{copy.note}</p>
     </aside>
   )
 }

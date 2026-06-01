@@ -76,13 +76,14 @@ describe('TaskControlPanel', () => {
     expect(screen.getByRole('button', { name: 'Run AdaCascade' })).toBeEnabled()
   })
 
-  it('renders Chinese copy when the workspace language is Chinese', () => {
+  it('renders Chinese copy when the workspace language is Chinese without the static preview note', () => {
     render(<TaskControlPanel {...baseProps} mode={'discover' satisfies TaskMode} language="zh" />)
 
     expect(screen.getByRole('heading', { name: '任务控制' })).toBeInTheDocument()
     expect(screen.getByLabelText('模式')).toBeInTheDocument()
     expect(screen.getByLabelText('查询表')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '运行 AdaCascade' })).toBeEnabled()
+    expect(screen.queryByText('静态外壳预览。REST 提交与 SSE 对账将在后续任务接入。')).not.toBeInTheDocument()
   })
 
   it('calls onTenantChange when the tenant select changes', async () => {

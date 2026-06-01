@@ -160,6 +160,9 @@ const localRuntime: LlmRuntimeInfo = {
   base_url: 'http://localhost:8000/v1',
   model: 'qwen3.5:9b',
   api_key_configured: false,
+  local_status: 'ready',
+  local_ready: true,
+  local_last_error: null,
 }
 
 const apiRuntime: LlmRuntimeInfo = {
@@ -167,6 +170,9 @@ const apiRuntime: LlmRuntimeInfo = {
   base_url: 'https://api.deepseek.com/v1',
   model: 'deepseek-chat',
   api_key_configured: true,
+  local_status: 'stopped',
+  local_ready: false,
+  local_last_error: null,
 }
 
 const runningTask: TaskDetail = {
@@ -273,13 +279,14 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('button', { name: 'API model', pressed: false })).toBeDisabled()
   })
 
-  it('fetches runtime info on load and displays the selected backend', async () => {
+  it('fetches runtime info on load and displays the selected backend with local vLLM status', async () => {
     vi.mocked(getLlmRuntime).mockResolvedValue(apiRuntime)
     renderWorkspace()
 
     await waitFor(() => expect(getLlmRuntime).toHaveBeenCalledWith('default'))
     expect(await screen.findByRole('button', { name: 'API model', pressed: true })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Local model', pressed: false })).toBeEnabled()
+    expect(screen.getByRole('status', { name: 'Local vLLM status' })).toHaveTextContent('stopped')
   })
 
   it('switches tenant and reloads tenant-scoped Datasets, tables, and runtime info', async () => {
@@ -595,7 +602,7 @@ describe('WorkspacePage', () => {
     expect(document.documentElement).not.toHaveAttribute('data-theme')
   })
 
-  it('updates runtime backend through the API client and displays the response backend', async () => {
+  it('updates runtime backend through the API client and displays the response backend and status', async () => {
     const user = userEvent.setup()
     renderWorkspace()
 
@@ -605,6 +612,7 @@ describe('WorkspacePage', () => {
     expect(updateLlmRuntime).toHaveBeenCalledWith('default', 'api')
     expect(await screen.findByRole('button', { name: 'API model', pressed: true })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Local model', pressed: false })).toBeEnabled()
+    expect(screen.getByRole('status', { name: 'Local vLLM status' })).toHaveTextContent('stopped')
     expect(window.localStorage.getItem('adacascade.runtimeBackend')).toBeNull()
   })
 
@@ -660,6 +668,20 @@ describe('WorkspacePage', () => {
 
     runtimeUpdate.resolve(apiRuntime)
     expect(await screen.findByRole('button', { name: 'API model', pressed: true })).toBeEnabled()
+  })
+
+  it('shows local vLLM startup errors from runtime metadata', async () => {
+    vi.mocked(getLlmRuntime).mockResolvedValue({
+      ...apiRuntime,
+      local_status: 'error',
+      local_ready: false,
+      local_last_error: 'startup timeout',
+    })
+    renderWorkspace()
+
+    const status = await screen.findByRole('status', { name: 'Local vLLM status' })
+    await waitFor(() => expect(status).toHaveTextContent('error'))
+    expect(status).toHaveTextContent('Error: startup timeout')
   })
 
   it('switches visible workspace copy and agent summaries after selecting Chinese', async () => {

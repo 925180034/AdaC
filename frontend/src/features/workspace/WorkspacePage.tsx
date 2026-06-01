@@ -386,6 +386,9 @@ export function WorkspacePage() {
         language={language}
         theme={theme}
         runtimeBackend={runtimeBackend}
+        localRuntimeStatus={runtimeQuery.data?.local_status ?? null}
+        localRuntimeReady={runtimeQuery.data?.local_ready ?? false}
+        localRuntimeLastError={runtimeQuery.data?.local_last_error ?? null}
         isRuntimePending={runtimeMutation.isPending}
         pendingRuntimeBackend={pendingRuntimeBackend}
         isRunning={isRunning}

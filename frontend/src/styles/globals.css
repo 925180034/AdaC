@@ -300,6 +300,42 @@ h4 {
   opacity: 0.55;
 }
 
+.local-runtime-status {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.42rem 0.72rem;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.local-runtime-status__label {
+  color: var(--muted-2);
+}
+
+.local-runtime-status__value {
+  color: var(--accent-strong);
+  font-weight: 850;
+}
+
+.local-runtime-status[data-ready='true'] .local-runtime-status__value {
+  color: var(--success);
+}
+
+.local-runtime-status[data-status='error'] .local-runtime-status__value,
+.local-runtime-status__error {
+  color: var(--danger-text);
+}
+
+.local-runtime-status__error {
+  border-left: 1px solid var(--border);
+  padding-left: 0.45rem;
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(18rem, 0.82fr) minmax(31rem, 1.72fr) minmax(21rem, 1fr);

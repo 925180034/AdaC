@@ -1,4 +1,4 @@
-import type { RuntimeBackend } from '../../api/runtime'
+import type { LocalRuntimeStatus, RuntimeBackend } from '../../api/runtime'
 import type { Language, ThemeMode } from './uiPreferences'
 
 export type WorkspaceToolbarCopy = {
@@ -15,6 +15,9 @@ export type WorkspaceToolbarCopy = {
   runtimeSwitching: string
   runtimeLoadError: string
   runtimeSwitchError: string
+  localRuntimeStatusLabel: string
+  localRuntimeStatuses: Record<LocalRuntimeStatus | 'unknown', string>
+  localRuntimeErrorDetail: (message: string) => string
 }
 
 type WorkspaceToolbarProps = {
@@ -22,6 +25,9 @@ type WorkspaceToolbarProps = {
   language: Language
   theme: ThemeMode
   runtimeBackend: RuntimeBackend | null
+  localRuntimeStatus?: LocalRuntimeStatus | null
+  localRuntimeReady?: boolean
+  localRuntimeLastError?: string | null
   isRuntimePending: boolean
   pendingRuntimeBackend?: RuntimeBackend | null
   isRunning: boolean
@@ -41,6 +47,9 @@ export function WorkspaceToolbar({
   language,
   theme,
   runtimeBackend,
+  localRuntimeStatus = null,
+  localRuntimeReady = false,
+  localRuntimeLastError = null,
   isRuntimePending,
   pendingRuntimeBackend = null,
   isRunning,
@@ -51,6 +60,8 @@ export function WorkspaceToolbar({
   onRuntimeBackendChange,
 }: WorkspaceToolbarProps) {
   const runtimeDisabled = isRuntimeDisabled || isRunning || isRuntimePending || runtimeBackend === null
+  const localRuntimeStatusKey = localRuntimeStatus ?? 'unknown'
+  const localRuntimeStatusText = copy.localRuntimeStatuses[localRuntimeStatusKey]
 
   return (
     <aside className="workspace-toolbar" aria-label={copy.preferencesLabel}>
@@ -113,6 +124,20 @@ export function WorkspaceToolbar({
         >
           {isRuntimePending && pendingRuntimeBackend === 'api' ? copy.runtimeSwitching : copy.apiModel}
         </button>
+      </div>
+
+      <div
+        className="local-runtime-status"
+        role="status"
+        aria-label={copy.localRuntimeStatusLabel}
+        data-status={localRuntimeStatusKey}
+        data-ready={localRuntimeReady}
+      >
+        <span className="local-runtime-status__label">{copy.localRuntimeStatusLabel}</span>
+        <span className="local-runtime-status__value">{localRuntimeStatusText}</span>
+        {localRuntimeLastError ? (
+          <span className="local-runtime-status__error">{copy.localRuntimeErrorDetail(localRuntimeLastError)}</span>
+        ) : null}
       </div>
     </aside>
   )
