@@ -1,6 +1,6 @@
 # AdaCascade deployment
 
-This package is for the 课题组 target server deployment. Docker verification is expected on the target server because the current development environment cannot run Docker.
+This package is for the 课题组 target server deployment. Docker verification is expected on the target server because the current development environment cannot run Docker. The known lab-server profile and operational constraints are recorded in [`deploy/LAB_SERVER.md`](LAB_SERVER.md).
 
 ## Prerequisites
 
