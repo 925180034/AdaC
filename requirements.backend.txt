@@ -1,0 +1,32 @@
+# Backend container dependencies.
+#
+# The Docker backend consumes an external OpenAI-compatible vLLM endpoint. It
+# intentionally excludes vllm and explicit torch/vision/audio pins so the image
+# keeps the CUDA 12.1 PyTorch runtime supplied by PYTORCH_BASE_IMAGE, which is
+# compatible with NVIDIA Driver 535 deployments.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+langgraph>=1.1.8,<1.3
+langgraph-checkpoint-sqlite>=3.0.1,<4.0
+langchain-core>=1.0,<2.0
+openai>=1.52,<3.0
+transformers==4.51.3
+sentence-transformers>=3.0,<6.0
+qdrant-client>=1.10,<2.0
+pandas>=2.2,<3.0
+pyarrow>=16.0
+openpyxl>=3.1
+sqlalchemy>=2.0,<3.0
+pydantic>=2.9,<3.0
+pydantic-settings>=2.4,<3.0
+typing_extensions>=4.8
+structlog>=24.1
+prometheus-fastapi-instrumentator>=7.0
+python-multipart>=0.0.9
+python-Levenshtein>=0.25
+scipy>=1.13
+numpy>=1.26,<2.3
+scikit-learn>=1.5
+aiofiles>=23.0
+httpx>=0.27
+optuna>=4.0

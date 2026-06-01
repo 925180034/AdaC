@@ -1,4 +1,4 @@
-ARG PYTORCH_BASE_IMAGE=pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+ARG PYTORCH_BASE_IMAGE=pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
 FROM ${PYTORCH_BASE_IMAGE}
 
 ARG HTTP_PROXY
@@ -23,8 +23,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-RUN pip install -r requirements.txt
+COPY requirements.backend.txt ./
+RUN pip install -r requirements.backend.txt
 RUN HTTPS_PROXY=${HTTPS_PROXY} HTTP_PROXY=${HTTP_PROXY} HF_ENDPOINT=${HF_ENDPOINT} \
     python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
 

@@ -31,6 +31,32 @@ def test_backend_dockerfile_predownloads_sbert_with_mirror_and_proxy() -> None:
     assert "HTTPS_PROXY=${HTTPS_PROXY}" in dockerfile
 
 
+def test_backend_cuda_default_is_driver_535_compatible() -> None:
+    """Default backend runtime should not require CUDA 12.4 drivers."""
+    dockerfile = Path("Dockerfile.backend").read_text()
+    compose = Path("docker-compose.yml").read_text()
+    env_example = Path(".env.example").read_text()
+
+    expected = "pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime"
+    assert f"ARG PYTORCH_BASE_IMAGE={expected}" in dockerfile
+    assert f"PYTORCH_BASE_IMAGE: ${{PYTORCH_BASE_IMAGE:-{expected}}}" in compose
+    assert f"PYTORCH_BASE_IMAGE={expected}" in env_example
+    assert "cuda12.4" not in dockerfile
+    assert "cuda12.4" not in compose
+    assert "cuda12.4" not in env_example
+
+
+def test_backend_container_uses_runtime_requirements_without_vllm_stack() -> None:
+    """Backend Docker image should not reinstall CUDA 12.4 vLLM/Torch wheels."""
+    dockerfile = Path("Dockerfile.backend").read_text()
+    requirements = Path("requirements.backend.txt").read_text()
+
+    assert "requirements.backend.txt" in dockerfile
+    assert "pip install -r requirements.backend.txt" in dockerfile
+    for package in ["vllm", "torch", "torchvision", "torchaudio"]:
+        assert f"{package}==" not in requirements
+
+
 def test_compose_backend_env_file_is_optional() -> None:
     """Fresh checkouts should render Compose config before .env exists."""
     compose = Path("docker-compose.yml").read_text()

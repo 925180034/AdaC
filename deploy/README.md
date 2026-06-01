@@ -29,12 +29,15 @@ For the lab server, set these deployment-local values in `.env`:
 
 ```dotenv
 CORS_ALLOW_ORIGINS=http://218.199.69.88:13000
+PYTORCH_BASE_IMAGE=pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
 LLM_LOCAL_BASE_URL=http://host.docker.internal:8000/v1
 LLM_BASE_URL=http://host.docker.internal:8000/v1
 NO_PROXY=localhost,127.0.0.1,qdrant,host.docker.internal
 no_proxy=localhost,127.0.0.1,qdrant,host.docker.internal
 SBERT_DEVICE=cuda:0
 ```
+
+The backend image default uses PyTorch `2.4.1-cuda12.1-cudnn9-runtime` so NVIDIA Driver 535 servers do not need CUDA 12.4 driver support. The backend container talks to an external OpenAI-compatible vLLM endpoint and installs `requirements.backend.txt`, which intentionally excludes the local vLLM/Torch pin stack from `requirements.txt` to avoid reinstalling CUDA 12.4 wheels. If deploying on a newer driver, you may override `PYTORCH_BASE_IMAGE` explicitly in `.env`.
 
 Then start the stack:
 

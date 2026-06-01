@@ -693,7 +693,7 @@ structlog>=24.1
 prometheus-fastapi-instrumentator>=7.0
 ```
 
-国内网络 Docker 构建默认使用清华 PyPI 镜像、`hf-mirror.com` 下载 HuggingFace/SBERT 模型、npmmirror 下载前端 npm 包，并通过 `HTTP_PROXY` / `HTTPS_PROXY` build args 支持代理；apt 源暂不替换。Docker Hub 镜像拉取由 Docker daemon 镜像加速控制，仓库同时提供 `PYTORCH_BASE_IMAGE`、`NODE_BASE_IMAGE`、`NGINX_BASE_IMAGE`、`QDRANT_IMAGE` 变量用于替换为内网/镜像仓库地址。
+国内网络 Docker 构建默认使用清华 PyPI 镜像、`hf-mirror.com` 下载 HuggingFace/SBERT 模型、npmmirror 下载前端 npm 包，并通过 `HTTP_PROXY` / `HTTPS_PROXY` build args 支持代理；apt 源暂不替换。Docker Hub 镜像拉取由 Docker daemon 镜像加速控制，仓库同时提供 `PYTORCH_BASE_IMAGE`、`NODE_BASE_IMAGE`、`NGINX_BASE_IMAGE`、`QDRANT_IMAGE` 变量用于替换为内网/镜像仓库地址。后端容器默认使用 `pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime` 以兼容 NVIDIA Driver 535；容器内只运行 AdaCascade 后端并连接外部 OpenAI 兼容 vLLM，因此 Docker 构建使用 `requirements.backend.txt`，不会安装 `requirements.txt` 中的本地 vLLM/Torch 2.6 CUDA 12.4 栈。
 
 ### 8.3 启动四步
 ```bash

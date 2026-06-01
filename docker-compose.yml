@@ -12,7 +12,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
       args:
-        PYTORCH_BASE_IMAGE: ${PYTORCH_BASE_IMAGE:-pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime}
+        PYTORCH_BASE_IMAGE: ${PYTORCH_BASE_IMAGE:-pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime}
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,qdrant,host.docker.internal}
