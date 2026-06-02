@@ -1,8 +1,11 @@
 # 课题组 AdaCascade 部署服务器档案
 
-**主机名：** kemove-ESC4000-E10  
-**部署用户：** xiaoyunhao  
-**信息来源：** 用户提供的服务器巡检信息  
+**主机名：** kemove-ESC4000-E10
+
+**部署用户：** xiaoyunhao
+
+**信息来源：** 用户提供的服务器巡检信息
+
 **最后更新：** 2026-06-01
 
 > 本文记录课题组目标部署服务器的已知环境约束，供 AdaCascade 后续部署、排障和容量规划使用。不要在本文或仓库中记录 `.env` 的真实密钥、令牌或密码。
@@ -187,6 +190,18 @@ no_proxy=localhost,127.0.0.1,qdrant,host.docker.internal
 | `NPM_CONFIG_REGISTRY` | `https://registry.npmmirror.com` | npm 镜像 |
 | `ADACASCADE_FRONTEND_PORT` | `13000` | 前端宿主机端口 |
 | `CORS_ALLOW_ORIGINS` | `http://218.199.69.88:13000` | 如通过 SSH 隧道访问，也可按实际访问入口调整 |
+
+### 与通用部署文档的差异
+
+本文是课题组服务器 profile，不是通用默认配置。通用 Docker Compose 文档中的默认值适合干净部署起点；本文件记录的是这台服务器已经确认或需要特别遵守的约束。
+
+- 通用 Compose 默认后端基础镜像为 `pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime`。
+- 本服务器 profile 可继续使用已验证的 `pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime`，前提是实际构建和运行已验证通过。
+- 两者都保持在 CUDA 12.1/12.2 兼容范围内，符合 Driver 535.230.02 的最高 CUDA 12.2 限制。
+- 不要在本服务器上改用 CUDA 12.4+ 镜像，例如 `pytorch/pytorch:2.6.0-cuda12.4-*`。
+- AdaCascade 仍应使用 `NVIDIA_VISIBLE_DEVICES=1` 固定物理 GPU 1；容器内 SBERT 使用 `cuda:0`。
+- 运行时数据仍放在 `/data/xiaoyunhao/adacascade/runtime/`，不要写入系统盘大文件。
+- Qdrant 仍只在 Compose 网络内访问，不需要暴露宿主机端口。
 
 ---
 
