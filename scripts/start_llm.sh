@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start vLLM serving qwen3.5:9b (AWQ 4bit) on cuda:0.
+# Start vLLM serving qwen3.5:9b on cuda:0.
 set -euo pipefail
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
@@ -16,7 +16,7 @@ GUIDED_DECODING_BACKEND="${VLLM_GUIDED_DECODING_BACKEND:-xgrammar}"
 
 exec vllm serve "$MODEL_PATH" \
     --served-model-name qwen3.5:9b \
-    --quantization awq \
+    ${VLLM_QUANTIZATION:+--quantization "$VLLM_QUANTIZATION"} \
     --max-model-len "$MAX_MODEL_LEN" \
     --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
     --guided-decoding-backend "$GUIDED_DECODING_BACKEND" \

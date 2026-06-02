@@ -141,5 +141,7 @@ def test_start_llm_uses_container_defaults_with_env_overrides() -> None:
     assert 'export TORCH_HOME="${TORCH_HOME:-/app/data/torch_cache}"' in script
     assert 'MODEL_PATH="${LLM_MODEL_PATH:-/app/models/Qwen/Qwen3.5-9B}"' in script
     assert 'PORT="${LLM_LOCAL_PORT:-8001}"' in script
+    assert '${VLLM_QUANTIZATION:+--quantization "$VLLM_QUANTIZATION"}' in script
+    assert '--quantization awq' not in script
     assert '--port "$PORT"' in script
     assert "/root/autodl-tmp" not in script
