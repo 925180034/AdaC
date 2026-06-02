@@ -114,3 +114,32 @@ def test_dockerignore_excludes_large_and_sensitive_context() -> None:
         ".mypy_cache",
     ]:
         assert entry in dockerignore
+
+
+def test_backend_mounts_host_model_directory_read_only() -> None:
+    """Backend containers should see the host model directory under /app/models."""
+    compose = Path("docker-compose.yml").read_text()
+
+    assert "${LLM_MODEL_DIR:-/data/xiaoyunhao/models}:/app/models:ro" in compose
+
+
+def test_env_example_documents_container_vllm_paths_and_port() -> None:
+    """Deployment env examples should use container paths for managed vLLM."""
+    env_example = Path(".env.example").read_text()
+
+    assert "LLM_MODEL_DIR=/data/xiaoyunhao/models" in env_example
+    assert "LLM_MODEL_PATH=/app/models/Qwen/Qwen3.5-9B" in env_example
+    assert "LLM_LOCAL_PORT=8001" in env_example
+    assert "LLM_LOCAL_BASE_URL=http://localhost:8001/v1" in env_example
+
+
+def test_start_llm_uses_container_defaults_with_env_overrides() -> None:
+    """vLLM launcher defaults should be container-friendly but overrideable."""
+    script = Path("scripts/start_llm.sh").read_text()
+
+    assert 'export HF_HOME="${HF_HOME:-/app/data/hf_cache}"' in script
+    assert 'export TORCH_HOME="${TORCH_HOME:-/app/data/torch_cache}"' in script
+    assert 'MODEL_PATH="${LLM_MODEL_PATH:-/app/models/Qwen/Qwen3.5-9B}"' in script
+    assert 'PORT="${LLM_LOCAL_PORT:-8001}"' in script
+    assert '--port "$PORT"' in script
+    assert "/root/autodl-tmp" not in script

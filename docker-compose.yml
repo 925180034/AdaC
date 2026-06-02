@@ -49,6 +49,7 @@ services:
     gpus: all
     volumes:
       - ${ADACASCADE_RUNTIME_DIR:-/data/xiaoyunhao/adacascade/runtime}:/app/data
+      - ${LLM_MODEL_DIR:-/data/xiaoyunhao/models}:/app/models:ro
     depends_on:
       - qdrant
     networks:
