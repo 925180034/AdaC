@@ -67,13 +67,17 @@ def test_compose_backend_env_file_is_optional() -> None:
 
 
 def test_compose_sets_container_safe_llm_urls() -> None:
-    """Backend containers should default to the host vLLM endpoint."""
+    """Backend containers should default local runtime to the host vLLM endpoint."""
     compose = Path("docker-compose.yml").read_text()
 
     assert (
         "LLM_LOCAL_BASE_URL: "
-        "${LLM_LOCAL_BASE_URL:-http://host.docker.internal:8000/v1}"
+        "${LLM_LOCAL_BASE_URL:-http://host.docker.internal:8001/v1}"
     ) in compose
+    assert (
+        "LLM_LOCAL_BASE_URL: "
+        "${LLM_LOCAL_BASE_URL:-http://host.docker.internal:8000/v1}"
+    ) not in compose
     assert "LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:8000/v1}" in compose
 
 
@@ -124,13 +128,43 @@ def test_backend_mounts_host_model_directory_read_only() -> None:
 
 
 def test_env_example_documents_container_vllm_paths_and_port() -> None:
-    """Deployment env examples should use container paths for managed vLLM."""
+    """Deployment env examples should document host vLLM and container model paths."""
     env_example = Path(".env.example").read_text()
 
     assert "LLM_MODEL_DIR=/data/xiaoyunhao/models" in env_example
-    assert "LLM_MODEL_PATH=/app/models/Qwen/Qwen3.5-9B" in env_example
+    assert "LLM_MODEL_PATH=/app/models/Qwen/Qwen3-8B-AWQ" in env_example
     assert "LLM_LOCAL_PORT=8001" in env_example
-    assert "LLM_LOCAL_BASE_URL=http://localhost:8001/v1" in env_example
+    assert "LLM_LOCAL_BASE_URL=http://host.docker.internal:8001/v1" in env_example
+    assert "LLM_LOCAL_MODEL=qwen3:8b" in env_example
+    assert "LLM_LOCAL_BASE_URL=http://localhost:8001/v1" not in env_example
+    assert ("qwen" + "3.5") not in env_example
+
+
+def test_lab_server_documents_requested_vllm_profile() -> None:
+    """Lab server profile should document the current host local vLLM setup."""
+    docs = Path("deploy/LAB_SERVER.md").read_text()
+
+    assert "211.69.141.64" in docs
+    assert "218.199.69.88" not in docs
+    assert "/data/xiaoyunhao/miniconda3/envs/vllm-env" in docs
+    assert "/data/xiaoyunhao/models/Qwen/Qwen3-8B-AWQ" in docs
+    assert "http://host.docker.internal:8001/v1" in docs
+    assert "qwen3:8b" in docs
+    assert ("qwen" + "3.5") not in docs
+
+
+def test_deploy_readme_documents_host_vllm_flow() -> None:
+    """Generic deploy docs should explain host vLLM and env reload semantics."""
+    docs = Path("deploy/README.md").read_text()
+
+    assert "Docker 部署使用宿主机本地 vLLM" in docs
+    assert "http://host.docker.internal:8001/v1" in docs
+    assert "/data/xiaoyunhao/miniconda3/envs/vllm-env" in docs
+    assert "/data/xiaoyunhao/models/Qwen/Qwen3-8B-AWQ" in docs
+    assert "qwen3:8b" in docs
+    assert ("qwen" + "3.5") not in docs
+    assert "docker compose up -d" in docs
+    assert "docker compose restart" in docs
 
 
 def test_start_llm_uses_container_defaults_with_env_overrides() -> None:
@@ -139,9 +173,19 @@ def test_start_llm_uses_container_defaults_with_env_overrides() -> None:
 
     assert 'export HF_HOME="${HF_HOME:-/app/data/hf_cache}"' in script
     assert 'export TORCH_HOME="${TORCH_HOME:-/app/data/torch_cache}"' in script
-    assert 'MODEL_PATH="${LLM_MODEL_PATH:-/app/models/Qwen/Qwen3.5-9B}"' in script
+    assert 'MODEL_PATH="${LLM_MODEL_PATH:-/app/models/Qwen/Qwen3-8B-AWQ}"' in script
+    assert ("qwen" + "3.5") not in script
     assert 'PORT="${LLM_LOCAL_PORT:-8001}"' in script
     assert '${VLLM_QUANTIZATION:+--quantization "$VLLM_QUANTIZATION"}' in script
     assert '--quantization awq' not in script
     assert '--port "$PORT"' in script
     assert "/root/autodl-tmp" not in script
+
+
+def test_start_llm_does_not_enable_reasoning_by_default() -> None:
+    """Qwen launcher should not force reasoning flags that break JSON output."""
+    script = Path("scripts/start_llm.sh").read_text()
+
+    assert "--enable-reasoning" not in script
+    assert "--reasoning-parser deepseek_r1" not in script
+    assert "deepseek_r1" not in script

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createDataset, listDatasets, uploadDatasetTables } from '../../api/datasets'
 import type { DatasetSummary, ListDatasetsResponse } from '../../api/datasets'
@@ -8,6 +8,7 @@ import type { LlmRuntimeInfo } from '../../api/runtime'
 import { getLlmRuntime, updateLlmRuntime } from '../../api/runtime'
 import type { ListTablesResponse, TablePreviewResponse } from '../../api/tables'
 import { getTablePreview, listTables } from '../../api/tables'
+import { subscribeTaskEvents } from '../../api/events'
 import { cancelTask, getTask, startDiscover, startIntegrate } from '../../api/tasks'
 import { useTaskStore } from '../tasks/taskStore'
 import type { TaskDetail } from '../tasks/taskTypes'
@@ -158,7 +159,7 @@ const benchmarkTablesResponse: ListTablesResponse = {
 const localRuntime: LlmRuntimeInfo = {
   backend: 'local',
   base_url: 'http://localhost:8000/v1',
-  model: 'qwen3.5:9b',
+  model: 'qwen3:8b',
   api_key_configured: false,
   local_status: 'ready',
   local_ready: true,
@@ -189,6 +190,12 @@ const runningTask: TaskDetail = {
   trace: [],
   ranking: [],
   mappings: [],
+}
+
+const successfulTask: TaskDetail = {
+  ...runningTask,
+  status: 'SUCCESS',
+  finished_at: '2026-04-28T00:01:00Z',
 }
 
 function renderWorkspace() {
@@ -234,6 +241,7 @@ describe('WorkspacePage', () => {
     vi.mocked(getTablePreview).mockResolvedValue(defaultTablePreview)
     vi.mocked(getLlmRuntime).mockResolvedValue(localRuntime)
     vi.mocked(updateLlmRuntime).mockResolvedValue(apiRuntime)
+    vi.mocked(subscribeTaskEvents).mockResolvedValue(undefined)
     vi.mocked(getTask).mockResolvedValue(runningTask)
     vi.mocked(cancelTask).mockResolvedValue({ ...runningTask, status: 'FAILED', error_message: 'Task cancelled by user' })
     vi.mocked(startIntegrate).mockResolvedValue({ task_id: 'task-running', status: 'RUNNING', state: {} })
@@ -649,6 +657,51 @@ describe('WorkspacePage', () => {
 
     expect(cancelTask).toHaveBeenCalledWith('default', 'task-running')
     await waitFor(() => expect(getTask).toHaveBeenCalled())
+  })
+
+  it('polls task details after the SSE stream disconnects until the task is terminal', async () => {
+    const eventStream = deferred<void>()
+    useTaskStore.setState({ currentTaskId: 'task-running' })
+    vi.mocked(subscribeTaskEvents).mockReturnValue(eventStream.promise)
+    vi.mocked(getTask)
+      .mockResolvedValueOnce(runningTask)
+      .mockResolvedValueOnce(runningTask)
+      .mockResolvedValueOnce(successfulTask)
+
+    const { queryClient } = renderWorkspace()
+
+    await waitFor(() => expect(getTask).toHaveBeenCalledTimes(1))
+    vi.useFakeTimers()
+    try {
+      await act(async () => {
+        eventStream.reject(new Error('network disconnected'))
+        await Promise.resolve()
+      })
+
+      expect(screen.getByText('network disconnected')).toBeInTheDocument()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000)
+      })
+      expect(getTask).toHaveBeenCalledTimes(2)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000)
+      })
+      expect(getTask).toHaveBeenCalledTimes(3)
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(queryClient.getQueryData<TaskDetail>(['task', 'default', 'task-running'])?.status).toBe('SUCCESS')
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000)
+      })
+      expect(getTask).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('disables runtime switching while runtime mutation is pending', async () => {

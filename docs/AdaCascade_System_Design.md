@@ -5,7 +5,7 @@
 > **版本**：v2.2
 > **定位**：作为独立服务嵌入课题组数据集成大系统，提供数据发现与模式匹配能力
 > **形态**：单体 Python 服务（FastAPI + LangGraph），外挂 Qdrant + vLLM 两个独立进程
-> **LLM 后端**：本地 vLLM 托管 **qwen3.5:9b**（AWQ 4bit 量化），OpenAI 兼容接口 + JSON Schema 约束解码
+> **LLM 后端**：本地 vLLM 托管 **qwen3:8b**（AWQ 4bit 量化），OpenAI 兼容接口 + JSON Schema 约束解码
 > **编排框架**：**LangGraph 1.1.x**（2025-10 GA 首个稳定大版本）
 
 命名说明：**Ada** 指向本框架的场景自适应匹配（SMD / SSD / SLD 三场景权重动态切换），**Cascade** 指向 TLCF 三层级联过滤（TF-IDF → 向量 → LLM）。两大创新点合并为 AdaCascade，学术写作中可自然称为 "the AdaCascade framework"，工程代码中使用 `adacascade` 作为 Python 包名、`adac` 作为短前缀。
@@ -62,7 +62,7 @@ AdaCascade 是一个**单体 Python 服务**，通过 REST API 嵌入课题组�
     ▼                   ▼                  ▼
 ┌───────────────────┐ ┌──────────────────┐ ┌──────────────────┐
 │ L3a  vLLM 服务    │ │ L3b  Qdrant      │ │ L3c  SBERT (GPU) │
-│ qwen3.5:9b (AWQ)  │ │ 单节点 docker    │ │ all-MiniLM-L6-v2 │
+│ qwen3:8b (AWQ)  │ │ 单节点 docker    │ │ all-MiniLM-L6-v2 │
 │ + JSON Schema 解码│ │ 硬删除/并发读写   │ │ cuda:0 常驻      │
 │ A100 #1 ~5GB      │ │ 持久化到卷        │ │ A100 #1 ~0.1GB   │
 └───────────────────┘ └──────────────────┘ └──────────────────┘
@@ -78,7 +78,7 @@ AdaCascade 是一个**单体 Python 服务**，通过 REST API 嵌入课题组�
 | 资源 | 用途 | 显存占用 |
 |---|---|---|
 | 主机 CPU / 内存 | FastAPI + LangGraph + Qdrant client + 任务调度 | 单进程常驻 |
-| **A100 #1** | vLLM (qwen3.5:9b AWQ) + SBERT (MiniLM) | ≈ 5.1 GB（~14% 占用） |
+| **A100 #1** | vLLM (qwen3:8b AWQ) + SBERT (MiniLM) | ≈ 5.1 GB（~14% 占用） |
 | A100 #2 | 组员其他任务 | 完全隔离 |
 | 本地磁盘 | SQLite、Parquet、Qdrant volume、artifacts | 单机文件系统 |
 
@@ -93,7 +93,7 @@ AdaCascade 是一个**单体 Python 服务**，通过 REST API 嵌入课题组�
 | 嵌入模型 | **Sentence-BERT** (all-MiniLM-L6-v2) | **GPU (cuda:0)** 推理，384 维 |
 | 向量存储 | **Qdrant**（docker 单节点） | 硬删除、并发读写、payload 过滤（多租户隔离） |
 | LLM 运行时 | **vLLM ≥ 0.8.5** | OpenAI 兼容、AWQ 量化、**JSON Schema 结构化输出** |
-| LLM 模型 | **qwen3.5:9b（AWQ 4bit）** | 论文基线 LLaMA3.1-8B 的中文友好替代 |
+| LLM 模型 | **qwen3:8b（AWQ 4bit）** | 论文基线 LLaMA3.1-8B 的中文友好替代 |
 | 元数据库 | **SQLite** 默认 / PostgreSQL 生产 | SQLAlchemy 切换 |
 | LLM 客户端 | **openai-python** | 改 BASE_URL 即可切换后端 |
 | 配置 | **pydantic-settings** + `.env` | 阈值、路径、模型名集中管理 |
@@ -544,11 +544,11 @@ data/
 ### 7.1 模型选型
 | 角色 | 模型 | 量化 | 显存 | 说明 |
 |---|---|---|---|---|
-| 主力（所有 Agent） | **qwen3.5:9b** | AWQ 4bit | ≈ 5 GB | 单 A100 40G 绰绰有余 |
+| 主力（所有 Agent） | **qwen3:8b** | AWQ 4bit | ≈ 5 GB | 单 A100 40G 绰绰有余 |
 | 备选（仅 Matcher） | Jellyfish-7B | 原精度 | ≈ 14 GB | 论文中模式匹配任务参考 |
 | 兜底（无 GPU） | DeepSeek / Qwen 线上 API | — | — | 改 `LLM_BASE_URL` |
 
-> 权重获取：`qwen3.5:9b` 通过 Ollama 或 HuggingFace；若获取困难，`Qwen/Qwen3-8B-AWQ` 为官方替代，`--served-model-name qwen3.5:9b` 保持对外 tag 一致。
+> 权重获取：使用 HuggingFace 官方 `Qwen/Qwen3-8B-AWQ` 权重，vLLM 对外 `--served-model-name qwen3:8b`，模型命名与实际 Qwen3-8B-AWQ 权重保持一致。
 
 ### 7.2 统一 LLM 客户端
 ```python
@@ -577,8 +577,8 @@ def chat(messages, *, model=None, temperature=0.0, response_format=None, **kw):
 # scripts/start_llm.sh
 #!/usr/bin/env bash
 export CUDA_VISIBLE_DEVICES=0              # 独占 A100 #1
-vllm serve /path/to/qwen3.5-9b-awq \
-    --served-model-name qwen3.5:9b \
+vllm serve /path/to/qwen3-8b-awq \
+    --served-model-name qwen3:8b \
     --quantization awq \
     --max-model-len 8192 \
     --gpu-memory-utilization 0.35 \        # 给 SBERT 和其他进程留空间
@@ -742,7 +742,7 @@ QDRANT_COLLECTION_COLUMNS=col_embeddings
 # LLM
 LLM_BASE_URL=http://localhost:8000/v1
 LLM_API_KEY=EMPTY
-LLM_MODEL=qwen3.5:9b
+LLM_MODEL=qwen3:8b
 LLM_TIMEOUT=30
 
 # SBERT
@@ -777,7 +777,7 @@ services:
     image: vllm/vllm-openai:latest
     command: >
       --model Qwen/Qwen3-8B-AWQ
-      --served-model-name qwen3.5:9b
+      --served-model-name qwen3:8b
       --quantization awq
       --gpu-memory-utilization 0.35
       --max-model-len 8192

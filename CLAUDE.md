@@ -70,7 +70,7 @@ NO_PROXY=localhost,127.0.0.1 bash scripts/start_api.sh
 | 向量存储 | **Qdrant**（docker 单节点，有硬删除） | 系统设计 §6.3 |
 | 嵌入模型 | Sentence-BERT (MiniLM-L6-v2)，**跑在 cuda:0** | 系统设计 §2.3 |
 | LLM 运行时 | vLLM **≥ 0.8.5**，OpenAI 兼容 + JSON Schema 约束解码 | 系统设计 §7.4 |
-| LLM 模型 | **qwen3.5:9b (AWQ 4bit)**，占 A100 #1 大约 5GB | 系统设计 §7.1 |
+| LLM 模型 | **qwen3:8b (AWQ 4bit)**，占 A100 #1 大约 5GB | 系统设计 §7.1 |
 | 元数据库 | SQLite 默认，PostgreSQL 生产（用 SQLAlchemy 切换） | 系统设计 §6.1 |
 | 原始表存储 | 本地 Parquet：`data/tables/{tenant}/{table_id}/data.parquet` | 系统设计 §3.2 |
 | 异步任务 | FastAPI `BackgroundTasks` + **启动时 reconciliation** | 系统设计 §3.4 |

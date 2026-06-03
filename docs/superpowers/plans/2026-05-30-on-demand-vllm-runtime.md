@@ -1312,7 +1312,7 @@ In `frontend/src/features/workspace/WorkspacePage.test.tsx`, update `localRuntim
 const localRuntime: LlmRuntimeInfo = {
   backend: 'local',
   base_url: 'http://localhost:8000/v1',
-  model: 'qwen3.5:9b',
+  model: 'qwen3:8b',
   api_key_configured: true,
   local_status: 'ready',
   local_ready: true,

@@ -7,7 +7,7 @@ import { getLlmRuntime, updateLlmRuntime } from '../../api/runtime'
 import { getTablePreview, listTables } from '../../api/tables'
 import { cancelTask, getTask, startDiscover, startIntegrate, startMatch } from '../../api/tasks'
 import { useTaskStore } from '../tasks/taskStore'
-import type { TaskMode } from '../tasks/taskTypes'
+import type { TaskDetail, TaskMode } from '../tasks/taskTypes'
 
 const defaultTenantId = import.meta.env.VITE_DEFAULT_TENANT_ID ?? 'default'
 const tenantOptions = ['default', 'benchmark'] as const
@@ -41,6 +41,14 @@ function isAbortError(error: unknown): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Task event stream failed unexpectedly'
+}
+
+function isTerminalTaskStatus(status: string | undefined): boolean {
+  return status === 'SUCCESS' || status === 'FAILED' || status === 'DEGRADED'
+}
+
+function isTerminalTaskDetail(task: TaskDetail | null | undefined): task is TaskDetail {
+  return isTerminalTaskStatus(task?.status)
 }
 
 export function WorkspacePage() {
@@ -221,6 +229,10 @@ export function WorkspacePage() {
     queryKey: ['task', tenantId, currentTaskId],
     queryFn: () => getTask(tenantId, currentTaskId ?? ''),
     enabled: Boolean(currentTaskId),
+    refetchInterval: (query) => {
+      if (!currentTaskId || !streamError || isTerminalTaskDetail(query.state.data)) return false
+      return 2000
+    },
   })
 
   const cancelTaskMutation = useMutation({
@@ -265,10 +277,7 @@ export function WorkspacePage() {
     return () => controller.abort()
   }, [appendEvent, currentTaskId, queryClient, tenantId])
 
-  const isTerminalTask =
-    taskQuery.data?.status === 'SUCCESS' ||
-    taskQuery.data?.status === 'FAILED' ||
-    taskQuery.data?.status === 'DEGRADED'
+  const isTerminalTask = isTerminalTaskStatus(taskQuery.data?.status)
   const isRunning = startTaskMutation.isPending || (Boolean(currentTaskId) && !isTerminalTask)
   const currentTableIds = useMemo(() => new Set(tables.map((table) => table.table_id)), [tables])
   const hasCurrentQueryTable = Boolean(queryTableId) && currentTableIds.has(queryTableId)

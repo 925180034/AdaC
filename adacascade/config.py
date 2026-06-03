@@ -48,10 +48,10 @@ class Settings(BaseSettings):
 
     # ── LLM ───────────────────────────────────────────────────────────────
     LLM_LOCAL_BASE_URL: str = "http://localhost:8000/v1"
-    LLM_LOCAL_MODEL: str = "qwen3.5:9b"
+    LLM_LOCAL_MODEL: str = "qwen3:8b"
     LLM_BASE_URL: str = "http://localhost:8000/v1"
     LLM_API_KEY: str = "EMPTY"
-    LLM_MODEL: str = "qwen3.5:9b"
+    LLM_MODEL: str = "qwen3:8b"
     LLM_TIMEOUT: int = 30
     VLLM_IDLE_TIMEOUT_SECONDS: int = Field(default=_vllm["idle_timeout_seconds"])
     VLLM_STARTUP_TIMEOUT_SECONDS: int = Field(default=_vllm["startup_timeout_seconds"])

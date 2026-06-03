@@ -148,7 +148,7 @@ async def test_chat_async_uses_async_local_readiness_and_tracks_request(
             backend="local",
             base_url="http://localhost:8000/v1",
             api_key="EMPTY",
-            model="qwen3.5:9b",
+            model="qwen3:8b",
             timeout=30,
         ),
     )
@@ -159,7 +159,7 @@ async def test_chat_async_uses_async_local_readiness_and_tracks_request(
     assert fake_runtime_manager.ensure_ready_calls == 1
     assert fake_runtime_manager.backends == ["local"]
     assert fake_client.chat.completions.kwargs is not None
-    assert fake_client.chat.completions.kwargs["model"] == "qwen3.5:9b"
+    assert fake_client.chat.completions.kwargs["model"] == "qwen3:8b"
 
 
 @pytest.mark.anyio
@@ -175,7 +175,7 @@ async def test_chat_local_from_running_loop_raises_clear_runtime_error(
             backend="local",
             base_url="http://localhost:8000/v1",
             api_key="EMPTY",
-            model="qwen3.5:9b",
+            model="qwen3:8b",
             timeout=30,
         ),
     )
@@ -197,7 +197,7 @@ def test_local_vllm_keeps_json_schema_and_thinking_extra_body(monkeypatch) -> No
             backend="local",
             base_url="http://localhost:8000/v1",
             api_key="EMPTY",
-            model="qwen3.5:9b",
+            model="qwen3:8b",
             timeout=30,
         ),
     )

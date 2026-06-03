@@ -6,7 +6,7 @@
 
 **信息来源：** 用户提供的服务器巡检信息
 
-**最后更新：** 2026-06-01
+**最后更新：** 2026-06-02
 
 > 本文记录课题组目标部署服务器的已知环境约束，供 AdaCascade 后续部署、排障和容量规划使用。不要在本文或仓库中记录 `.env` 的真实密钥、令牌或密码。
 
@@ -22,6 +22,7 @@
 | 系统包管理 | apt；安装/升级系统包需要管理员 |
 | 系统 Python | 3.8.10 |
 | Conda | Miniconda，安装于 `/data/xiaoyunhao/miniconda3`（Python 3.13） |
+| vLLM Conda 环境 | `/data/xiaoyunhao/miniconda3/envs/vllm-env`（宿主机本地 vLLM） |
 | Node.js | 20.20.2 |
 | npm | 10.8.2 |
 
@@ -75,7 +76,7 @@
 
 | 项目 | 值 |
 |---|---|
-| 公网 IP | 218.199.69.88 |
+| 公网 IP | 211.69.141.64 |
 | 出口路由 | 218.199.69.254（enp1s0f0） |
 | Docker 网桥 IP | 172.17.0.1 / 172.18.0.1 / 172.19.0.1 |
 | DeepSeek API | 可直达 |
@@ -92,7 +93,8 @@
 | 6379 | Redis (`bresaas-redis`) | Docker 容器，仅本地 |
 | 7778-7779 | `bresaas-nginx` | Docker 容器 |
 | 7897 | Mihomo 代理 | HTTP/SOCKS 代理 |
-| 8000 | vLLM（sunhuabin 的 Qwen3-14B） | 公网可访问，但非 AdaCascade 专属 |
+| 8000 | vLLM（sunhuabin 的 Qwen3-14B） | 已占用，非 AdaCascade 专属 |
+| 8001 | AdaCascade 本地 vLLM | 宿主机启动，供 Docker 后端通过 `host.docker.internal:8001` 访问 |
 | 8088 | 未知服务 | 已占用 |
 | 13000 | AdaCascade 前端 | 本项目；防火墙未开放时需 SSH 隧道访问 |
 
@@ -144,6 +146,7 @@ no_proxy=localhost,127.0.0.1,qdrant,host.docker.internal
 | 服务 | 模型 | 端口 | GPU | 用户 | 备注 |
 |---|---|---:|---|---|---|
 | vLLM | Qwen3-14B-agri-awq（`/data/sunhuabin/...`） | 8000 | GPU 0 | sunhuabin | 共享服务，不稳定，AdaCascade 当前不依赖它作为主 LLM 后端 |
+| AdaCascade vLLM | Qwen/Qwen3-8B-AWQ（`/data/xiaoyunhao/models/Qwen/Qwen3-8B-AWQ`） | 8001 | GPU 1 | xiaoyunhao | 在宿主机 `vllm-env` 中手动启动，供 Docker backend 的 local runtime 使用 |
 | Ollama | 未知 | - | GPU 1 | 系统 | 与 AdaCascade 共享 GPU 1 显存 |
 
 ---
@@ -159,7 +162,8 @@ no_proxy=localhost,127.0.0.1,qdrant,host.docker.internal
 | SQLite 元数据库 | `/data/xiaoyunhao/adacascade/runtime/metadata.db` |
 | 制品（pkl） | `/data/xiaoyunhao/adacascade/runtime/artifacts/` |
 | 日志 | `/data/xiaoyunhao/adacascade/runtime/logs/` |
-| Qwen3.5-9B 模型目录 | `/data/xiaoyunhao/models/Qwen/Qwen3.5-9B/` |
+| Qwen3-8B-AWQ 模型目录 | `/data/xiaoyunhao/models/Qwen/Qwen3-8B-AWQ/` |
+| 宿主机 vLLM 环境 | `/data/xiaoyunhao/miniconda3/envs/vllm-env` |
 
 ---
 
@@ -180,8 +184,14 @@ no_proxy=localhost,127.0.0.1,qdrant,host.docker.internal
 | 配置项 | 推荐/服务器值 | 说明 |
 |---|---|---|
 | `API_KEY` | 已在服务器 `.env` 配置，真实值不入库 | 前端构建时会嵌入同一个 token；修改后需重建 frontend |
-| `LLM_BASE_URL` | `https://api.deepseek.com` | 当前 AdaCascade 主 LLM 后端 |
+| `LLM_BASE_URL` | `https://api.deepseek.com` | 当前 AdaCascade API 模型后端 |
 | `LLM_MODEL` | `deepseek-chat` | DeepSeek chat 模型 |
+| `LLM_LOCAL_BASE_URL` | `http://host.docker.internal:8001/v1` | Docker 后端访问宿主机 AdaCascade vLLM；8000 已被其他服务占用 |
+| `LLM_LOCAL_MODEL` | `qwen3:8b` | local runtime 暴露给前端/后端的模型名，需与 vLLM `--served-model-name` 一致 |
+| `LLM_MODEL_DIR` | `/data/xiaoyunhao/models` | 宿主机模型根目录，Compose 挂载到容器内 `/app/models` |
+| `LLM_MODEL_PATH` | `/app/models/Qwen/Qwen3-8B-AWQ` | Docker 容器内模型路径；宿主机直接启动 vLLM 时用 `/data/xiaoyunhao/models/Qwen/Qwen3-8B-AWQ` |
+| `LLM_LOCAL_PORT` | `8001` | AdaCascade 本地 vLLM 端口 |
+| `VLLM_QUANTIZATION` | `awq` | Qwen3-8B-AWQ 需要设置；无量化 base 模型留空 |
 | `SBERT_DEVICE` | `cuda:0` | 容器内 GPU 编号；对应物理 GPU 1 |
 | `NVIDIA_VISIBLE_DEVICES` | `1` | 固定使用物理 GPU 1 |
 | `PYTORCH_BASE_IMAGE` | `pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime` | 服务器当前可用的 Driver 535 兼容 PyTorch 镜像；仓库默认也必须保持 CUDA 12.1/12.2 以内 |
@@ -189,7 +199,30 @@ no_proxy=localhost,127.0.0.1,qdrant,host.docker.internal
 | `PIP_INDEX_URL` | `https://pypi.tuna.tsinghua.edu.cn/simple` | PyPI 清华镜像 |
 | `NPM_CONFIG_REGISTRY` | `https://registry.npmmirror.com` | npm 镜像 |
 | `ADACASCADE_FRONTEND_PORT` | `13000` | 前端宿主机端口 |
-| `CORS_ALLOW_ORIGINS` | `http://218.199.69.88:13000` | 如通过 SSH 隧道访问，也可按实际访问入口调整 |
+| `CORS_ALLOW_ORIGINS` | `http://211.69.141.64:13000` | 如通过 SSH 隧道访问，也可按实际访问入口调整 |
+
+### 宿主机本地 vLLM 启动
+
+Docker backend 容器不内置 vLLM；切换到 local runtime 前，先在宿主机启动 AdaCascade 专属 vLLM：
+
+```bash
+conda activate /data/xiaoyunhao/miniconda3/envs/vllm-env
+CUDA_VISIBLE_DEVICES=1 vllm serve /data/xiaoyunhao/models/Qwen/Qwen3-8B-AWQ \
+  --served-model-name qwen3:8b \
+  --quantization awq \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.55 \
+  --guided-decoding-backend xgrammar \
+  --port 8001
+```
+
+启动后在宿主机验证：
+
+```bash
+curl --noproxy '*' http://localhost:8001/v1/models
+```
+
+backend 切换到 local 时会先 probe `LLM_LOCAL_BASE_URL`。如果该宿主机 vLLM 已 ready，AdaCascade 会直接使用它，不会再启动 `scripts/start_llm.sh`。
 
 ### 与通用部署文档的差异
 
@@ -212,7 +245,7 @@ no_proxy=localhost,127.0.0.1,qdrant,host.docker.internal
 在本地 Windows PowerShell 执行并保持窗口打开：
 
 ```powershell
-ssh -L 18000:localhost:13000 xiaoyunhao@218.199.69.88
+ssh -L 18000:localhost:13000 xiaoyunhao@211.69.141.64
 ```
 
 浏览器访问：
@@ -268,4 +301,6 @@ nvidia-smi
 7. **vLLM 共享服务不稳定**：端口 8000 的 vLLM 属于共享服务，AdaCascade 当前以 DeepSeek API 作为主 LLM 后端。
 8. **单 worker 约束**：后端必须保持 uvicorn `--workers 1`，不要为吞吐量擅自增加 worker。
 9. **Qdrant 私有网络**：Qdrant 仅在 Compose 网络内访问，不需要暴露宿主机端口。
-10. **密钥不入库**：`.env`、API key、代理密码等真实敏感信息不得写入任何 git 文件。
+10. **`.env` 去重**：服务器真实 `.env` 如出现重复键（例如 `LLM_LOCAL_MODEL`），应在服务器本地清理重复行；不要把真实 `.env` 内容复制进仓库或聊天记录。
+11. **管理员事项**：Docker `data-root` 迁移到 `/data/docker`、开放公网 `13000` 端口等需要管理员权限，本仓库只记录需求，不在代码中执行。
+12. **密钥不入库**：`.env`、API key、代理密码等真实敏感信息不得写入任何 git 文件。

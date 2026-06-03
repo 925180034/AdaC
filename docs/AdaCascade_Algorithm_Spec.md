@@ -770,7 +770,7 @@ profiling:
 
 # ============ LLM ============
 llm:
-  model:        "qwen3.5:9b"
+  model:        "qwen3:8b"
   temperature:  0.0
   max_tokens:   512
   timeout_s:    30

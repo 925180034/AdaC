@@ -98,7 +98,7 @@ async def stream_task_events(
         while True:
             try:
                 event = await asyncio.wait_for(queue.get(), timeout=60.0)
-            except TimeoutError:
+            except (TimeoutError, asyncio.TimeoutError):
                 yield _sse_frame(
                     {"type": "heartbeat", "task_id": task_id, "timestamp": _timestamp()}
                 )

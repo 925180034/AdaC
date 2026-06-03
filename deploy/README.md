@@ -58,7 +58,7 @@ cp .env.example .env
 | `CORS_ALLOW_ORIGINS` | 允许访问后端的前端来源 |
 | `LLM_BASE_URL` | API 模型 OpenAI-compatible endpoint |
 | `LLM_MODEL` | API 模型名称 |
-| `LLM_LOCAL_BASE_URL` | local 模型 endpoint，Compose 默认指向宿主机 `8000` |
+| `LLM_LOCAL_BASE_URL` | local 模型 endpoint，Compose 默认指向宿主机 `8001` |
 | `PYTORCH_BASE_IMAGE` | backend 基础镜像，可按服务器驱动兼容性覆盖 |
 | `NVIDIA_VISIBLE_DEVICES` | 指定容器可见 GPU |
 | `SBERT_DEVICE` | SBERT 运行设备，例如容器内 `cuda:0` |
@@ -147,17 +147,49 @@ localhost,127.0.0.1,qdrant,host.docker.internal
 
 | 场景 | endpoint | 用途 | 说明 |
 |---|---|---|---|
-| 本地 vLLM 开发 | `http://localhost:8000/v1` | 本地模型调试 | 通过 `bash scripts/start_llm.sh` 启动 |
-| Docker 连接宿主机 vLLM | `http://host.docker.internal:8000/v1` | 容器访问宿主机本地模型 | Compose 默认 `LLM_LOCAL_BASE_URL` / `LLM_BASE_URL` 使用该地址 |
+| 本地 vLLM 开发 | `http://localhost:8001/v1` | 本地模型调试 | 通过 `bash scripts/start_llm.sh` 或宿主机 vLLM 环境启动 |
+| Docker 连接宿主机 vLLM | `http://host.docker.internal:8001/v1` | 容器访问宿主机本地模型 | Compose 默认 `LLM_LOCAL_BASE_URL` 使用该地址；`LLM_BASE_URL` 仍按 API runtime 配置 |
 | 外部 API 模型 | 部署本地配置 | 生产或公网可访问服务 | 可使用 DeepSeek 或其他 OpenAI-compatible endpoint |
 
 后端支持 local/API runtime switching：
 
-- 切换到 local 时，会等待本地 vLLM ready；
+- 切换到 local 时，会先 probe `LLM_LOCAL_BASE_URL`；如果宿主机 vLLM 已 ready，会直接使用，不会重新启动 `scripts/start_llm.sh`；
 - 如果本地 vLLM 未启动，冷启动会较慢；
 - 切换到 API 时，会停止由 AdaCascade manager 托管启动的本地 vLLM；
 - 本地 vLLM 无请求超过默认 `900s` 会 idle stop；
 - 前端会显示本地 vLLM 状态，便于判断切换是否会冷启动。
+
+### Docker 部署使用宿主机本地 vLLM
+
+backend 容器不内置 vLLM。如需在 Docker 部署中切换到 local model，先在宿主机启动 OpenAI-compatible vLLM 服务，然后让容器通过 `host.docker.internal` 访问。
+
+课题组服务器示例：
+
+```bash
+conda activate /data/xiaoyunhao/miniconda3/envs/vllm-env
+CUDA_VISIBLE_DEVICES=1 vllm serve /data/xiaoyunhao/models/Qwen/Qwen3-8B-AWQ \
+  --served-model-name qwen3:8b \
+  --quantization awq \
+  --max-model-len 4096 \
+  --gpu-memory-utilization 0.55 \
+  --guided-decoding-backend xgrammar \
+  --port 8001
+```
+
+宿主机验证：
+
+```bash
+curl --noproxy '*' http://localhost:8001/v1/models
+```
+
+Docker `.env` 中配置：
+
+```dotenv
+LLM_LOCAL_BASE_URL=http://host.docker.internal:8001/v1
+LLM_LOCAL_MODEL=qwen3:8b
+```
+
+> ⚠️ 修改 `.env` 或 Compose 环境变量后，使用 `docker compose up -d` 重新创建受影响容器；不要只执行 `docker compose restart`，因为 restart 不会应用新的 Compose 环境变量或重新构建镜像。
 
 ---
 
@@ -183,10 +215,17 @@ docker compose build backend frontend
 docker compose up -d
 ```
 
-如果仅重启后端：
+如果仅重启后端且没有修改 `.env`、Compose 配置或镜像：
 
 ```bash
 docker compose restart backend
+docker compose logs -f backend
+```
+
+如果修改了 `.env` 或 Compose 环境变量，必须使用 `up -d` 让容器重建并加载新环境：
+
+```bash
+docker compose up -d backend
 docker compose logs -f backend
 ```
 
@@ -242,7 +281,7 @@ docker compose run --rm backend python scripts/rebuild_tfidf.py --tenant-id benc
 如果使用宿主机本地 vLLM，还应在宿主机检查：
 
 ```bash
-curl --noproxy '*' http://localhost:8000/v1/models
+curl --noproxy '*' http://localhost:8001/v1/models
 ```
 
 ---

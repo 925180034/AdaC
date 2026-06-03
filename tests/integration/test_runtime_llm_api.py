@@ -161,7 +161,7 @@ def test_runtime_llm_get_returns_safe_metadata(client: TestClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["backend"] == "local"
-    assert body["model"] == "qwen3.5:9b"
+    assert body["model"] == "qwen3:8b"
     assert body["local_status"] == "stopped"
     assert body["local_ready"] is False
     assert body["local_last_error"] is None

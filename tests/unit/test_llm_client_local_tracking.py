@@ -85,7 +85,7 @@ def _configure_chat(
             else "https://api.deepseek.com"
         ),
         api_key="EMPTY" if backend == "local" else "TEST_API_TOKEN",
-        model="qwen3.5:9b" if backend == "local" else "deepseek-v4-flash",
+        model="qwen3:8b" if backend == "local" else "deepseek-v4-flash",
         timeout=30,
     )
     monkeypatch.setattr(llm_client.llm_runtime, "get_request_config", lambda: config)
