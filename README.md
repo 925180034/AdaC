@@ -7,9 +7,9 @@ AdaCascade（**Ada**ptive scenario matching + **Cascade**d filtering）是一个
 - Python 后端服务（FastAPI、LangGraph、SQLite、Qdrant、SBERT、OpenAI-compatible LLM 客户端）；
 - React + Vite 前端工作台；
 - 本地开发脚本、Docker Compose 部署配置、部署服务器档案；
-- 系统设计、算法规格、运维与 demo 数据说明文档。
+- 工作台使用指南、系统设计、算法规格、运维与 demo 数据说明文档。
 
-> 算法公式、默认超参与提示词模板以 [`docs/AdaCascade_Algorithm_Spec.md`](docs/AdaCascade_Algorithm_Spec.md) 为准；工程架构、API、部署和数据布局以 [`docs/AdaCascade_System_Design.md`](docs/AdaCascade_System_Design.md) 为准。
+> 工作台页面、功能和常见操作见 [`docs/AdaCascade_Workbench_Guide.md`](docs/AdaCascade_Workbench_Guide.md)；算法公式、默认超参与提示词模板以 [`docs/AdaCascade_Algorithm_Spec.md`](docs/AdaCascade_Algorithm_Spec.md) 为准；工程架构、API、部署和数据布局以 [`docs/AdaCascade_System_Design.md`](docs/AdaCascade_System_Design.md) 为准。
 
 ---
 
@@ -130,6 +130,27 @@ npm --prefix frontend run dev
 
 Vite 默认开发端口为 `5173`。`scripts/start_demo.sh` 会使用本地 demo API 端口 `6008` 和 Vite 代理流程。
 
+### 4.6 打开工作台
+
+本地工作台入口：
+
+```text
+http://localhost:5173/?tenant_id=default
+```
+
+如果在当前服务器或远程开发环境中将 Vite 映射到 `6006`，入口为：
+
+```text
+http://localhost:6006/?tenant_id=default
+```
+
+常用租户：
+
+- `default`：演示和用户上传数据；
+- `benchmark`：基准数据集。
+
+页面区域、按钮功能、运行模式和排错说明见 [`docs/AdaCascade_Workbench_Guide.md`](docs/AdaCascade_Workbench_Guide.md)。
+
 ---
 
 ## 5. 端口表
@@ -141,7 +162,8 @@ Vite 默认开发端口为 `5173`。`scripts/start_demo.sh` 会使用本地 demo
 | `6333` | 本地 Qdrant | Qdrant HTTP API |
 | `6334` | 本地 Qdrant | Qdrant gRPC |
 | `8000` | 本地 LLM | vLLM OpenAI-compatible API |
-| `5173` | 本地前端 | Vite dev server |
+| `5173` | 本地前端 | Vite dev server 默认端口 |
+| `6006` | 当前服务器/远程开发 | Vite dev server 映射端口，常用入口 `/?tenant_id=default` |
 | `13000` | Docker 部署 | Nginx + React 前端宿主机端口 |
 
 ---
@@ -258,6 +280,7 @@ curl --noproxy '*' http://localhost:8000/v1/models  # 仅本地 vLLM 场景
 | 文档 | 用途 |
 |---|---|
 | [`docs/README.md`](docs/README.md) | 文档索引与推荐阅读路径 |
+| [`docs/AdaCascade_Workbench_Guide.md`](docs/AdaCascade_Workbench_Guide.md) | 工作台页面、功能、运行流程和常见问题说明 |
 | [`docs/AdaCascade_System_Design.md`](docs/AdaCascade_System_Design.md) | 工程架构、API、数据库、部署与目录结构 |
 | [`docs/AdaCascade_Algorithm_Spec.md`](docs/AdaCascade_Algorithm_Spec.md) | 算法公式、默认超参、提示词、JSON Schema 与测试指标 |
 | [`docs/M4_Operations_Guide.md`](docs/M4_Operations_Guide.md) | 本地 demo / 运维操作指南 |
